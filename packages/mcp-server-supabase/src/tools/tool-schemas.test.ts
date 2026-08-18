@@ -146,6 +146,49 @@ describe('createToolSchemas', () => {
       // delete_branch uses branch_id, not project_id - should use original schema
       expect(schemas.delete_branch).toBe(supabaseMcpToolSchemas.delete_branch);
     });
+
+    test('includes cost tools when branching is enabled', () => {
+      const schemas = createToolSchemas({ projectScoped: true });
+      const keys = Object.keys(schemas);
+
+      expect(keys).toContain('get_cost');
+      expect(keys).toContain('confirm_cost');
+
+      // Cost tools have no project_id - should use original schemas
+      expect(schemas.get_cost).toBe(supabaseMcpToolSchemas.get_cost);
+      expect(schemas.confirm_cost).toBe(supabaseMcpToolSchemas.confirm_cost);
+
+      expectTypeOf(schemas).toHaveProperty('get_cost');
+      expectTypeOf(schemas).toHaveProperty('confirm_cost');
+    });
+
+    test('excludes cost tools when branching is disabled', () => {
+      const schemas = createToolSchemas({
+        features: ['database', 'docs'],
+        projectScoped: true,
+      });
+      const keys = Object.keys(schemas);
+
+      expect(keys).not.toContain('get_cost');
+      expect(keys).not.toContain('confirm_cost');
+
+      expectTypeOf(schemas).not.toHaveProperty('get_cost');
+      expectTypeOf(schemas).not.toHaveProperty('confirm_cost');
+    });
+
+    test('excludes cost tools when only account is enabled', () => {
+      const schemas = createToolSchemas({
+        features: ['account'],
+        projectScoped: true,
+      });
+      const keys = Object.keys(schemas);
+
+      expect(keys).not.toContain('get_cost');
+      expect(keys).not.toContain('confirm_cost');
+
+      expectTypeOf(schemas).not.toHaveProperty('get_cost');
+      expectTypeOf(schemas).not.toHaveProperty('confirm_cost');
+    });
   });
 
   describe('readOnly', () => {

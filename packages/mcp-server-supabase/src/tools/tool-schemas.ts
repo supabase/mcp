@@ -135,6 +135,16 @@ const PROJECT_SCOPED_OVERRIDES: Record<string, SchemaEntry> =
   );
 
 /**
+ * Cost tools that stay available in project-scoped mode when the
+ * branching feature is enabled, since `create_branch` requires a cost
+ * confirmation ID that can only be obtained from them.
+ * Matches server behavior in `server.ts`.
+ */
+const PROJECT_SCOPED_COST_TOOLS = ['get_cost', 'confirm_cost'] as const;
+
+type ProjectScopedCostToolName = (typeof PROJECT_SCOPED_COST_TOOLS)[number];
+
+/**
  * Tools excluded entirely in read-only mode.
  * Derived from tool defs: any tool with `readOnlyHint: false` and no
  * `readOnlyBehavior: 'adapt'` annotation.
@@ -188,18 +198,26 @@ type WriteToolName = {
  * Computes the set of tool names available for a given configuration.
  *
  * - Resolves feature groups to their tool names
- * - Excludes account tools when project-scoped
+ * - Excludes account tools when project-scoped, except the cost tools
+ *   which stay available when branching is enabled (so `create_branch`
+ *   remains callable)
  * - Excludes write-only tools when read-only
  */
 type AvailableToolNames<
   Feature extends FeatureGroup,
   ProjectScoped extends boolean,
   ReadOnly extends boolean,
-> = Exclude<
-  ToolNameForFeature<Feature>,
-  | (ProjectScoped extends true ? AccountToolName : never)
-  | (ReadOnly extends true ? WriteToolName : never)
->;
+> =
+  | Exclude<
+      ToolNameForFeature<Feature>,
+      | (ProjectScoped extends true ? AccountToolName : never)
+      | (ReadOnly extends true ? WriteToolName : never)
+    >
+  | (ProjectScoped extends true
+      ? 'branching' extends Feature
+        ? ProjectScopedCostToolName
+        : never
+      : never);
 
 /**
  * Computes the tool schemas for a given configuration.
@@ -226,7 +244,9 @@ type ToolSchemasFor<
  * Mirrors the server's dynamic tool behavior:
  * - `features` controls which tool groups are included
  * - `projectScoped` omits `project_id` from input schemas and excludes
- *   account tools (matching server behavior when `projectId` is set)
+ *   account tools, except `get_cost` and `confirm_cost` which stay
+ *   available when branching is enabled (matching server behavior when
+ *   `projectId` is set)
  * - `readOnly` excludes mutating tools
  *
  * @example
@@ -272,6 +292,12 @@ export function createToolSchemas<
       } else {
         result[toolName] = supabaseMcpToolSchemas[toolName];
       }
+    }
+  }
+
+  if (projectScoped && enabledFeatures.has('branching')) {
+    for (const toolName of PROJECT_SCOPED_COST_TOOLS) {
+      result[toolName] = supabaseMcpToolSchemas[toolName];
     }
   }
 
