@@ -4403,13 +4403,14 @@ describe('project scoped tools', () => {
 
     const result = await client.listTools();
 
+    // `get_cost` and `confirm_cost` are not listed here: they stay
+    // available in project scope (when branching is enabled) so that
+    // `create_branch` remains callable.
     const accountLevelToolNames = [
       'list_organizations',
       'get_organization',
       'list_projects',
       'get_project',
-      'get_cost',
-      'confirm_cost',
       'create_project',
       'pause_project',
       'restore_project',
@@ -4423,6 +4424,184 @@ describe('project scoped tools', () => {
         `tool ${accountLevelToolName} should not be available in project scope`
       ).not.toContain(accountLevelToolName);
     }
+  });
+
+  test('cost tools are available when branching is enabled', async () => {
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+
+    const { client } = await setup({ projectId: project.id });
+
+    const result = await client.listTools();
+    const toolNames = result.tools.map((tool) => tool.name);
+
+    expect(toolNames).toContain('get_cost');
+    expect(toolNames).toContain('confirm_cost');
+  });
+
+  test('cost tools are not available when branching is disabled', async () => {
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+
+    const { client } = await setup({
+      projectId: project.id,
+      features: ['database', 'docs'],
+    });
+
+    const result = await client.listTools();
+    const toolNames = result.tools.map((tool) => tool.name);
+
+    expect(toolNames).not.toContain('get_cost');
+    expect(toolNames).not.toContain('confirm_cost');
+  });
+
+  test('create branch using the scoped cost tools', async () => {
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    const { callTool } = await setup({ projectId: project.id });
+
+    const cost = await callTool({
+      name: 'get_cost',
+      arguments: {
+        type: 'branch',
+        organization_id: org.id,
+      },
+    });
+
+    expect(cost).toEqual({
+      type: 'branch',
+      recurrence: 'hourly',
+      amount: BRANCH_COST_HOURLY,
+    });
+
+    const confirm_cost_id_result = await callTool({
+      name: 'confirm_cost',
+      arguments: cost,
+    });
+
+    const branchName = 'test-branch';
+    const branch = await callTool({
+      name: 'create_branch',
+      arguments: {
+        name: branchName,
+        confirm_cost_id: confirm_cost_id_result.confirmation_id,
+      },
+    });
+
+    expect(branch).toEqual(
+      expect.objectContaining({
+        name: branchName,
+        parent_project_ref: project.id,
+      })
+    );
+  });
+
+  test('branch workflow: create, list, and merge on a scoped connection', async () => {
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    const { callTool } = await setup({
+      projectId: project.id,
+      features: ['branching', 'database'],
+    });
+
+    const confirm_cost_id_result = await callTool({
+      name: 'confirm_cost',
+      arguments: {
+        type: 'branch',
+        recurrence: 'hourly',
+        amount: BRANCH_COST_HOURLY,
+      },
+    });
+
+    const branch = await callTool({
+      name: 'create_branch',
+      arguments: {
+        name: 'feature-branch',
+        confirm_cost_id: confirm_cost_id_result.confirmation_id,
+      },
+    });
+
+    const listResult = await callTool({
+      name: 'list_branches',
+      arguments: {},
+    });
+
+    expect(listResult.branches).toContainEqual(
+      expect.objectContaining({ id: branch.id })
+    );
+
+    // Simulate a migration applied on the branch. In a real workflow this
+    // happens through a connection scoped to the branch's project_ref.
+    const branchProject = mockProjects.get(branch.project_ref);
+    if (!branchProject) {
+      throw new Error('branch project not found');
+    }
+    const migrationName = 'sample_migration';
+    const migrationVersion = '20240101000000';
+    branchProject.migrations.push({
+      version: migrationVersion,
+      name: migrationName,
+      query:
+        'create table sample (id integer generated always as identity primary key)',
+    });
+
+    await callTool({
+      name: 'merge_branch',
+      arguments: {
+        branch_id: branch.id,
+      },
+    });
+
+    // Check that the migration was applied to the scoped parent project
+    const migrationsResult = await callTool({
+      name: 'list_migrations',
+      arguments: {},
+    });
+
+    expect(migrationsResult.migrations).toContainEqual({
+      name: migrationName,
+      version: migrationVersion,
+    });
   });
 
   test('no tool should accept a project_id', async () => {

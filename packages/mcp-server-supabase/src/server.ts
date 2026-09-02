@@ -6,7 +6,7 @@ import {
 import packageJson from '../package.json' with { type: 'json' };
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
-import { getAccountTools } from './tools/account-tools.js';
+import { getAccountTools, getCostTools } from './tools/account-tools.js';
 import { getBranchingTools } from './tools/branching-tools.js';
 import { getDatabaseTools } from './tools/database-operation-tools.js';
 import { getDebuggingTools } from './tools/debugging-tools.js';
@@ -154,6 +154,16 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
       if (!projectId && account && enabledFeatures.has('account')) {
         Object.assign(tools, getAccountTools({ account, readOnly }));
+      } else if (
+        projectId &&
+        account &&
+        branching &&
+        enabledFeatures.has('branching')
+      ) {
+        // `create_branch` requires a cost confirmation ID that can only be
+        // obtained from the cost tools, so keep them available in
+        // project-scoped mode even though account tools are excluded there.
+        Object.assign(tools, getCostTools({ account }));
       }
 
       if (database && enabledFeatures.has('database')) {
