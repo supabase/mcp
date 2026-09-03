@@ -5,7 +5,7 @@ import {
 } from '@modelcontextprotocol/server';
 import { describe, expect, test } from 'vitest';
 
-import { isFormCapable } from './cost-confirmation.js';
+import { isFormCapable, isUrlCapable } from './cost-confirmation.js';
 
 // Minimal ServerContext stub: only the envelope slice isFormCapable reads.
 function makeCtx(envelope: Record<string, unknown>): ServerContext {
@@ -66,5 +66,52 @@ describe('isFormCapable', () => {
     },
   ])('$label -> $expected', ({ envelope, expected }) => {
     expect(isFormCapable(makeCtx(envelope))).toBe(expected);
+  });
+});
+
+describe('isUrlCapable', () => {
+  test.each([
+    {
+      label: 'url mode only',
+      envelope: {
+        ...validBase(),
+        [CLIENT_CAPABILITIES_META_KEY]: { elicitation: { url: {} } },
+      },
+      expected: true,
+    },
+    {
+      label: 'form mode only',
+      envelope: {
+        ...validBase(),
+        [CLIENT_CAPABILITIES_META_KEY]: { elicitation: { form: {} } },
+      },
+      expected: false,
+    },
+    {
+      label: 'elicitation is an empty object',
+      envelope: {
+        ...validBase(),
+        [CLIENT_CAPABILITIES_META_KEY]: { elicitation: {} },
+      },
+      expected: false,
+    },
+    {
+      label: 'no elicitation key in capabilities',
+      envelope: {
+        ...validBase(),
+        [CLIENT_CAPABILITIES_META_KEY]: {},
+      },
+      expected: false,
+    },
+    {
+      label: 'protocol version meta key absent',
+      envelope: {
+        [CLIENT_CAPABILITIES_META_KEY]: { elicitation: { url: {} } },
+        // PROTOCOL_VERSION_META_KEY intentionally omitted
+      },
+      expected: false,
+    },
+  ])('$label -> $expected', ({ envelope, expected }) => {
+    expect(isUrlCapable(makeCtx(envelope))).toBe(expected);
   });
 });

@@ -41,6 +41,7 @@ import {
   type GetLogsOptions,
   type QueryLogsOptions,
   type ResetBranchOptions,
+  type SecretOperations,
   type StorageConfig,
   type StorageOperations,
   type SupabasePlatform,
@@ -815,6 +816,30 @@ export function createSupabaseApiPlatform(
     },
   };
 
+  const secrets: SecretOperations = {
+    async getUpdatedAt(projectId: string, name: string) {
+      const response = await managementApiClient.GET(
+        '/v1/projects/{ref}/secrets',
+        {
+          params: {
+            path: {
+              ref: projectId,
+            },
+          },
+        }
+      );
+
+      assertSuccess(response, 'Failed to fetch secrets');
+
+      const secret = response.data.find((s) => s.name === name);
+      if (!secret || !secret.updated_at) {
+        return undefined;
+      }
+
+      return new Date(secret.updated_at);
+    },
+  };
+
   const platform: SupabasePlatform = {
     async init(info: InitData) {
       const { clientInfo } = info;
@@ -838,6 +863,7 @@ export function createSupabaseApiPlatform(
     functions,
     branching,
     storage,
+    secrets,
   };
 
   return platform;

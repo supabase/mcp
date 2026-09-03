@@ -28,6 +28,7 @@ import {
   mockBranches,
   mockContentApiSchemaLoadCount,
   mockProjects,
+  mockSecrets,
   setupMockApis,
 } from '../test/mocks.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
@@ -212,6 +213,61 @@ async function setupFormCapable(options: FormCapableSetupOptions = {}) {
     { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
     {
       capabilities: { elicitation: { form: {} } },
+      versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
+      ...(elicitationAction === undefined && {
+        inputRequired: { autoFulfill: false },
+      }),
+    }
+  );
+
+  if (elicitationAction !== undefined) {
+    client.setRequestHandler('elicitation/create', async () =>
+      elicitationAction === 'accept'
+        ? { action: 'accept' as const, content: {} }
+        : { action: elicitationAction }
+    );
+  }
+
+  await client.connect(transport);
+
+  return { client };
+}
+
+/**
+ * Sets up an MCP client with URL elicitation capability for the
+ * `create_edge_function_secret` secret-collection elicitation lane.
+ */
+async function setupUrlCapable(options: FormCapableSetupOptions = {}) {
+  const { readOnly, projectId, elicitationAction } = options;
+
+  const platform = createSupabaseApiPlatform({
+    accessToken: ACCESS_TOKEN,
+    apiUrl: API_URL,
+  });
+
+  await platform.init?.({
+    clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+    clientCapabilities: { elicitation: { url: {} } },
+  });
+
+  const handler = createSupabaseMcpHandler({
+    platform,
+    projectId,
+    readOnly,
+    costConfirmation: COST_CONFIRMATION,
+    secretCollection: {
+      connectBaseUrl: 'https://supabase.com/dashboard/mcp_callback',
+    },
+  });
+
+  const transport = new StreamableHTTPClientTransport(MCP_ENDPOINT, {
+    fetch: (url, init) => handler.fetch(new Request(url, init)),
+  });
+
+  const client = new Client(
+    { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+    {
+      capabilities: { elicitation: { url: {} } },
       versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
       ...(elicitationAction === undefined && {
         inputRequired: { autoFulfill: false },
@@ -4333,6 +4389,603 @@ describe('tools', () => {
     });
   });
 
+  describe('create_edge_function_secret via URL elicitation', () => {
+    test('url-capable client receives InputRequiredResult with url mode', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const result = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'create_edge_function_secret',
+            arguments: { project_id: project.id, name: 'MY_SECRET' },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(result)).toBe(true);
+      if (isInputRequiredResult(result)) {
+        expect(result.inputRequests?.store_secret).toMatchObject({
+          method: 'elicitation/create',
+          params: {
+            mode: 'url',
+            url: `https://supabase.com/dashboard/mcp_callback?ref=${encodeURIComponent(project.id)}&name=MY_SECRET`,
+          },
+        });
+
+        const message = (result.inputRequests?.store_secret?.params as any)
+          ?.message;
+        expect(message).toBeDefined();
+        const messageLines = message?.split('\n') || [];
+        expect(messageLines).toHaveLength(3);
+        expect(message).not.toContain('http');
+      }
+    });
+
+    test('form-only and empty-capability clients receive isError with no URL', async () => {
+      for (const capabilities of [
+        { elicitation: { form: {} } },
+        { elicitation: {} },
+      ]) {
+        const platform = createSupabaseApiPlatform({
+          accessToken: ACCESS_TOKEN,
+          apiUrl: API_URL,
+        });
+
+        await platform.init?.({
+          clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+          clientCapabilities: capabilities as any,
+        });
+
+        const handler = createSupabaseMcpHandler({
+          platform,
+          costConfirmation: COST_CONFIRMATION,
+          secretCollection: {
+            connectBaseUrl: 'https://supabase.com/dashboard/mcp_callback',
+          },
+        });
+
+        const transport = new StreamableHTTPClientTransport(MCP_ENDPOINT, {
+          fetch: (url, init) => handler.fetch(new Request(url, init)),
+        });
+        const client = new Client(
+          { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+          {
+            capabilities: capabilities as any,
+            versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
+            inputRequired: { autoFulfill: false },
+          }
+        );
+
+        await client.connect(transport);
+
+        const org = await createOrganization({
+          name: 'My Org',
+          plan: 'free',
+          allowed_release_channels: ['ga'],
+        });
+        const project = await createProject({
+          name: 'Project 1',
+          region: 'us-east-1',
+          organization_id: org.id,
+        });
+        project.status = 'ACTIVE_HEALTHY';
+
+        const result = await client.callTool({
+          name: 'create_edge_function_secret',
+          arguments: { project_id: project.id, name: 'MY_SECRET' },
+        });
+
+        expect(result.isError).toBe(true);
+        const textContent = result.content.find((c: any) => c.type === 'text');
+        expect((textContent as any)?.text).toContain(
+          'This client cannot open a browser page'
+        );
+        expect(JSON.stringify(result)).not.toContain('http');
+      }
+    });
+
+    test('tool input schema has only project_id and name properties', async () => {
+      const { client } = await setupUrlCapable();
+
+      const { tools } = await client.listTools();
+      const secretTool = tools.find(
+        (tool) => tool.name === 'create_edge_function_secret'
+      );
+
+      expect(secretTool?.inputSchema.properties).toHaveProperty('project_id');
+      expect(secretTool?.inputSchema.properties).toHaveProperty('name');
+      expect(secretTool?.inputSchema.properties).not.toHaveProperty('value');
+      expect(
+        Object.keys(secretTool?.inputSchema.properties ?? {})
+      ).toHaveLength(2);
+    });
+
+    test('name starting with SUPABASE_ is rejected', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const result = await client.callTool({
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'SUPABASE_URL' },
+      });
+
+      expect(result.isError).toBe(true);
+      const textContent = result.content.find((c: any) => c.type === 'text');
+      expect((textContent as any)?.text).toContain('SUPABASE_');
+    });
+
+    test('accept with recent secret returns stored true', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const first = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'create_edge_function_secret',
+            arguments: { project_id: project.id, name: 'MY_SECRET' },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(first)).toBe(true);
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected InputRequiredResult');
+      }
+
+      // Simulate the secret being stored
+      mockSecrets.set(project.id, [
+        {
+          name: 'MY_SECRET',
+          value: 'secret-value',
+          updated_at: new Date().toISOString(),
+        },
+      ]);
+
+      const second = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'create_edge_function_secret',
+            arguments: { project_id: project.id, name: 'MY_SECRET' },
+            inputResponses: {
+              store_secret: { action: 'accept', content: {} },
+            },
+            requestState: first.requestState,
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult;
+
+      const textContent = second.content.find((c: any) => c.type === 'text');
+      expect((textContent as any)?.text).toContain(
+        'Secret MY_SECRET is stored'
+      );
+      expect((second as any).structuredContent?.stored).toBe(true);
+    });
+
+    test('accept with old or missing secret reissues elicitation with same issued_at', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const first = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'create_edge_function_secret',
+            arguments: { project_id: project.id, name: 'MY_SECRET' },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(first)).toBe(true);
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected InputRequiredResult');
+      }
+
+      // Simulate an old secret
+      const oldDate = new Date(Date.now() - 700_000);
+      mockSecrets.set(project.id, [
+        {
+          name: 'MY_SECRET',
+          value: 'secret-value',
+          updated_at: oldDate.toISOString(),
+        },
+      ]);
+
+      const second = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'create_edge_function_secret',
+            arguments: { project_id: project.id, name: 'MY_SECRET' },
+            inputResponses: {
+              store_secret: { action: 'accept', content: {} },
+            },
+            requestState: first.requestState,
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(second)).toBe(true);
+      if (isInputRequiredResult(second)) {
+        expect(second.inputRequests?.store_secret).toMatchObject({
+          method: 'elicitation/create',
+          params: {
+            url: `https://supabase.com/dashboard/mcp_callback?ref=${encodeURIComponent(project.id)}&name=MY_SECRET`,
+          },
+        });
+
+        // Decode requestState to verify issued_at is preserved
+        const firstState = JSON.parse(
+          Buffer.from(first.requestState!.split('.')[1]!, 'base64').toString()
+        );
+        const secondState = JSON.parse(
+          Buffer.from(second.requestState!.split('.')[1]!, 'base64').toString()
+        );
+        expect(typeof firstState.p.issued_at).toBe('number');
+        expect(secondState.p.issued_at).toBe(firstState.p.issued_at);
+      }
+    });
+
+    test('accept with secret updated at exact issue time (second boundary)', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const first = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'create_edge_function_secret',
+            arguments: { project_id: project.id, name: 'MY_SECRET' },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(first)).toBe(true);
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected InputRequiredResult');
+      }
+
+      // Decode issued_at and set mock secret's updated_at to the same value truncated to seconds
+      const firstState = JSON.parse(
+        Buffer.from(first.requestState!.split('.')[1]!, 'base64').toString()
+      );
+      expect(firstState.p.issued_at % 1000).toBe(0);
+      const issuedAtTruncated = new Date(
+        Math.floor(firstState.p.issued_at / 1000) * 1000
+      );
+      mockSecrets.set(project.id, [
+        {
+          name: 'MY_SECRET',
+          value: 'secret-value',
+          updated_at: issuedAtTruncated.toISOString(),
+        },
+      ]);
+
+      const result = (await client.request({
+        method: 'tools/call',
+        params: {
+          name: 'create_edge_function_secret',
+          arguments: { project_id: project.id, name: 'MY_SECRET' },
+          inputResponses: {
+            store_secret: { action: 'accept', content: {} },
+          },
+          requestState: first.requestState,
+        },
+      })) as CallToolResult;
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toMatchObject([
+        { type: 'text', text: `Secret MY_SECRET is stored.` },
+      ]);
+      expect((result as any).structuredContent).toMatchObject({
+        name: 'MY_SECRET',
+        stored: true,
+      });
+    });
+
+    test('decline and cancel return stored false', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      for (const action of ['decline', 'cancel'] as const) {
+        const first = (await client.request(
+          {
+            method: 'tools/call',
+            params: {
+              name: 'create_edge_function_secret',
+              arguments: { project_id: project.id, name: 'MY_SECRET' },
+            },
+          },
+          { allowInputRequired: true }
+        )) as CallToolResult | InputRequiredResult;
+
+        expect(isInputRequiredResult(first)).toBe(true);
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected InputRequiredResult');
+        }
+
+        const second = (await client.request(
+          {
+            method: 'tools/call',
+            params: {
+              name: 'create_edge_function_secret',
+              arguments: { project_id: project.id, name: 'MY_SECRET' },
+              inputResponses: {
+                store_secret: { action, content: {} },
+              },
+              requestState: first.requestState,
+            },
+          },
+          { allowInputRequired: true }
+        )) as CallToolResult;
+
+        expect((second as any).structuredContent?.stored).toBe(false);
+      }
+    });
+
+    test('fresh call with recent secret returns stored true without elicitation', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      // Set up a recent secret
+      const now = Date.now();
+      mockSecrets.set(project.id, [
+        {
+          name: 'MY_SECRET',
+          value: 'secret-value',
+          updated_at: new Date(now - 500_000).toISOString(),
+        },
+      ]);
+
+      const result = await client.callTool({
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+      });
+
+      expect((result as any).structuredContent?.stored).toBe(true);
+      expect(
+        (result as any).structuredContent?.updated_seconds_ago
+      ).toBeGreaterThan(0);
+      expect(
+        (result as any).structuredContent?.updated_seconds_ago
+      ).toBeLessThan(600);
+    });
+
+    test('rejects requestState minted by create_project', async () => {
+      // Need form+url capabilities: form for create_project, url for create_edge_function_secret
+      const platform = createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      });
+
+      await platform.init?.({
+        clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+        clientCapabilities: { elicitation: { form: {}, url: {} } },
+      });
+
+      const handler = createSupabaseMcpHandler({
+        platform,
+        costConfirmation: COST_CONFIRMATION,
+        secretCollection: {
+          connectBaseUrl: 'https://supabase.com/dashboard/mcp_callback',
+        },
+      });
+
+      const transport = new StreamableHTTPClientTransport(MCP_ENDPOINT, {
+        fetch: (url, init) => handler.fetch(new Request(url, init)),
+      });
+
+      const client = new Client(
+        { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+        {
+          capabilities: { elicitation: { form: {}, url: {} } } as any,
+          versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
+          inputRequired: { autoFulfill: false },
+        }
+      );
+      await client.connect(transport);
+
+      const org = await createOrganization({
+        name: 'Paid Org',
+        plan: 'pro',
+        allowed_release_channels: ['ga'],
+      });
+      const existingProject = await createProject({
+        name: 'Existing Project',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      existingProject.status = 'ACTIVE_HEALTHY';
+
+      // Get a requestState from create_project (requires a pro org with existing project)
+      const projectFirst = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'create_project',
+            arguments: {
+              organization_id: org.id,
+              name: 'My Project',
+              region: 'us-east-1',
+            },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      if (!isInputRequiredResult(projectFirst)) {
+        throw new Error(
+          'expected an input_required result from create_project'
+        );
+      }
+
+      const result = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'create_edge_function_secret',
+            arguments: { project_id: existingProject.id, name: 'MY_SECRET' },
+            inputResponses: {
+              store_secret: { action: 'accept', content: {} },
+            },
+            requestState: projectFirst.requestState,
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult;
+
+      expect(result.isError).toBe(true);
+      const textContent = result.content.find((c: any) => c.type === 'text');
+      expect((textContent as any)?.text).toBe(
+        'Request state was not issued for create_edge_function_secret.'
+      );
+    });
+
+    test('tool absent when secretCollection not configured', async () => {
+      const platform = createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      });
+
+      await platform.init?.({
+        clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+        clientCapabilities: { elicitation: { url: {} } },
+      });
+
+      const handler = createSupabaseMcpHandler({
+        platform,
+        costConfirmation: COST_CONFIRMATION,
+        // secretCollection NOT set
+      });
+
+      const transport = new StreamableHTTPClientTransport(MCP_ENDPOINT, {
+        fetch: (url, init) => handler.fetch(new Request(url, init)),
+      });
+
+      const client = new Client(
+        { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+        {
+          capabilities: { elicitation: { url: {} } },
+          versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
+        }
+      );
+
+      await client.connect(transport);
+
+      const { tools } = await client.listTools();
+      const secretTool = tools.find(
+        (tool) => tool.name === 'create_edge_function_secret'
+      );
+
+      expect(secretTool).toBeUndefined();
+    });
+
+    test('constructing server with secretCollection but no costConfirmation throws', async () => {
+      const platform = createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      });
+
+      expect(() =>
+        createSupabaseMcpServer({
+          platform,
+          secretCollection: {
+            connectBaseUrl: 'https://supabase.com/dashboard/mcp_callback',
+          },
+          // costConfirmation NOT set
+        })
+      ).toThrow(
+        'secretCollection requires costConfirmation (shared requestState codec).'
+      );
+    });
+  });
+
   test('delete branch', async () => {
     const { callTool } = await setup({
       features: ['account', 'branching'],
@@ -4993,7 +5646,11 @@ describe('tools', () => {
     // query_logs).
     const registryToolNames = Object.keys(supabaseMcpToolSchemas);
     const serverToolNames = tools.map((t) => t.name);
-    const conditionallyHiddenToolNames = new Set(['get_logs']);
+    // Registered only when secretCollection is configured
+    const conditionallyHiddenToolNames = new Set([
+      'get_logs',
+      'create_edge_function_secret',
+    ]);
 
     const extraToolsInRegistry = registryToolNames.filter(
       (name) => !serverToolNames.includes(name)

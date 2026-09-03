@@ -84,6 +84,10 @@ export type Migration = {
 export const mockOrgs = new Map<string, MockOrganization>();
 export const mockProjects = new Map<string, MockProject>();
 export const mockBranches = new Map<string, MockBranch>();
+export const mockSecrets = new Map<
+  string,
+  Array<{ name: string; value: string; updated_at: string }>
+>();
 
 export const mockContentApiSchemaLoadCount = { value: 0 };
 
@@ -856,6 +860,17 @@ export const mockManagementApi = [
   ),
 
   /**
+   * List secrets
+   */
+  http.get<{ projectId: string }>(
+    `${API_URL}/v1/projects/:projectId/secrets`,
+    ({ params }) => {
+      const secrets = mockSecrets.get(params.projectId) ?? [];
+      return HttpResponse.json(secrets);
+    }
+  ),
+
+  /**
    * List storage buckets
    */
   http.get<{ ref: string }>(
@@ -939,6 +954,7 @@ export function setupMockApis(): SetupServer {
   mockOrgs.clear();
   mockProjects.clear();
   mockBranches.clear();
+  mockSecrets.clear();
   mockContentApiSchemaLoadCount.value = 0;
 
   const mockServer = setupServer(...mockContentApi, ...mockManagementApi);

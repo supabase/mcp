@@ -35,7 +35,23 @@ export type BranchCostState = {
  * Signed `requestState` payload for any cost-confirmation elicitation this
  * server issues, discriminated by `tool`.
  */
-export type CostConfirmationState = ProjectCostState | BranchCostState;
+export type CostConfirmationState =
+  | ProjectCostState
+  | BranchCostState
+  | SecretCollectionState;
+
+/**
+ * Signed `requestState` payload for the `create_edge_function_secret`
+ * secret-collection elicitation, bound to the project and secret name. The
+ * `issued_at` timestamp is preserved across reissues.
+ */
+export type SecretCollectionState = {
+  tool: 'create_edge_function_secret';
+  project_id: string;
+  name: string;
+  /** Epoch ms, floored to the second; the platform reports updated_at at second precision. */
+  issued_at: number;
+};
 
 /**
  * An action-only elicitation: no properties, so the client renders the
@@ -68,4 +84,26 @@ export function isFormCapable(ctx: ServerContext): boolean {
 
   const modes = Object.keys(elicitation);
   return modes.length === 0 || modes.includes('form');
+}
+
+/**
+ * Whether the current request declares per-request url-elicitation
+ * capability (protocol revision 2026-07-28): an `elicitation` declaration
+ * with a `url` mode.
+ */
+export function isUrlCapable(ctx: ServerContext): boolean {
+  const envelope = ctx.mcpReq.envelope as Record<string, unknown> | undefined;
+  if (typeof envelope?.[PROTOCOL_VERSION_META_KEY] !== 'string') {
+    return false;
+  }
+
+  const capabilities = envelope[CLIENT_CAPABILITIES_META_KEY] as
+    | { elicitation?: Record<string, unknown> }
+    | undefined;
+  const elicitation = capabilities?.elicitation;
+  if (elicitation === undefined) {
+    return false;
+  }
+
+  return 'url' in elicitation;
 }

@@ -15,6 +15,7 @@ import { getDebuggingTools } from './tools/debugging-tools.js';
 import { getDevelopmentTools } from './tools/development-tools.js';
 import { getDocsTools } from './tools/docs-tools.js';
 import { getEdgeFunctionTools } from './tools/edge-function-tools.js';
+import { getSecretTools } from './tools/secret-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
 import { writeToolSet } from './tools/tool-schemas.js';
 import type { FeatureGroup } from './types.js';
@@ -74,6 +75,21 @@ export type SupabaseMcpServerOptions = {
     /** Tools that accept a cost-confirmation elicitation. */
     enabledTools: readonly ('create_project' | 'create_branch')[];
   };
+
+  /**
+   * Enables secret collection via URL elicitation for clients that declare
+   * per-request url-elicitation capability. Requires `costConfirmation`
+   * (shared `requestState` codec) and `platform.secrets`. Registered under
+   * the functions feature group. Only URL-capable clients get the tool.
+   */
+  secretCollection?: {
+    /**
+     * Base URL of the dashboard page that collects the secret value;
+     * `?ref=<project>&name=<secret>` is appended. Must not contain a query
+     * string or fragment.
+     */
+    connectBaseUrl: string;
+  };
 };
 
 const DEFAULT_FEATURES: FeatureGroup[] = [
@@ -117,7 +133,14 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
     onToolCall,
     costConfirmation,
+    secretCollection,
   } = options;
+
+  if (secretCollection && !costConfirmation) {
+    throw new Error(
+      'secretCollection requires costConfirmation (shared requestState codec).'
+    );
+  }
 
   const contentApiClientPromise = createContentApiClient(contentApiUrl, {
     'User-Agent': `supabase-mcp/${version}`,
@@ -136,13 +159,15 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     features ?? availableDefaultFeatures
   );
 
-  const costConfirmationCodec = costConfirmation?.enabledTools.length
-    ? createRequestStateCodec<CostConfirmationState>({
-        key: costConfirmation.requestStateKey,
-        ttlSeconds: costConfirmation.ttlSeconds,
-        bind: (ctx) => `${ctx.mcpReq.method}:${costConfirmation.principal}`,
-      })
-    : undefined;
+  const costConfirmationCodec =
+    costConfirmation &&
+    (costConfirmation.enabledTools.length > 0 || secretCollection)
+      ? createRequestStateCodec<CostConfirmationState>({
+          key: costConfirmation.requestStateKey,
+          ttlSeconds: costConfirmation.ttlSeconds,
+          bind: (ctx) => `${ctx.mcpReq.method}:${costConfirmation.principal}`,
+        })
+      : undefined;
 
   const server = createMcpServer({
     name: 'supabase',
@@ -168,8 +193,6 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     },
     tools: async () => {
       const contentApiClient = await contentApiClientPromise;
-      const tools: Record<string, Tool> = {};
-
       const {
         account,
         database,
@@ -178,7 +201,9 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         development,
         storage,
         branching,
+        secrets,
       } = platform;
+      const tools: Record<string, Tool> = {};
 
       if (enabledFeatures.has('docs')) {
         Object.assign(tools, getDocsTools({ contentApiClient }));
@@ -243,6 +268,24 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
       if (storage && enabledFeatures.has('storage')) {
         Object.assign(tools, getStorageTools({ storage, projectId, readOnly }));
+      }
+
+      if (
+        secretCollection &&
+        secrets &&
+        costConfirmationCodec &&
+        enabledFeatures.has('functions')
+      ) {
+        Object.assign(
+          tools,
+          getSecretTools({
+            secrets,
+            projectId,
+            readOnly,
+            codec: costConfirmationCodec,
+            connectBaseUrl: secretCollection.connectBaseUrl,
+          })
+        );
       }
 
       if (readOnly) {
