@@ -5200,6 +5200,17 @@ describe('feature groups', () => {
 
     expect(queryLogs?.description).toContain('ClickHouse');
     expect(sqlDescription).toContain("log_attributes['<key>']");
+    // Edge Function logs are split across two ClickHouse sources. The hint must
+    // name both, or the model reaches for `function_edge_logs` (the request
+    // envelope) when the user asked for console output, which only lives in
+    // `function_logs`. See getClickHouseLogQuery in logs.ts.
+    expect(sqlDescription).toContain("'function_edge_logs'");
+    expect(sqlDescription).toContain("'function_logs'");
+    // The log line text lives in `event_message`; `log_attributes` carries only
+    // per-row metadata. Without naming the column the model reads
+    // `log_attributes`, finds no message key, and reports that the console
+    // output was never stored. See getClickHouseLogQuery in logs.ts.
+    expect(sqlDescription).toContain('event_message');
   });
 
   test('query_logs advertises the BigQuery dialect when the platform declares it', async () => {
