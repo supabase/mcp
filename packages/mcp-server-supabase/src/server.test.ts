@@ -2006,6 +2006,91 @@ describe('tools', () => {
     ).toHaveLength(1);
   });
 
+  test('composite primary key preserves constraint-definition column order', async () => {
+    const { callTool } = await setup();
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    // Key order is deliberately the reverse of the physical column order, so a
+    // regression to attnum ordering fails immediately. This mirrors the ordering
+    // guarantee the foreign key tests above already assert.
+    await project.db.exec(`
+      create table membership (
+        org_id int not null,
+        user_id int not null,
+        role text,
+        primary key (user_id, org_id)
+      );
+    `);
+
+    const result = await callTool({
+      name: 'list_tables',
+      arguments: {
+        project_id: project.id,
+        schemas: ['public'],
+        verbose: true,
+      },
+    });
+
+    const membership = result.tables.find(
+      (t: { name: string }) => t.name === 'public.membership'
+    );
+
+    expect(membership.primary_keys).toEqual(['user_id', 'org_id']);
+  });
+
+  test('primary key excludes non-key INCLUDE columns', async () => {
+    const { callTool } = await setup();
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    // `b` is an INCLUDE payload column: carried in the index for index-only scans,
+    // but not part of the key and not covered by the uniqueness guarantee. Reporting
+    // it as a primary key column overstates what the database enforces.
+    await project.db.exec(`
+      create table inc (a int not null, b int not null, c int not null);
+      create unique index inc_pk_idx on inc (a) include (b);
+      alter table inc add constraint inc_pk primary key using index inc_pk_idx;
+    `);
+
+    const result = await callTool({
+      name: 'list_tables',
+      arguments: {
+        project_id: project.id,
+        schemas: ['public'],
+        verbose: true,
+      },
+    });
+
+    const inc = result.tables.find(
+      (t: { name: string }) => t.name === 'public.inc'
+    );
+
+    expect(inc.primary_keys).toEqual(['a']);
+  });
+
   test('list_tables omits advisory when all tables have RLS enabled', async () => {
     const { callTool } = await setup();
 
