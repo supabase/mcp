@@ -235,6 +235,7 @@ export type DebuggingOperations = {
   queryLogs?(projectId: string, options: QueryLogsOptions): Promise<unknown>;
   getSecurityAdvisors(projectId: string): Promise<unknown>;
   getPerformanceAdvisors(projectId: string): Promise<unknown>;
+  getHealthAdvisors(projectId: string): Promise<unknown>;
 };
 
 export const apiKeyTypeSchema = z.enum(['legacy', 'publishable']);

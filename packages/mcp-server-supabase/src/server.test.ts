@@ -25,6 +25,8 @@ import {
   createProject,
   MCP_CLIENT_NAME,
   MCP_CLIENT_VERSION,
+  MCP_SERVER_NAME,
+  MCP_SERVER_VERSION,
   mockBranches,
   mockContentApiSchemaLoadCount,
   mockProjects,
@@ -2925,6 +2927,139 @@ describe('tools', () => {
     });
 
     expect(result).toEqual({ lints: [] });
+  });
+
+  test('get health advisors', async () => {
+    const { callTool } = await setup();
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    mockServer?.use(
+      http.post(
+        `${API_URL}/v2/projects/:projectId/advisors/run`,
+        async ({ request }) => {
+          expect(request.headers.get('user-agent')).toBe(
+            `${MCP_SERVER_NAME}/${MCP_SERVER_VERSION} (${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION})`
+          );
+          expect(await request.json()).toEqual({
+            data: {
+              type: 'project_advisors',
+              attributes: {
+                lints: [
+                  { name: 'instance_db_down' },
+                  { name: 'db_not_reachable' },
+                  { name: 'db_connection_limit_reached' },
+                  { name: 'log_data_api_error_rate_high' },
+                  { name: 'log_auth_error_rate_high' },
+                  { name: 'log_storage_error_rate_high' },
+                  { name: 'log_edge_function_error_rate_high' },
+                  { name: 'instance_alert_firing' },
+                ],
+              },
+            },
+          });
+
+          return HttpResponse.json({
+            data: {
+              type: 'project_advisors',
+              attributes: {
+                lints: [
+                  { name: 'instance_db_down', level: 'WARN' },
+                  { name: 'project_not_active', level: 'INFO' },
+                  { name: 'advisor_check_unavailable', level: 'INFO' },
+                ],
+              },
+            },
+          });
+        }
+      )
+    );
+
+    const { result } = await callTool({
+      name: 'get_advisors',
+      arguments: {
+        project_id: project.id,
+        type: 'health',
+      },
+    });
+
+    expect(result).toEqual({
+      lints: [{ name: 'instance_db_down', level: 'WARN' }],
+    });
+  });
+
+  test('encodes project IDs for health advisors', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const projectId = 'project/ref with spaces';
+    let requestUrl: string | undefined;
+
+    mockServer?.use(
+      http.post(
+        `${API_URL}/v2/projects/:projectId/advisors/run`,
+        ({ request }) => {
+          requestUrl = request.url;
+
+          return HttpResponse.json({
+            data: {
+              type: 'project_advisors',
+              attributes: { lints: [] },
+            },
+          });
+        }
+      )
+    );
+
+    await platform.debugging?.getHealthAdvisors(projectId);
+
+    expect(requestUrl).toBe(
+      `${API_URL}/v2/projects/project%2Fref%20with%20spaces/advisors/run`
+    );
+  });
+
+  test('rejects malformed health advisor responses', async () => {
+    const { callTool } = await setup();
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+
+    mockServer?.use(
+      http.post(`${API_URL}/v2/projects/:projectId/advisors/run`, () =>
+        HttpResponse.json({ data: { attributes: { lints: null } } })
+      )
+    );
+
+    await expect(
+      callTool({
+        name: 'get_advisors',
+        arguments: {
+          project_id: project.id,
+          type: 'health',
+        },
+      })
+    ).rejects.toThrow('Failed to fetch health advisors');
   });
 
   test('get logs for invalid service type', async () => {

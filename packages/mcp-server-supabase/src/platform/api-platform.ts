@@ -4,6 +4,7 @@ import {
 } from '@mjackson/multipart-parser';
 import type { InitData } from '@supabase/mcp-utils';
 import { fileURLToPath } from 'node:url';
+import { z } from 'zod/v4';
 import packageJson from '../../package.json' with { type: 'json' };
 import { getDeploymentId, normalizeFilename } from '../edge-function.js';
 import { getClickHouseLogQuery } from '../logs.js';
@@ -50,6 +51,32 @@ const { version } = packageJson;
 
 const SUCCESS_RESPONSE: SuccessResponse = { success: true };
 
+const healthAdvisorLintNames = [
+  'instance_db_down',
+  'db_not_reachable',
+  'db_connection_limit_reached',
+  'log_data_api_error_rate_high',
+  'log_auth_error_rate_high',
+  'log_storage_error_rate_high',
+  'log_edge_function_error_rate_high',
+  'instance_alert_firing',
+] as const;
+
+const healthAdvisorResultOnlyLintNames = new Set([
+  'project_not_active',
+  'advisor_check_unavailable',
+]);
+
+const healthAdvisorResponseSchema = z.object({
+  data: z.object({
+    attributes: z.object({
+      lints: z.array(z.object({ name: z.string().optional() }).passthrough()),
+    }),
+  }),
+});
+
+const errorMessageSchema = z.object({ message: z.string() });
+
 export type SupabaseApiPlatformOptions = {
   /**
    * The access token for the Supabase Management API.
@@ -71,6 +98,9 @@ export function createSupabaseApiPlatform(
   const { accessToken, apiUrl } = options;
 
   const managementApiUrl = apiUrl ?? 'https://api.supabase.com';
+  let managementApiHeaders: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
 
   let managementApiClient = createManagementApiClient(
     managementApiUrl,
@@ -335,6 +365,62 @@ export function createSupabaseApiPlatform(
       assertSuccess(response, 'Failed to fetch performance advisors');
 
       return response.data;
+    },
+    async getHealthAdvisors(projectId: string) {
+      const response = await fetch(
+        new URL(
+          `/v2/projects/${encodeURIComponent(projectId)}/advisors/run`,
+          managementApiUrl
+        ),
+        {
+          method: 'POST',
+          headers: {
+            ...managementApiHeaders,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            data: {
+              type: 'project_advisors',
+              attributes: {
+                lints: healthAdvisorLintNames.map((name) => ({ name })),
+              },
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error(
+            'Unauthorized. Please provide a valid access token to the MCP server via the --access-token flag or SUPABASE_ACCESS_TOKEN.'
+          );
+        }
+
+        const error = errorMessageSchema.safeParse(
+          await response.json().catch(() => undefined)
+        );
+
+        if (error.success) {
+          throw new Error(error.data.message);
+        }
+
+        throw new Error('Failed to fetch health advisors');
+      }
+
+      const result = healthAdvisorResponseSchema.safeParse(
+        await response.json().catch(() => undefined)
+      );
+
+      if (!result.success) {
+        throw new Error('Failed to fetch health advisors');
+      }
+
+      return {
+        lints: result.data.data.attributes.lints.filter(
+          (lint) =>
+            !lint.name || !healthAdvisorResultOnlyLintNames.has(lint.name)
+        ),
+      };
     },
   };
 
@@ -822,12 +908,16 @@ export function createSupabaseApiPlatform(
         throw new Error('Client info is required');
       }
 
-      // Re-initialize the management API client with the user agent
+      const userAgent = `supabase-mcp/${version} (${clientInfo.name}/${clientInfo.version})`;
+      managementApiHeaders = {
+        Authorization: `Bearer ${accessToken}`,
+        'User-Agent': userAgent,
+      };
       managementApiClient = createManagementApiClient(
         managementApiUrl,
         accessToken,
         {
-          'User-Agent': `supabase-mcp/${version} (${clientInfo.name}/${clientInfo.version})`,
+          'User-Agent': userAgent,
         }
       );
     },

@@ -120,7 +120,7 @@ const queryLogsOutputSchema = z.object({
 const getAdvisorsInputSchema = z.object({
   project_id: z.string(),
   type: z
-    .enum(['security', 'performance'])
+    .enum(['security', 'performance', 'health'])
     .describe('The type of advisors to fetch'),
 });
 
@@ -243,7 +243,7 @@ export const debuggingToolDefs = {
   },
   get_advisors: {
     description:
-      "Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities or performance improvements. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
+      "Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
     parameters: getAdvisorsInputSchema,
     outputSchema: getAdvisorsOutputSchema,
     annotations: {
@@ -353,6 +353,9 @@ export function getDebuggingTools({
             break;
           case 'performance':
             result = await debugging.getPerformanceAdvisors(project_id);
+            break;
+          case 'health':
+            result = await debugging.getHealthAdvisors(project_id);
             break;
           default:
             throw new Error(`Unknown advisor type: ${type}`);

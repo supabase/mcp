@@ -612,6 +612,28 @@ export const mockManagementApi = [
     }
   ),
 
+  http.post<{ projectId: string }>(
+    `${API_URL}/v2/projects/:projectId/advisors/run`,
+    async ({ params }) => {
+      const project = mockProjects.get(params.projectId);
+      if (!project) {
+        return HttpResponse.json(
+          { message: 'Project not found' },
+          { status: 404 }
+        );
+      }
+
+      return HttpResponse.json({
+        data: {
+          type: 'project_advisors',
+          attributes: {
+            lints: [],
+          },
+        },
+      });
+    }
+  ),
+
   /**
    * Create a new branch for a project
    */
