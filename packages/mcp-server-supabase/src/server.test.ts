@@ -5570,6 +5570,121 @@ describe('project scoped tools', () => {
       }),
     ]);
   });
+
+  test('destructive branch tools reject branches owned by another project', async () => {
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const projectA = await createProject({
+      name: 'Project A',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    projectA.status = 'ACTIVE_HEALTHY';
+
+    const projectB = await createProject({
+      name: 'Project B',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    projectB.status = 'ACTIVE_HEALTHY';
+
+    const foreignBranch = await createBranch({
+      name: 'disposable-branch',
+      parent_project_ref: projectB.id,
+    });
+
+    // Also create a same-project branch so list_branches is non-empty for A
+    // and we can confirm same-project ops still work when needed.
+    await createBranch({
+      name: 'owned-branch',
+      parent_project_ref: projectA.id,
+    });
+
+    const { callTool } = await setup({
+      projectId: projectA.id,
+      features: ['branching'],
+    });
+
+    const listed = await callTool({
+      name: 'list_branches',
+      arguments: {},
+    });
+    expect(listed.branches).not.toContainEqual(
+      expect.objectContaining({ id: foreignBranch.id })
+    );
+    expect(listed.branches).toContainEqual(
+      expect.objectContaining({ parent_project_ref: projectA.id })
+    );
+
+    const scopeError = `Branch '${foreignBranch.id}' is not a development branch of the scoped project '${projectA.id}'.`;
+
+    await expect(
+      callTool({
+        name: 'delete_branch',
+        arguments: { branch_id: foreignBranch.id },
+      })
+    ).rejects.toThrow(scopeError);
+
+    await expect(
+      callTool({
+        name: 'merge_branch',
+        arguments: { branch_id: foreignBranch.id },
+      })
+    ).rejects.toThrow(scopeError);
+
+    await expect(
+      callTool({
+        name: 'reset_branch',
+        arguments: { branch_id: foreignBranch.id },
+      })
+    ).rejects.toThrow(scopeError);
+
+    await expect(
+      callTool({
+        name: 'rebase_branch',
+        arguments: { branch_id: foreignBranch.id },
+      })
+    ).rejects.toThrow(scopeError);
+
+    // Foreign branch must still exist — delete must not have run
+    expect(mockBranches.has(foreignBranch.id)).toBe(true);
+  });
+
+  test('destructive branch tools still work for branches of the scoped project', async () => {
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project A',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    const ownedBranch = await createBranch({
+      name: 'owned-branch',
+      parent_project_ref: project.id,
+    });
+
+    const { callTool } = await setup({
+      projectId: project.id,
+      features: ['branching'],
+    });
+
+    await callTool({
+      name: 'delete_branch',
+      arguments: { branch_id: ownedBranch.id },
+    });
+
+    expect(mockBranches.has(ownedBranch.id)).toBe(false);
+  });
 });
 
 describe('docs tools', () => {
