@@ -1,0 +1,64 @@
+version: "1"
+description: "Supabase MCP — permissive policy. All tools allowed. Rate limits on destructive and high-risk operations."
+default: allow
+
+tools:
+  # SQL execution — rate limited even in permissive mode
+  execute_sql:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "30/minute"
+        on_deny: "Max 30 SQL executions per minute"
+
+  # Schema migrations
+  apply_migration:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "10/hour"
+        on_deny: "Max 10 migrations per hour"
+
+  # Edge Function deployment
+  deploy_edge_function:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "10/hour"
+        on_deny: "Max 10 deployments per hour"
+
+  # Project management
+  create_project:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "5/hour"
+        on_deny: "Max 5 project creations per hour"
+
+  pause_project:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "5/hour"
+        on_deny: "Max 5 project pauses per hour"
+
+  # Branch management — destructive operations
+  delete_branch:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "10/hour"
+        on_deny: "Max 10 branch deletions per hour"
+
+  reset_branch:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "10/hour"
+        on_deny: "Max 10 branch resets per hour"
+
+  merge_branch:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "10/hour"
+        on_deny: "Max 10 branch merges per hour"
+
+  # Global safety net
+  "*":
+    rules:
+      - name: "global-rate-limit"
+        rate_limit: "120/minute"
+        on_deny: "Global rate limit — max 120 tool calls per minute"
