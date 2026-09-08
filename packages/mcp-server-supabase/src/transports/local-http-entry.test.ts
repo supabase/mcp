@@ -155,16 +155,59 @@ describe('startLocalHttpEntry', () => {
     expect(response.status).toBe(403);
   });
 
-  test('OAuth mode reads the token source on every request', async () => {
-    const issued: string[] = [];
+  test('OAuth mode advertises itself as an OAuth-protected resource', async () => {
     const oauthEntry = await startLocalHttpEntry({
       port: 0,
       apiUrl: API_URL,
-      accessToken: async () => {
-        const token = `${ACCESS_TOKEN}-${issued.length + 1}`;
-        issued.push(token);
-        return token;
-      },
+      oauthAuthorizationServer: new URL(API_URL),
+      log: () => {},
+    });
+    cleanups.push(() => oauthEntry.close());
+    mockServer.use(
+      http.all(`${new URL(oauthEntry.url).origin}/*`, () => passthrough())
+    );
+
+    const metadataUrl = new URL(
+      '/.well-known/oauth-protected-resource/mcp',
+      oauthEntry.url
+    );
+    const metadataResponse = await fetch(metadataUrl);
+    await expect(metadataResponse.json()).resolves.toEqual({
+      resource: oauthEntry.url,
+      authorization_servers: [new URL(API_URL).origin],
+      scopes_supported: expect.arrayContaining(['projects:read']),
+    });
+  });
+
+  test('OAuth mode challenges a request without a bearer token', async () => {
+    const oauthEntry = await startLocalHttpEntry({
+      port: 0,
+      apiUrl: API_URL,
+      oauthAuthorizationServer: new URL(API_URL),
+      log: () => {},
+    });
+    cleanups.push(() => oauthEntry.close());
+    mockServer.use(
+      http.all(`${new URL(oauthEntry.url).origin}/*`, () => passthrough())
+    );
+
+    const response = await fetch(oauthEntry.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toContain(
+      `resource_metadata="${new URL('/.well-known/oauth-protected-resource/mcp', oauthEntry.url).href}"`
+    );
+  });
+
+  test('OAuth mode accepts each client bringing its own bearer token', async () => {
+    const oauthEntry = await startLocalHttpEntry({
+      port: 0,
+      apiUrl: API_URL,
+      oauthAuthorizationServer: new URL(API_URL),
       log: () => {},
     });
     cleanups.push(() => oauthEntry.close());
@@ -176,23 +219,25 @@ describe('startLocalHttpEntry', () => {
         return HttpResponse.json([]);
       })
     );
-    const client = new Client(
-      { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
-      { versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } } }
-    );
-    await client.connect(
-      new StreamableHTTPClientTransport(new URL(oauthEntry.url))
-    );
-    cleanups.push(() => client.close());
 
-    await client.callTool({ name: 'list_projects', arguments: {} });
-    await client.callTool({ name: 'list_projects', arguments: {} });
+    for (const token of [`${ACCESS_TOKEN}-a`, `${ACCESS_TOKEN}-b`]) {
+      const client = new Client(
+        { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+        { versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } } }
+      );
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(oauthEntry.url), {
+          requestInit: { headers: { Authorization: `Bearer ${token}` } },
+        })
+      );
+      cleanups.push(() => client.close());
+      await client.callTool({ name: 'list_projects', arguments: {} });
+    }
 
-    expect(seen).toHaveLength(2);
-    expect(seen[0]).not.toBe(seen[1]);
-    expect(issued.map((token) => `Bearer ${token}`)).toEqual(
-      expect.arrayContaining(seen)
-    );
+    expect(seen).toEqual([
+      `Bearer ${ACCESS_TOKEN}-a`,
+      `Bearer ${ACCESS_TOKEN}-b`,
+    ]);
   });
 
   test('sends a form-capable client a cost elicitation', async () => {

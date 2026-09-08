@@ -6,7 +6,6 @@ import packageJson from '../package.json' with { type: 'json' };
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import { createSupabaseMcpServer } from './server.js';
 import { startLocalHttpEntry } from './transports/local-http-entry.js';
-import { login } from './transports/oauth-client.js';
 import { parseList } from './transports/util.js';
 import { parseFeatureGroups } from './util.js';
 
@@ -76,17 +75,24 @@ async function main() {
     cliContentApiUrl ?? process.env.SUPABASE_CONTENT_API_URL;
 
   if (http) {
-    // The hosted MCP server's OAuth discovery points at the matching Management API.
-    const mcpUrl = new URL(apiUrl ?? 'https://api.supabase.com');
-    mcpUrl.host = mcpUrl.host.replace(/^api\./, 'mcp.');
-    const accessToken = oauth ? await login(`${mcpUrl.origin}/mcp`) : undefined;
+    const oauthAuthorizationServer = oauth
+      ? new URL(apiUrl ?? 'https://api.supabase.com')
+      : undefined;
     const entry = await startLocalHttpEntry({
       port: Number(cliPort),
       apiUrl,
       contentApiUrl,
-      accessToken,
+      oauthAuthorizationServer,
     });
     console.error(`Supabase MCP server listening on ${entry.url}`);
+    if (oauthAuthorizationServer) {
+      console.error(
+        'Your MCP client signs in with Supabase OAuth in the browser on connect.'
+      );
+      console.error(
+        'Note: signing in against api.supabase.com will currently fail (400) until platform widens its OAuth resource validation for loopback URLs; see CONTRIBUTING.md.'
+      );
+    }
     return;
   }
 
