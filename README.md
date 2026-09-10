@@ -85,7 +85,7 @@ for (const step of await result.steps) {
 `createToolSchemas()` accepts similar filtering options as the MCP server's URL parameters:
 
 - `features`: Restrict to specific [feature groups](https://supabase.com/mcp#configuration-options) (e.g. `['database', 'docs']`). Defaults to all default feature groups.
-- `projectScoped`: When `true`, omits `project_id` from tool input schemas and excludes account-level tools — use when connecting to a server configured with `project_ref`. Defaults to `false`.
+- `projectScoped`: When `true`, omits `project_id` from tool input schemas and excludes account-level operations; writable branching retains branch-only cost quotation and confirmation schemas — use when connecting to a server configured with `project_ref`. Defaults to `false`.
 - `readOnly`: When `true`, excludes mutating tools — use when connecting to a server configured with `read_only=true`. Defaults to `false`.
 
 ```ts

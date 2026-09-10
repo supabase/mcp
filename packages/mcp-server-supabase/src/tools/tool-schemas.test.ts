@@ -128,24 +128,262 @@ describe('createToolSchemas', () => {
       expect(shape).not.toHaveProperty('project_id');
       expect(shape).toHaveProperty('query');
     });
+  });
 
-    test('type reflects project_id omission', () => {
-      const schemas = createToolSchemas({ projectScoped: true });
-
-      // The input schema type should NOT include project_id
-      type ExecuteSqlInput = (typeof schemas)['execute_sql']['inputSchema'];
-      expectTypeOf<ExecuteSqlInput>().not.toHaveProperty('project_id');
+  describe('branch-only cost helpers', () => {
+    test('boolean project scope retains account and branch-only quote alternatives', () => {
+      const schemas = createToolSchemas({
+        features: ['account', 'branching'],
+        projectScoped: false as boolean,
+      });
+      const scopedSchemas = createToolSchemas({
+        features: ['account', 'branching'],
+        projectScoped: true,
+      });
+      expectTypeOf<
+        z.input<typeof schemas.get_cost.inputSchema>
+      >().toEqualTypeOf<
+        | { type: 'project' | 'branch'; organization_id: string }
+        | { type: 'branch' }
+      >();
+      expectTypeOf<typeof schemas.get_cost.outputSchema>().toEqualTypeOf<
+        | typeof supabaseMcpToolSchemas.get_cost.outputSchema
+        | typeof scopedSchemas.get_cost.outputSchema
+      >();
+      expectTypeOf<
+        z.output<typeof schemas.get_cost.outputSchema>
+      >().toEqualTypeOf<
+        | {
+            type: 'project' | 'branch';
+            amount: number;
+            recurrence: 'hourly' | 'monthly';
+          }
+        | {
+            type: 'branch';
+            amount: number;
+            recurrence: 'hourly' | 'monthly';
+          }
+      >();
+      const input = { type: 'project', organization_id: 'fixture-org' };
+      expect(schemas.get_cost.inputSchema.parse(input)).toEqual(input);
+      expect(
+        schemas.get_cost.inputSchema.safeParse({ type: 'branch' }).success
+      ).toBe(false);
     });
 
-    test('non-project-id tools retain original schemas', () => {
-      const schemas = createToolSchemas({ projectScoped: true });
-
-      // search_docs has no project_id - should use original schema
-      expect(schemas.search_docs).toBe(supabaseMcpToolSchemas.search_docs);
-
-      // delete_branch uses branch_id, not project_id - should use original schema
-      expect(schemas.delete_branch).toBe(supabaseMcpToolSchemas.delete_branch);
+    test('boolean read-only retains both helper-present and helper-absent maps', () => {
+      const schemas = createToolSchemas({
+        features: ['branching'],
+        readOnly: false as boolean,
+      });
+      const writableSchemas = createToolSchemas({ features: ['branching'] });
+      const readOnlySchemas = createToolSchemas({
+        features: ['branching'],
+        readOnly: true,
+      });
+      expectTypeOf(schemas).toEqualTypeOf<
+        typeof writableSchemas | typeof readOnlySchemas
+      >();
+      expectTypeOf<
+        Extract<typeof schemas, { get_cost: unknown }>
+      >().toEqualTypeOf<typeof writableSchemas>();
+      expectTypeOf<
+        Exclude<typeof schemas, { get_cost: unknown }>
+      >().toEqualTypeOf<typeof readOnlySchemas>();
+      expect(schemas).toHaveProperty('get_cost');
+      expect(schemas).toHaveProperty('confirm_cost');
     });
+
+    test.each([
+      {
+        name: 'scoped defaults',
+        create: () => createToolSchemas({ projectScoped: true }),
+      },
+      {
+        name: 'scoped branching-only',
+        create: () =>
+          createToolSchemas({ features: ['branching'], projectScoped: true }),
+      },
+      {
+        name: 'unscoped branching-only',
+        create: () => createToolSchemas({ features: ['branching'] }),
+      },
+    ])(
+      '$name exposes branch-only cost input and output types',
+      ({ create }) => {
+        const schemas = create();
+        expectTypeOf(schemas).toHaveProperty('get_cost');
+        expectTypeOf(schemas).toHaveProperty('confirm_cost');
+        expectTypeOf<
+          z.input<typeof schemas.get_cost.inputSchema>
+        >().toEqualTypeOf<{
+          type: 'branch';
+        }>();
+        expectTypeOf<
+          z.input<typeof schemas.confirm_cost.inputSchema>
+        >().toEqualTypeOf<{
+          type: 'branch';
+          amount: number;
+          recurrence: 'hourly' | 'monthly';
+        }>();
+        expectTypeOf<
+          z.output<typeof schemas.get_cost.outputSchema>
+        >().toEqualTypeOf<{
+          type: 'branch';
+          amount: number;
+          recurrence: 'hourly' | 'monthly';
+        }>();
+        expectTypeOf<
+          z.output<typeof schemas.confirm_cost.outputSchema>
+        >().toEqualTypeOf<{ confirmation_id: string }>();
+
+        const quote = { type: 'branch', amount: 0.01344, recurrence: 'hourly' };
+        expect(schemas.get_cost.inputSchema.parse({ type: 'branch' })).toEqual({
+          type: 'branch',
+        });
+        expect(schemas.get_cost.inputSchema.shape).not.toHaveProperty(
+          'organization_id'
+        );
+        expect(
+          schemas.get_cost.inputSchema.safeParse({ type: 'project' }).success
+        ).toBe(false);
+        expect(schemas.confirm_cost.inputSchema.parse(quote)).toEqual(quote);
+        expect(
+          schemas.confirm_cost.inputSchema.safeParse({
+            ...quote,
+            type: 'project',
+          }).success
+        ).toBe(false);
+        expect(
+          schemas.confirm_cost.inputSchema.safeParse({
+            type: 'branch',
+            recurrence: 'hourly',
+          }).success
+        ).toBe(false);
+        expect(
+          schemas.confirm_cost.inputSchema.safeParse({
+            type: 'branch',
+            amount: quote.amount,
+          }).success
+        ).toBe(false);
+        expect(schemas.get_cost.outputSchema.parse(quote)).toEqual(quote);
+        expect(
+          schemas.get_cost.outputSchema.safeParse({
+            ...quote,
+            type: 'project',
+          }).success
+        ).toBe(false);
+        expect(
+          schemas.confirm_cost.outputSchema.parse({
+            confirmation_id: 'cost-id',
+          })
+        ).toEqual({ confirmation_id: 'cost-id' });
+      }
+    );
+
+    test.each([
+      {
+        name: 'read-only scoped defaults',
+        create: () =>
+          createToolSchemas({ projectScoped: true, readOnly: true }),
+      },
+      {
+        name: 'read-only scoped branching',
+        create: () =>
+          createToolSchemas({
+            features: ['branching'],
+            projectScoped: true,
+            readOnly: true,
+          }),
+      },
+      {
+        name: 'read-only unscoped branching',
+        create: () =>
+          createToolSchemas({ features: ['branching'], readOnly: true }),
+      },
+      {
+        name: 'scoped account without branching',
+        create: () =>
+          createToolSchemas({ features: ['account'], projectScoped: true }),
+      },
+      {
+        name: 'unscoped without account or branching',
+        create: () => createToolSchemas({ features: ['database'] }),
+      },
+    ])(
+      '$name omits branch-only helpers from runtime and inferred keys',
+      ({ create }) => {
+        const schemas = create();
+        expect(schemas).not.toHaveProperty('get_cost');
+        expect(schemas).not.toHaveProperty('confirm_cost');
+        expectTypeOf(schemas).not.toHaveProperty('get_cost');
+        expectTypeOf(schemas).not.toHaveProperty('confirm_cost');
+        // Check every factory's return type, not only the union's common keys.
+        expectTypeOf<
+          Extract<typeof schemas, { get_cost: unknown }>
+        >().toEqualTypeOf<never>();
+        expectTypeOf<
+          Extract<typeof schemas, { confirm_cost: unknown }>
+        >().toEqualTypeOf<never>();
+      }
+    );
+
+    test.each([
+      {
+        name: 'account only',
+        create: () => createToolSchemas({ features: ['account'] }),
+      },
+      {
+        name: 'account and branching',
+        create: () => createToolSchemas({ features: ['account', 'branching'] }),
+      },
+      {
+        name: 'read-only account and branching',
+        create: () =>
+          createToolSchemas({
+            features: ['account', 'branching'],
+            readOnly: true,
+          }),
+      },
+    ])(
+      '$name preserves account cost schemas and inferred types',
+      ({ create }) => {
+        const schemas = create();
+        expectTypeOf<
+          z.input<typeof schemas.get_cost.inputSchema>
+        >().toEqualTypeOf<{
+          type: 'project' | 'branch';
+          organization_id: string;
+        }>();
+        expectTypeOf<
+          z.input<typeof schemas.confirm_cost.inputSchema>
+        >().toEqualTypeOf<{
+          type: 'project' | 'branch';
+          amount: number;
+          recurrence: 'hourly' | 'monthly';
+        }>();
+        expectTypeOf<
+          z.output<typeof schemas.get_cost.outputSchema>
+        >().toEqualTypeOf<{
+          type: 'project' | 'branch';
+          amount: number;
+          recurrence: 'hourly' | 'monthly';
+        }>();
+        expectTypeOf<
+          z.output<typeof schemas.confirm_cost.outputSchema>
+        >().toEqualTypeOf<{ confirmation_id: string }>();
+        for (const type of ['project', 'branch'] as const) {
+          const input = { type, organization_id: 'fixture-org' };
+          const quote = { type, amount: 1, recurrence: 'monthly' };
+          expect(schemas.get_cost.inputSchema.parse(input)).toEqual(input);
+          expect(schemas.get_cost.inputSchema.safeParse({ type }).success).toBe(
+            false
+          );
+          expect(schemas.confirm_cost.inputSchema.parse(quote)).toEqual(quote);
+          expect(schemas.get_cost.outputSchema.parse(quote)).toEqual(quote);
+        }
+      }
+    );
   });
 
   describe('readOnly', () => {

@@ -8,7 +8,10 @@ import packageJson from '../package.json' with { type: 'json' };
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
-import { getBranchingTools } from './tools/branching-tools.js';
+import {
+  getBranchCostTools,
+  getBranchingTools,
+} from './tools/branching-tools.js';
 import {
   type CostConfirmationState,
   isFormCapable,
@@ -20,7 +23,7 @@ import { getDocsTools } from './tools/docs-tools.js';
 import { getEdgeFunctionTools } from './tools/edge-function-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
 import { writeToolSet } from './tools/tool-schemas.js';
-import type { FeatureGroup } from './types.js';
+import { PLATFORM_INDEPENDENT_FEATURES, type FeatureGroup } from './types.js';
 import { parseFeatureGroups } from './util.js';
 import { z } from 'zod/v4';
 
@@ -89,8 +92,6 @@ const DEFAULT_FEATURES: FeatureGroup[] = [
   'functions',
   'branching',
 ];
-
-export const PLATFORM_INDEPENDENT_FEATURES: FeatureGroup[] = ['docs'];
 
 export const instructions = `
 Here are guidelines for using Supabase tools effectively:
@@ -230,6 +231,14 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         );
       }
 
+      const branchCostConfirmation =
+        costConfirmationCodec &&
+        costConfirmation?.enabledTools.includes('create_branch') &&
+        ctx &&
+        isFormCapable(ctx)
+          ? { codec: costConfirmationCodec }
+          : undefined;
+
       if (branching && enabledFeatures.has('branching')) {
         Object.assign(
           tools,
@@ -237,11 +246,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             branching,
             projectId,
             readOnly,
-            costConfirmation:
-              costConfirmationCodec &&
-              costConfirmation?.enabledTools.includes('create_branch')
-                ? { codec: costConfirmationCodec }
-                : undefined,
+            costConfirmation: branchCostConfirmation,
           })
         );
       }
@@ -296,6 +301,19 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
               }
             : { ...tool, hidden: true };
         }
+      }
+
+      // Install branch-only fallbacks after account cost pruning so their
+      // supported cost type cannot be widened to project.
+      if (
+        branching &&
+        enabledFeatures.has('branching') &&
+        !readOnly &&
+        !branchCostConfirmation &&
+        !tools.get_cost &&
+        !tools.confirm_cost
+      ) {
+        Object.assign(tools, getBranchCostTools());
       }
 
       return tools;

@@ -28,3 +28,5 @@ export const featureGroupSchema = z
   });
 
 export type FeatureGroup = z.infer<typeof featureGroupSchema>;
+
+export const PLATFORM_INDEPENDENT_FEATURES: FeatureGroup[] = ['docs'];

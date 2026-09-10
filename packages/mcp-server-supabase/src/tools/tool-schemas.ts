@@ -1,7 +1,7 @@
 import type { z } from 'zod/v4';
 import { CURRENT_FEATURE_GROUPS, type FeatureGroup } from '../types.js';
 import { accountToolDefs } from './account-tools.js';
-import { branchingToolDefs } from './branching-tools.js';
+import { branchCostToolDefs, branchingToolDefs } from './branching-tools.js';
 import { databaseToolDefs } from './database-operation-tools.js';
 import { debuggingToolDefs } from './debugging-tools.js';
 import { developmentToolDefs } from './development-tools.js';
@@ -73,6 +73,8 @@ export const supabaseMcpToolSchemas = {
   ...defsToSchemas(edgeFunctionToolDefs),
   ...defsToSchemas(storageToolDefs),
 } satisfies Record<string, SchemaEntry>;
+
+const branchCostSchemas = defsToSchemas(branchCostToolDefs);
 
 /**
  * Maps each feature group to its tool names.
@@ -184,50 +186,83 @@ type WriteToolName = {
     : never;
 }[keyof AllSchemas];
 
+type BranchCostToolNames<
+  Feature extends FeatureGroup,
+  ProjectScoped extends boolean,
+  ReadOnly extends boolean,
+> = 'branching' extends Feature
+  ? ReadOnly extends true
+    ? never
+    : ProjectScoped extends true
+      ? keyof typeof branchCostSchemas
+      : 'account' extends Feature
+        ? never
+        : keyof typeof branchCostSchemas
+  : never;
+
 /**
  * Computes the set of tool names available for a given configuration.
  *
  * - Resolves feature groups to their tool names
  * - Excludes account tools when project-scoped
  * - Excludes write-only tools when read-only
+ * - Adds branch-only cost helpers for writable branching without account tools
  */
 type AvailableToolNames<
   Feature extends FeatureGroup,
   ProjectScoped extends boolean,
   ReadOnly extends boolean,
-> = Exclude<
-  ToolNameForFeature<Feature>,
-  | (ProjectScoped extends true ? AccountToolName : never)
-  | (ReadOnly extends true ? WriteToolName : never)
->;
+> =
+  | Exclude<
+      ToolNameForFeature<Feature>,
+      | (ProjectScoped extends true ? AccountToolName : never)
+      | (ReadOnly extends true ? WriteToolName : never)
+    >
+  | BranchCostToolNames<Feature, ProjectScoped, ReadOnly>;
 
 /**
  * Computes the tool schemas for a given configuration.
  *
  * When `ProjectScoped` is `true`, tools with `project_id` use the
  * project-scoped override (with `project_id` omitted from the input
- * schema). All other tools use their original schemas.
+ * schema). Branch-only cost helpers use their narrowed schemas when account
+ * tools are unavailable. All other tools use their original schemas.
+ * Distribute over boolean option cases before selecting schemas so unresolved
+ * options retain each possible map. Feature remains the selected feature set.
  */
 type ToolSchemasFor<
   Feature extends FeatureGroup,
   ProjectScoped extends boolean,
   ReadOnly extends boolean,
-> = Pick<
-  ProjectScoped extends true
-    ? Omit<AllSchemas, ProjectScopedToolName> & ProjectScopedSchemas
-    : AllSchemas,
-  AvailableToolNames<Feature, ProjectScoped, ReadOnly> & keyof AllSchemas
->;
+> = ProjectScoped extends boolean
+  ? ReadOnly extends boolean
+    ? {
+        [Name in AvailableToolNames<
+          Feature,
+          ProjectScoped,
+          ReadOnly
+        >]: Name extends BranchCostToolNames<Feature, ProjectScoped, ReadOnly>
+          ? (typeof branchCostSchemas)[Name]
+          : ProjectScoped extends true
+            ? Name extends keyof ProjectScopedSchemas
+              ? ProjectScopedSchemas[Name]
+              : AllSchemas[Name]
+            : AllSchemas[Name];
+      }
+    : never
+  : never;
 
 /**
  * Creates a dynamically scoped tool schema map for use with AI SDK's
  * `mcpClient.tools()`.
  *
- * Mirrors the server's dynamic tool behavior:
+ * Mirrors the server's legacy tool schemas:
  * - `features` controls which tool groups are included
  * - `projectScoped` omits `project_id` from input schemas and excludes
- *   account tools (matching server behavior when `projectId` is set)
- * - `readOnly` excludes mutating tools
+ *   account operations (matching server behavior when `projectId` is set)
+ * - Writable branching retains branch-only cost helpers when account tools
+ *   are unavailable
+ * - `readOnly` excludes mutating tools and branch-only cost helpers
  *
  * @example
  * ```typescript
@@ -273,6 +308,14 @@ export function createToolSchemas<
         result[toolName] = supabaseMcpToolSchemas[toolName];
       }
     }
+  }
+
+  if (
+    enabledFeatures.has('branching') &&
+    !readOnly &&
+    (projectScoped || !enabledFeatures.has('account'))
+  ) {
+    Object.assign(result, branchCostSchemas);
   }
 
   return result as ToolSchemasFor<Features[number], ProjectScoped, ReadOnly>;

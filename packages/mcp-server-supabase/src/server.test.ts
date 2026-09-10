@@ -156,6 +156,7 @@ type ModernSetupOptions = {
   clientCapabilities?: ClientCapabilities;
   readOnly?: boolean;
   projectId?: string;
+  features?: string[];
   /**
    * Registers an auto-fulfilling `elicitation/create` handler that always
    * answers with this action, driven via `client.callTool`. Omit for manual
@@ -191,6 +192,7 @@ async function setupModern(options: ModernSetupOptions = {}) {
   const {
     readOnly,
     projectId,
+    features,
     elicitationAction,
     costConfirmation = COST_CONFIRMATION,
     clientCapabilities = {},
@@ -214,6 +216,7 @@ async function setupModern(options: ModernSetupOptions = {}) {
     platform,
     projectId,
     readOnly,
+    features,
     costConfirmation,
   });
 
@@ -3882,7 +3885,7 @@ describe('tools', () => {
       );
     });
 
-    test('create_branch advertises confirm_cost_id as optional when cost confirmation is configured', async () => {
+    test('create_branch requires confirm_cost_id for configured legacy fallback', async () => {
       const { client } = await setup({
         features: ['branching'],
         costConfirmation: COST_CONFIRMATION,
@@ -3893,62 +3896,127 @@ describe('tools', () => {
         (tool) => tool.name === 'create_branch'
       );
 
-      expect(createBranchTool?.inputSchema.required).not.toContain(
+      expect(createBranchTool?.inputSchema.required).toContain(
         'confirm_cost_id'
       );
     });
 
-    test('capability-free client still succeeds via get_cost -> confirm_cost -> create_branch', async () => {
-      const { callTool } = await setup({
-        features: ['account', 'branching'],
-        costConfirmation: COST_CONFIRMATION,
-      });
+    test.each([false, true])(
+      'branching-only legacy quote -> confirm -> create (scoped: %s)',
+      async (scoped) => {
+        const org = await createOrganization({
+          name: 'My Org',
+          plan: 'free',
+          allowed_release_channels: ['ga'],
+        });
+        const project = await createProject({
+          name: 'Project 1',
+          region: 'us-east-1',
+          organization_id: org.id,
+        });
+        project.status = 'ACTIVE_HEALTHY';
+        const { callTool } = await setup({
+          features: ['branching'],
+          projectId: scoped ? project.id : undefined,
+          costConfirmation: COST_CONFIRMATION,
+        });
+        const requests: string[] = [];
+        const onRequest = ({ request }: { request: Request }) => {
+          if (request.url.startsWith(`${API_URL}/v1/`)) {
+            requests.push(`${request.method} ${request.url}`);
+          }
+        };
+        mockServer!.events.on('request:start', onRequest);
+        try {
+          const cost = await callTool({
+            name: 'get_cost',
+            arguments: { type: 'branch' },
+          });
+          expect(cost).toEqual({
+            type: 'branch',
+            amount: BRANCH_COST_HOURLY,
+            recurrence: 'hourly',
+          });
+          const confirmation = await callTool({
+            name: 'confirm_cost',
+            arguments: cost,
+          });
+          expect(requests).toEqual([]);
+          const branch = await callTool({
+            name: 'create_branch',
+            arguments: {
+              ...(scoped ? {} : { project_id: project.id }),
+              name: 'test-branch',
+              confirm_cost_id: confirmation.confirmation_id,
+            },
+          });
+          expect(branch).toMatchObject({
+            name: 'test-branch',
+            parent_project_ref: project.id,
+          });
+          expect(
+            Array.from(mockBranches.values()).filter(
+              (branch) => !branch.is_default
+            )
+          ).toMatchObject([
+            { name: 'test-branch', parent_project_ref: project.id },
+          ]);
+          expect(requests).toEqual([
+            `POST ${API_URL}/v1/projects/${project.id}/branches`,
+          ]);
+        } finally {
+          mockServer!.events.removeListener('request:start', onRequest);
+        }
+      }
+    );
 
-      const org = await createOrganization({
-        name: 'My Org',
-        plan: 'free',
-        allowed_release_channels: ['ga'],
-      });
-
-      const project = await createProject({
-        name: 'Project 1',
-        region: 'us-east-1',
-        organization_id: org.id,
-      });
-      project.status = 'ACTIVE_HEALTHY';
-
-      const confirm_cost_id_result = await callTool({
-        name: 'confirm_cost',
-        arguments: {
-          type: 'branch',
-          recurrence: 'hourly',
-          amount: BRANCH_COST_HOURLY,
-        },
-      });
-
-      const branchName = 'test-branch';
-      const result = await callTool({
+    test.each([
+      { name: 'create_branch', arguments: { name: 'test-branch' } },
+      {
         name: 'create_branch',
-        arguments: {
-          project_id: project.id,
-          name: branchName,
-          confirm_cost_id: confirm_cost_id_result.confirmation_id,
-        },
-      });
-
-      expect(result).toMatchObject({
-        name: branchName,
-        parent_project_ref: project.id,
-      });
-      // Creating a project's first branch also mints a same-named
-      // `is_default` mock branch representing the parent project itself -
-      // filter it out to count only the branch this call created.
-      expect(
-        Array.from(mockBranches.values()).filter(
-          (branch) => branch.name === branchName && !branch.is_default
-        )
-      ).toHaveLength(1);
-    });
+        arguments: { name: 'test-branch', confirm_cost_id: 'wrong-cost-id' },
+      },
+      { name: 'get_cost', arguments: { type: 'project' } },
+      {
+        name: 'confirm_cost',
+        arguments: { type: 'project', amount: 0, recurrence: 'monthly' },
+      },
+    ])(
+      'branch-only fallback rejects unsupported or unconfirmed calls: %j',
+      async (params) => {
+        const org = await createOrganization({
+          name: 'My Org',
+          plan: 'free',
+          allowed_release_channels: ['ga'],
+        });
+        const project = await createProject({
+          name: 'Project 1',
+          region: 'us-east-1',
+          organization_id: org.id,
+        });
+        project.status = 'ACTIVE_HEALTHY';
+        const { client } = await setup({
+          features: ['branching'],
+          projectId: project.id,
+          costConfirmation: COST_CONFIRMATION,
+        });
+        const requests: string[] = [];
+        const onRequest = ({ request }: { request: Request }) => {
+          if (request.url.startsWith(`${API_URL}/v1/`)) {
+            requests.push(`${request.method} ${request.url}`);
+          }
+        };
+        mockServer!.events.on('request:start', onRequest);
+        try {
+          const result = await client.callTool(params);
+          expect(result.isError).toBe(true);
+          expect(requests).toEqual([]);
+          expect(mockBranches.size).toBe(0);
+        } finally {
+          mockServer!.events.removeListener('request:start', onRequest);
+        }
+      }
+    );
 
     test('form-capable client: accept creates the branch exactly once', async () => {
       const { client } = await setupModern({
@@ -4292,55 +4360,111 @@ describe('tools', () => {
       expect(mockBranches.size).toBe(0);
     });
 
-    test('project-scoped server signs and uses the configured project', async () => {
-      const org = await createOrganization({
-        name: 'My Org',
-        plan: 'free',
-        allowed_release_channels: ['ga'],
-      });
-
-      const project = await createProject({
-        name: 'Project 1',
-        region: 'us-east-1',
-        organization_id: org.id,
-      });
-      project.status = 'ACTIVE_HEALTHY';
-
-      const { client } = await setupModern({
-        clientCapabilities: FORM_CAPABLE,
-        projectId: project.id,
-        elicitationAction: 'accept',
-      });
-
-      const { tools } = await client.listTools();
-      const createBranchTool = tools.find(
-        (tool) => tool.name === 'create_branch'
-      );
-      expect(
-        Object.keys(createBranchTool?.inputSchema.properties ?? {})
-      ).not.toContain('project_id');
-
-      const result = await client.callTool({
-        name: 'create_branch',
-        arguments: { name: 'test-branch' },
-      });
-
-      expect(result.isError).toBeFalsy();
-      const [content] = result.content;
-      if (content?.type !== 'text') {
-        throw new Error('expected text content');
+    test.each(['accept', 'cancel'] as const)(
+      'scoped branching-only form %s preserves the configured project',
+      async (action) => {
+        const org = await createOrganization({
+          name: 'My Org',
+          plan: 'free',
+          allowed_release_channels: ['ga'],
+        });
+        const project = await createProject({
+          name: 'Project 1',
+          region: 'us-east-1',
+          organization_id: org.id,
+        });
+        project.status = 'ACTIVE_HEALTHY';
+        const { client } = await setupModern({
+          clientCapabilities: FORM_CAPABLE,
+          projectId: project.id,
+          features: ['branching'],
+        });
+        const { tools } = await client.listTools();
+        const createBranchTool = tools.find(
+          (tool) => tool.name === 'create_branch'
+        );
+        expect(createBranchTool).toBeDefined();
+        expect(createBranchTool?.inputSchema.properties).not.toHaveProperty(
+          'project_id'
+        );
+        expect(createBranchTool?.inputSchema.properties).not.toHaveProperty(
+          'confirm_cost_id'
+        );
+        expect(tools.map((tool) => tool.name)).not.toContain('get_cost');
+        expect(tools.map((tool) => tool.name)).not.toContain('confirm_cost');
+        const requests: string[] = [];
+        const onRequest = ({ request }: { request: Request }) => {
+          if (request.url.startsWith(`${API_URL}/v1/`)) {
+            requests.push(`${request.method} ${request.url}`);
+          }
+        };
+        mockServer!.events.on('request:start', onRequest);
+        try {
+          const args = { name: 'test-branch' };
+          const first = (await client.request(
+            {
+              method: 'tools/call',
+              params: { name: 'create_branch', arguments: args },
+            },
+            { allowInputRequired: true }
+          )) as CallToolResult | InputRequiredResult;
+          if (!isInputRequiredResult(first)) {
+            throw new Error('expected an input_required result');
+          }
+          expect(first.inputRequests?.confirm_cost).toMatchObject({
+            method: 'elicitation/create',
+            params: { mode: 'form' },
+          });
+          expect(requests).toEqual([]);
+          expect(mockBranches.size).toBe(0);
+          const result = (await client.request(
+            {
+              method: 'tools/call',
+              params: {
+                name: 'create_branch',
+                arguments: args,
+                inputResponses: {
+                  confirm_cost:
+                    action === 'accept' ? { action, content: {} } : { action },
+                },
+                requestState: first.requestState,
+              },
+            },
+            { allowInputRequired: true }
+          )) as CallToolResult | InputRequiredResult;
+          if (isInputRequiredResult(result)) {
+            throw new Error('expected a CallToolResult');
+          }
+          expect(result.isError).toBeFalsy();
+          if (action === 'cancel') {
+            expect(result.structuredContent).toEqual({ status: 'cancelled' });
+            expect(requests).toEqual([]);
+            expect(mockBranches.size).toBe(0);
+          } else {
+            const [content] = result.content;
+            if (content?.type !== 'text') {
+              throw new Error('expected text content');
+            }
+            expect(JSON.parse(content.text)).toMatchObject({
+              name: 'test-branch',
+              parent_project_ref: project.id,
+            });
+            expect(
+              Array.from(mockBranches.values()).filter(
+                (branch) => !branch.is_default
+              )
+            ).toMatchObject([
+              { name: 'test-branch', parent_project_ref: project.id },
+            ]);
+            expect(requests).toEqual([
+              `POST ${API_URL}/v1/projects/${project.id}/branches`,
+            ]);
+          }
+        } finally {
+          mockServer!.events.removeListener('request:start', onRequest);
+        }
       }
-      const branch = JSON.parse(content.text);
-      expect(branch).toMatchObject({
-        name: 'test-branch',
-        parent_project_ref: project.id,
-      });
-      expect(
-        Array.from(mockBranches.values()).filter(
-          (branch) => branch.name === 'test-branch' && !branch.is_default
-        )
-      ).toHaveLength(1);
-    });
+    );
 
     test('rejects a requestState minted by create_project', async () => {
       const { client } = await setupModern({
@@ -5454,22 +5578,121 @@ describe('feature groups', () => {
     ]);
   });
 
-  test('branching tools', async () => {
+  test.each([
+    { projectId: undefined, costConfirmation: undefined },
+    { projectId: 'scoped-project', costConfirmation: undefined },
+    { projectId: undefined, costConfirmation: COST_CONFIRMATION },
+    { projectId: 'scoped-project', costConfirmation: COST_CONFIRMATION },
+  ])('branching tools include fallback helpers: %j', async (options) => {
     const { client } = await setup({
+      ...options,
       features: ['branching'],
     });
-
     const { tools } = await client.listTools();
-    const toolNames = tools.map((tool) => tool.name);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(
+      [
+        'create_branch',
+        'list_branches',
+        'delete_branch',
+        'merge_branch',
+        'reset_branch',
+        'rebase_branch',
+        'get_cost',
+        'confirm_cost',
+      ].sort()
+    );
+    expect(
+      tools.find((tool) => tool.name === 'get_cost')?.inputSchema.properties
+    ).not.toHaveProperty('organization_id');
+  });
 
-    expect(toolNames).toEqual([
-      'create_branch',
-      'list_branches',
-      'delete_branch',
-      'merge_branch',
-      'reset_branch',
-      'rebase_branch',
+  test.each([
+    { features: ['database'], readOnly: false },
+    { features: ['branching'], readOnly: true },
+  ])(
+    'no branch-only helpers without writable branching: %j',
+    async (options) => {
+      const { client } = await setup({
+        ...options,
+        projectId: 'scoped-project',
+        costConfirmation: COST_CONFIRMATION,
+      });
+      const { tools } = await client.listTools();
+      const names = tools.map((tool) => tool.name);
+      expect(names).not.toContain('create_branch');
+      expect(names).not.toContain('get_cost');
+      expect(names).not.toContain('confirm_cost');
+    }
+  );
+
+  test.each([
+    { enabledTools: ['create_project'] as const, fallback: true },
+    { enabledTools: ['create_branch'] as const, fallback: false },
+  ])(
+    'scoped modern branch fallback follows branch enablement: %j',
+    async ({ enabledTools, fallback }) => {
+      const { client } = await setupModern({
+        projectId: 'scoped-project',
+        features: ['branching'],
+        clientCapabilities: FORM_CAPABLE,
+        costConfirmation: {
+          ...COST_CONFIRMATION,
+          enabledTools: [...enabledTools],
+        },
+      });
+      const { tools } = await client.listTools();
+      const names = tools.map((tool) => tool.name);
+      for (const name of ['get_cost', 'confirm_cost']) {
+        expect(names.includes(name)).toBe(fallback);
+      }
+      const branchTool = tools.find((tool) => tool.name === 'create_branch');
+      expect(branchTool).toBeDefined();
+      if (fallback) {
+        expect(branchTool?.inputSchema.required).toContain('confirm_cost_id');
+      } else {
+        expect(branchTool?.inputSchema.properties).not.toHaveProperty(
+          'confirm_cost_id'
+        );
+      }
+    }
+  );
+
+  test('scoped modern client without forms retains branch fallback helpers', async () => {
+    const { client } = await setupModern({
+      projectId: 'scoped-project',
+      features: ['branching'],
+    });
+    const { tools } = await client.listTools();
+    const names = tools.map((tool) => tool.name);
+    expect(names).toContain('get_cost');
+    expect(names).toContain('confirm_cost');
+    expect(
+      tools.find((tool) => tool.name === 'create_branch')?.inputSchema.required
+    ).toContain('confirm_cost_id');
+  });
+
+  test('account cost helper schemas retain project and branch contracts', async () => {
+    const { client } = await setup({
+      features: ['account', 'branching'],
+      costConfirmation: COST_CONFIRMATION,
+    });
+    const { tools } = await client.listTools();
+    const getCost = tools.find((tool) => tool.name === 'get_cost');
+    const confirmCost = tools.find((tool) => tool.name === 'confirm_cost');
+    expect(getCost?.inputSchema.required?.slice().sort()).toEqual([
+      'organization_id',
+      'type',
     ]);
+    expect(confirmCost?.inputSchema.required?.slice().sort()).toEqual([
+      'amount',
+      'recurrence',
+      'type',
+    ]);
+    for (const tool of [getCost, confirmCost]) {
+      expect(tool?.inputSchema.properties?.type).toMatchObject({
+        enum: ['project', 'branch'],
+      });
+    }
   });
 
   test('storage tools', async () => {
@@ -5591,14 +5814,14 @@ describe('project scoped tools', () => {
       'get_organization',
       'list_projects',
       'get_project',
-      'get_cost',
-      'confirm_cost',
       'create_project',
       'pause_project',
       'restore_project',
     ];
 
     const toolNames = result.tools.map((tool) => tool.name);
+    expect(toolNames).toContain('get_cost');
+    expect(toolNames).toContain('confirm_cost');
 
     for (const accountLevelToolName of accountLevelToolNames) {
       expect(

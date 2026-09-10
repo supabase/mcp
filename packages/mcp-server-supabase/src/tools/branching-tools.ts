@@ -10,6 +10,7 @@ import type { BranchingOperations } from '../platform/types.js';
 import { branchSchema } from '../platform/types.js';
 import { getBranchCost } from '../pricing.js';
 import { hashObject } from '../util.js';
+import { accountToolDefs } from './account-tools.js';
 import {
   actionOnlyElicitationSchema,
   isFormCapable,
@@ -179,6 +180,45 @@ export const branchingToolDefs = {
     },
   },
 } as const satisfies ToolDefs;
+
+const branchCostTypeSchema = z.enum(['branch']);
+
+export const branchCostToolDefs = {
+  get_cost: {
+    ...accountToolDefs.get_cost,
+    description:
+      'Gets the cost of creating a new branch. Always repeat the cost to the user and confirm their understanding before proceeding.',
+    parameters: accountToolDefs.get_cost.parameters
+      .pick({ type: true })
+      .extend({ type: branchCostTypeSchema }),
+    outputSchema: accountToolDefs.get_cost.outputSchema.extend({
+      type: branchCostTypeSchema,
+    }),
+  },
+  confirm_cost: {
+    ...accountToolDefs.confirm_cost,
+    description:
+      'Ask the user to confirm their understanding of the cost of creating a new branch. Call `get_cost` first. Returns a unique ID for this confirmation which should be passed to `create_branch`.',
+    parameters: accountToolDefs.confirm_cost.parameters.extend({
+      type: branchCostTypeSchema,
+    }),
+  },
+} as const satisfies ToolDefs;
+
+export function getBranchCostTools() {
+  return {
+    get_cost: tool({
+      ...branchCostToolDefs.get_cost,
+      execute: async () => getBranchCost(),
+    }),
+    confirm_cost: tool({
+      ...branchCostToolDefs.confirm_cost,
+      execute: async (cost) => ({
+        confirmation_id: await hashObject(cost),
+      }),
+    }),
+  };
+}
 
 export function getBranchingTools({
   branching,
