@@ -43,7 +43,9 @@ export type LocalHttpEntryOptions = {
 
 // Mirrors the hosted endpoint's advertised scopes (`mcp.supabase.com/.well-known/oauth-protected-resource/mcp`),
 // so an OAuth client requests the same access the Management API tools need.
-const OAUTH_SCOPES_SUPPORTED = [
+// Kept in sync by test/e2e/oauth-scopes.e2e.ts, which fails with a clear diff
+// against the live endpoint if this drifts -- update this array to fix it.
+export const OAUTH_SCOPES_SUPPORTED = [
   'organizations:read',
   'projects:read',
   'projects:write',
