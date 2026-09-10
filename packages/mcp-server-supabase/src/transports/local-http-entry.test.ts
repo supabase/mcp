@@ -253,7 +253,9 @@ describe('startLocalHttpEntry', () => {
       )) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(accepted)) {
-        throw new Error('expected accepted SQL to execute without re-prompting');
+        throw new Error(
+          'expected accepted SQL to execute without re-prompting'
+        );
       }
       expect(accepted.isError).toBeFalsy();
       expect(
