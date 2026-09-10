@@ -2768,24 +2768,24 @@ export interface components {
                 result: {
                     id: string;
                     hostname: string;
-                    ssl: {
-                        status: string;
+                    ssl?: {
+                        status?: string;
                         validation_records?: {
-                            txt_name: string;
-                            txt_value: string;
+                            txt_name?: string;
+                            txt_value?: string;
                         }[];
                         validation_errors?: {
                             message: string;
                         }[];
                     };
                     ownership_verification?: {
-                        type: string;
-                        name: string;
-                        value: string;
+                        type?: string;
+                        name?: string;
+                        value?: string;
                     };
-                    custom_origin_server: string;
+                    custom_origin_server?: string;
                     verification_errors?: string[];
-                    status: string;
+                    status?: string;
                 };
             };
         };
