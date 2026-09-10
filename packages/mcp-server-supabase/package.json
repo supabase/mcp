@@ -53,7 +53,6 @@
   },
   "dependencies": {
     "@mjackson/multipart-parser": "^0.10.1",
-    "@modelcontextprotocol/client": "catalog:",
     "@modelcontextprotocol/node": "catalog:",
     "@supabase/mcp-utils": "workspace:^",
     "common-tags": "^1.8.2",
@@ -69,6 +68,7 @@
     "@ai-sdk/anthropic": "catalog:",
     "@ai-sdk/mcp": "catalog:",
     "@electric-sql/pglite": "^0.2.17",
+    "@modelcontextprotocol/client": "catalog:",
     "@modelcontextprotocol/server": "catalog:",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/common-tags": "^1.8.4",

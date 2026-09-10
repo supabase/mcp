@@ -43,7 +43,7 @@ Example client config:
 
 The dev server supports the same [query params as the hosted endpoint](https://supabase.com/docs/guides/ai-tools/mcp#configuration-options). The access token comes from the client's `Authorization` header on each request. Restart the server in your MCP client after each change.
 
-Add `--oauth` to sign in with Supabase OAuth in the browser instead. The server then attaches the token to every request itself and the client config needs no `headers`. The session is saved to `~/.supabase/mcp-oauth.json`, next to the Supabase CLI's files (`SUPABASE_HOME` overrides the directory for both). Delete that file to sign out.
+Add `--oauth` to skip the PAT: the dev server advertises itself as an OAuth-protected resource (the same model as the hosted endpoint), and each MCP client is meant to sign in with Supabase OAuth in its own browser popup on connect and attach its own token to every request. **Not yet usable against production**: the client SDK sends this loopback URL as the OAuth `resource` parameter, and `api.supabase.com` currently rejects any `resource` that isn't the exact hosted MCP endpoint — the authorize call fails with `400` until platform widens that validation to accept loopback `/mcp` URLs. Verified end to end against a local mock authorization server only; no token has been exchanged with the real Supabase authorization server yet.
 
 Flags: `--http`, `--port` (default 3111), `--oauth`, `--api-url`, `--content-api-url`, `--version`.
 
