@@ -12,6 +12,7 @@ import { getBranchingTools } from './tools/branching-tools.js';
 import {
   type CostConfirmationState,
   isFormCapable,
+  isUrlCapable,
 } from './tools/cost-confirmation.js';
 import { getDatabaseTools } from './tools/database-operation-tools.js';
 import { getDebuggingTools } from './tools/debugging-tools.js';
@@ -299,16 +300,16 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         costConfirmationCodec &&
         enabledFeatures.has('functions')
       ) {
-        Object.assign(
-          tools,
-          getSecretTools({
-            secrets,
-            projectId,
-            readOnly,
-            codec: costConfirmationCodec,
-            connectUrlTemplate: elicitation.secretCollection.connectUrlTemplate,
-          })
-        );
+        const secretTools = getSecretTools({
+          secrets,
+          projectId,
+          readOnly,
+          codec: costConfirmationCodec,
+          connectUrlTemplate: elicitation.secretCollection.connectUrlTemplate,
+        });
+        secretTools.create_edge_function_secret.hidden =
+          !ctx || !isUrlCapable(ctx);
+        Object.assign(tools, secretTools);
       }
 
       if (readOnly) {

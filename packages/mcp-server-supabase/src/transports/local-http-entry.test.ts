@@ -248,10 +248,69 @@ describe('startLocalHttpEntry', () => {
     expect(response.status).toBe(500);
   });
 
+  test.each<{
+    label: string;
+    capabilities: NonNullable<ClientOptions['capabilities']>;
+    listed: boolean;
+    mode?: VersionNegotiationMode;
+  }>([
+    { label: 'absent elicitation', capabilities: {}, listed: false },
+    {
+      label: 'empty elicitation modes',
+      capabilities: { elicitation: {} },
+      listed: false,
+    },
+    {
+      label: 'form-only elicitation',
+      capabilities: { elicitation: { form: {} } },
+      listed: false,
+    },
+    {
+      label: 'form and URL elicitation',
+      capabilities: { elicitation: { form: {}, url: {} } },
+      listed: true,
+    },
+    {
+      label: 'legacy without elicitation',
+      mode: 'legacy',
+      capabilities: {},
+      listed: false,
+    },
+  ])(
+    'keeps secret tool visibility request-scoped for $label',
+    async ({ mode, capabilities, listed }) => {
+      const query = 'project_ref=project&features=functions&read_only=false';
+      const urlClient = await connect({ pin: MODERN_PROTOCOL_VERSION }, query, {
+        capabilities: { elicitation: { url: {} } },
+      });
+      const { tools: urlTools } = await urlClient.listTools();
+      expect(urlTools.map((tool) => tool.name)).toContain(
+        'create_edge_function_secret'
+      );
+
+      const client = await connect(
+        mode ?? { pin: MODERN_PROTOCOL_VERSION },
+        query,
+        { capabilities }
+      );
+      const { tools } = await client.listTools();
+      expect(tools).toEqual(
+        listed
+          ? urlTools
+          : urlTools.filter(
+              (tool) => tool.name !== 'create_edge_function_secret'
+            )
+      );
+      expect((await urlClient.listTools()).tools).toEqual(urlTools);
+    }
+  );
+
   test.each(['features=functions&read_only=true', 'features=database'])(
     'does not expose secret collection with %s',
     async (query) => {
-      const client = await connect({ pin: MODERN_PROTOCOL_VERSION }, query);
+      const client = await connect({ pin: MODERN_PROTOCOL_VERSION }, query, {
+        capabilities: { elicitation: { url: {} } },
+      });
       const { tools } = await client.listTools();
       expect(tools.map((tool) => tool.name)).not.toContain(
         'create_edge_function_secret'
