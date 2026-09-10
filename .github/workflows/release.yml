@@ -76,7 +76,7 @@ jobs:
       # Ref: https://github.com/googleapis/release-please-action#path-outputs
 
       - name: Checkout repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         if: ${{ steps.release.outputs.releases_created || inputs.force_publish == true }}
         with:
           ref: ${{ inputs.force_publish == true && inputs.release_tag || github.sha }}
