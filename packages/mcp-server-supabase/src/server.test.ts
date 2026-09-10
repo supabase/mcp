@@ -4600,6 +4600,36 @@ describe('tools', () => {
       expect(executeSql).not.toHaveBeenCalled();
     });
 
+    test('form-capable client: declining bare-column DROP preserves the column and its data', async () => {
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitationAction: 'decline',
+      });
+      const project = await createActiveProject();
+      try {
+        await project.db.exec(
+          "create table films (id int, title text); insert into films values (1, 'Alien');"
+        );
+
+        const result = await client.callTool({
+          name: 'execute_sql',
+          arguments: {
+            project_id: project.id,
+            query: 'ALTER TABLE films DROP title;',
+          },
+        });
+
+        const { rows } = await project.db.query(
+          'select to_jsonb(films) as film from films'
+        );
+        expect(rows).toEqual([{ film: { id: 1, title: 'Alien' } }]);
+        expect(result.structuredContent).toEqual({ status: 'declined' });
+      } finally {
+        await client.close();
+        await project.destroy();
+      }
+    });
+
     test('rejects a retry whose query changed since the state was minted', async () => {
       const { client, platform } = await setupModern({
         clientCapabilities: FORM_CAPABLE,

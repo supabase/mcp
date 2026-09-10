@@ -30,6 +30,9 @@ export const ACCESS_TOKEN = 'dummy-token';
 export const COUNTRY_CODE = 'US';
 export const CLOSEST_REGION = 'us-east-2';
 
+const DEFAULT_USER_AGENT = `${MCP_SERVER_NAME}/${MCP_SERVER_VERSION} (${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION})`;
+let expectedManagementApiUserAgent: string | null = DEFAULT_USER_AGENT;
+
 export const contentApiMockSchema = source`
   schema {
     query: RootQueryType
@@ -152,9 +155,7 @@ export const mockManagementApi = [
    */
   http.all(`${API_URL}/*`, ({ request }) => {
     const userAgent = request.headers.get('user-agent');
-    expect(userAgent).toBe(
-      `${MCP_SERVER_NAME}/${MCP_SERVER_VERSION} (${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION})`
-    );
+    expect(userAgent).toBe(expectedManagementApiUserAgent);
   }),
 
   /**
@@ -935,7 +936,12 @@ export const mockManagementApi = [
   ),
 ];
 
-export function setupMockApis(): SetupServer {
+export function setupMockApis({
+  expectedUserAgent = DEFAULT_USER_AGENT,
+}: {
+  expectedUserAgent?: string | null;
+} = {}): SetupServer {
+  expectedManagementApiUserAgent = expectedUserAgent;
   mockOrgs.clear();
   mockProjects.clear();
   mockBranches.clear();

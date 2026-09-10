@@ -97,4 +97,39 @@ describe('isDestructiveSql', () => {
       isDestructiveSql('select * from films; UPDATE films SET title = null;')
     ).toBe(true);
   });
+
+  test.each([
+    'ALTER TABLE films DROP title;',
+    'ALTER TABLE public.films DROP title;',
+    'ALTER TABLE "public"."film archive" DROP "display title";',
+    'ALTER TABLE "film""archive" DROP "display""title";',
+    'ALTER TABLE IF EXISTS public.films DROP IF EXISTS title;',
+    'ALTER TABLE ONLY public.films DROP title CASCADE;',
+    'ALTER TABLE ONLY "public"."films" DROP COLUMN IF EXISTS "title" RESTRICT;',
+    'ALTER TABLE films DROP "constraint";',
+    'ALTER TABLE films DROP constraint$archive;',
+    'ALTER TABLE films DROP constrainté;',
+    'SELECT 1;\nALTER TABLE films DROP title;',
+  ])('direct DROP-column action matches: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+
+  test.each([
+    'ALTER TABLE films DROP CONSTRAINT films_pkey;',
+    'ALTER TABLE "public"."films" DROP CONSTRAINT IF EXISTS films_pkey;',
+    'ALTER TABLE films ALTER COLUMN title DROP DEFAULT;',
+    'ALTER TABLE films ALTER COLUMN title DROP NOT NULL;',
+    'ALTER TABLE films ALTER COLUMN id DROP IDENTITY;',
+    'ALTER TABLE films ALTER COLUMN title DROP EXPRESSION;',
+  ])('other ALTER actions remain outside the policy: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(false);
+  });
+
+  test.each([
+    'ALTER TABLE films DROP COLUMN title;',
+    'ALTER TABLE films ADD COLUMN rating int, DROP COLUMN title;',
+    "DO $$ BEGIN EXECUTE 'ALTER TABLE films DROP COLUMN title'; END $$;",
+  ])('existing explicit-column detection is preserved: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
 });

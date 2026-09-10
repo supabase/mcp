@@ -1,8 +1,16 @@
 /** Adapted from supabase/supabase apps/studio (SQLEditor.constants.ts, SQLEditor.utils.ts, lib/helpers.ts), Apache-2.0. */
 
+const sqlIdentifier = String.raw`(?:"(?:[^"]|"")+"|[a-z_\u0080-\uffff][\w$\u0080-\uffff]*)`;
+
 const destructiveSqlRegex = [
   // Direct destructive statements at top level or after semicolon
   /^(.*;)?\s*(drop|delete|truncate|alter\s+table\s+.*\s+drop\s+column)\s/is,
+  // Single direct DROP-column action, including omitted COLUMN. ONLY target is
+  // supported, not ONLY (target); do not traverse other ALTER actions.
+  new RegExp(
+    String.raw`(?:^|;)\s*alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?${sqlIdentifier}(?:\s*\.\s*${sqlIdentifier})?\s+drop\s+(?!constraint(?![\w$\u0080-\uffff]))(?:column\s+)?(?:if\s+exists\s+)?${sqlIdentifier}(?:\s+(?:cascade|restrict))?\s*(?:;|$)`,
+    'i'
+  ),
   // EXECUTE with string literal: EXECUTE 'DROP TABLE ...' or EXECUTE 'ALTER TABLE ... DROP COLUMN ...'
   /execute\s+(?:format\s*\([^)]*\)\s*\|\||[^;]*['"])\s*(?:(drop|delete|truncate)\b|alter\s+table[^;]*\bdrop\s+column\b)/is,
   // EXECUTE format(): EXECUTE format('DROP TABLE %I', ...)

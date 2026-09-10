@@ -139,7 +139,12 @@ export async function startLocalHttpEntry({
                   principal: createHash('sha256')
                     .update(accessToken)
                     .digest('hex'),
-                  enabledTools: ['create_project', 'create_branch'],
+                  enabledTools: [
+                    'create_project',
+                    'create_branch',
+                    'execute_sql',
+                    'apply_migration',
+                  ],
                 },
               }),
             { legacy: 'stateless', onerror: console.error }
