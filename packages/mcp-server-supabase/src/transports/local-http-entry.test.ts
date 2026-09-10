@@ -9,6 +9,10 @@ import type {
   InputRequiredResult,
   VersionNegotiationMode,
 } from '@modelcontextprotocol/client';
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  PROTOCOL_VERSION_META_KEY,
+} from '@modelcontextprotocol/server';
 import { http, HttpResponse, passthrough } from 'msw';
 import type { SetupServer } from 'msw/node';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -24,6 +28,7 @@ import {
   setupMockApis,
 } from '../../test/mocks.js';
 import {
+  describeRequest,
   type LocalHttpEntry,
   startLocalHttpEntry,
   type LocalHttpEntryOptions,
@@ -133,7 +138,7 @@ describe('startLocalHttpEntry', () => {
 
     expect(logLines).toContainEqual(
       expect.stringMatching(
-        /^initialize\s+test-client\/1\.0\.0\s+\(2025-\d\d-\d\d\)$/
+        /^initialize\s+test-client\/1\.0\.0\s+\(2025-\d\d-\d\d\)/
       )
     );
     const client = `${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION}`;
@@ -141,6 +146,65 @@ describe('startLocalHttpEntry', () => {
       `${'tools/list'.padEnd(28)}  ${client.padEnd(24)}  (${MODERN_PROTOCOL_VERSION})`
     );
     expect(logLines.every((line) => !line.includes(ACCESS_TOKEN))).toBe(true);
+  });
+
+  test('logs only the current request elicitation subtree', () => {
+    const sensitive = 'SENSITIVE_FIXTURE_MUST_NOT_APPEAR';
+    for (const elicitation of [
+      undefined,
+      {},
+      { form: {} },
+      { url: {} },
+      { form: {}, url: {} },
+    ]) {
+      const capabilities = {
+        ...(elicitation === undefined ? {} : { elicitation }),
+        experimental: { private: { marker: sensitive } },
+      };
+      const initialize = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+          capabilities,
+        },
+      };
+      const call = {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'create_edge_function_secret',
+          arguments: { name: sensitive, value: sensitive },
+          requestState: sensitive,
+          inputResponses: {
+            store_secret: { action: 'accept', content: { value: sensitive } },
+          },
+          _meta: {
+            [PROTOCOL_VERSION_META_KEY]: MODERN_PROTOCOL_VERSION,
+            [CLIENT_CAPABILITIES_META_KEY]: capabilities,
+            private: sensitive,
+          },
+        },
+      };
+      for (const request of [initialize, call]) {
+        const line = describeRequest(request);
+        expect(line.split('  elicitation=')[1]).toBe(
+          JSON.stringify(elicitation) ?? 'absent'
+        );
+        expect(line).not.toContain(sensitive);
+      }
+    }
+
+    const legacyCall = describeRequest({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'tools/call',
+      params: { name: 'create_edge_function_secret', arguments: {} },
+    });
+    expect(legacyCall).toContain('(legacy)  elicitation=absent');
   });
 
   test('rejects a request without a bearer token', async () => {
@@ -394,9 +458,6 @@ describe('startLocalHttpEntry', () => {
       params: { mode: 'form' },
     });
     expect(mockBranches.size).toBe(0);
-    expect(logLines.at(-1)).toBe(
-      `${'tools/call create_branch'.padEnd(28)}  ${`${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION}`.padEnd(24)}  (${MODERN_PROTOCOL_VERSION})`
-    );
     const secret = (await client.request(
       {
         method: 'tools/call',

@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import {
+  CLIENT_CAPABILITIES_META_KEY,
   CLIENT_INFO_META_KEY,
   createMcpHandler,
   hostHeaderValidationResponse,
@@ -44,6 +45,7 @@ export function describeRequest(body: unknown): string {
   let client: Implementation | undefined;
   let method: string | undefined;
   let protocolVersion: string | undefined;
+  let elicitation: string | undefined;
   for (const message of messages) {
     if (!isJSONRPCRequest(message) && !isJSONRPCNotification(message)) continue;
     method ??= isSpecType.CallToolRequest(message)
@@ -57,16 +59,26 @@ export function describeRequest(body: unknown): string {
     if (isSpecType.InitializeRequest(message)) {
       client ??= message.params.clientInfo;
       protocolVersion ??= message.params.protocolVersion;
+      elicitation ??=
+        JSON.stringify(message.params.capabilities.elicitation) ?? 'absent';
+    } else if (isSpecType.CallToolRequest(message)) {
+      const capabilities = meta?.[CLIENT_CAPABILITIES_META_KEY] as
+        | { elicitation?: unknown }
+        | undefined;
+      elicitation ??= JSON.stringify(capabilities?.elicitation) ?? 'absent';
     }
   }
   const name = client
     ? [client.name, client.version].filter(Boolean).join('/')
     : 'unknown';
-  return [
+  const description = [
     (method ?? 'unknown').padEnd(28),
     name.padEnd(24),
     `(${protocolVersion ?? 'legacy'})`,
   ].join('  ');
+  return elicitation === undefined
+    ? description
+    : `${description}  elicitation=${elicitation}`;
 }
 
 export async function startLocalHttpEntry({
