@@ -1622,6 +1622,75 @@ describe('tools', () => {
     });
   });
 
+  test('list_tables with empty schemas [] includes tables across all non-system schemas', async () => {
+    const { callTool } = await setup();
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    await project.db.exec(`
+      create schema custom_schema;
+      create table test_public (id integer generated always as identity primary key);
+      create table custom_schema.test_custom (id integer generated always as identity primary key);
+    `);
+
+    const result = await callTool({
+      name: 'list_tables',
+      arguments: {
+        project_id: project.id,
+        schemas: [],
+      },
+    });
+
+    const tableNames = result.tables.map((t: { name: string }) => t.name);
+    expect(tableNames).toContain('public.test_public');
+    expect(tableNames).toContain('custom_schema.test_custom');
+  });
+
+  test('list_tables omitting schemas defaults to public schema', async () => {
+    const { callTool } = await setup();
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    await project.db.exec(`
+      create schema custom_schema;
+      create table test_public (id integer generated always as identity primary key);
+      create table custom_schema.test_custom (id integer generated always as identity primary key);
+    `);
+
+    const result = await callTool({
+      name: 'list_tables',
+      arguments: {
+        project_id: project.id,
+      },
+    });
+
+    const tableNames = result.tables.map((t: { name: string }) => t.name);
+    expect(tableNames).toContain('public.test_public');
+    expect(tableNames).not.toContain('custom_schema.test_custom');
+  });
+
   test('list_tables returns full details when verbose is true', async () => {
     const { callTool } = await setup();
 

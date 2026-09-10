@@ -27,7 +27,9 @@ const listTablesInputSchema = z.object({
   project_id: z.string(),
   schemas: z
     .array(z.string())
-    .describe('List of schemas to include. Defaults to all schemas.')
+    .describe(
+      'List of schemas to include. Defaults to ["public"]. Pass [] to include all non-system schemas.'
+    )
     .default(['public']),
   verbose: z
     .boolean()
