@@ -1317,6 +1317,7 @@ export interface components {
                         capabilities: {
                             list_v2: boolean;
                             iceberg_catalog: boolean;
+                            object_versioning: boolean;
                         };
                         /** @enum {string} */
                         upstream_target: "main" | "canary";
@@ -2387,6 +2388,15 @@ export interface operations {
             };
             /** @description Forbidden action */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
