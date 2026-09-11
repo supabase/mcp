@@ -275,6 +275,14 @@ export type BranchingOperations = {
   rebaseBranch(branchId: string): Promise<void>;
 };
 
+/**
+ * Returns only the `updated_at` timestamp of the named secret, never its
+ * value or digest.
+ */
+export type SecretOperations = {
+  getUpdatedAt(projectId: string, name: string): Promise<Date | undefined>;
+};
+
 export type SupabasePlatform = {
   init?(info: InitData): Promise<void>;
   account?: AccountOperations;
@@ -284,4 +292,5 @@ export type SupabasePlatform = {
   development?: DevelopmentOperations;
   storage?: StorageOperations;
   branching?: BranchingOperations;
+  secrets?: SecretOperations;
 };

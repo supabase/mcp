@@ -41,9 +41,21 @@ Example client config:
 }
 ```
 
-The dev server supports the same [query params as the hosted endpoint](https://supabase.com/docs/guides/ai-tools/mcp#configuration-options). The access token comes from the client's `Authorization` header on each request. Restart the server in your MCP client after each change.
+The dev server supports the same [query params as the hosted endpoint](https://supabase.com/docs/guides/ai-tools/mcp#configuration-options). Set `project_ref`, `read_only`, and `features` in the HTTP URL, not through stdio CLI flags. The access token comes from the client's `Authorization` header on each request.
 
-Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--version`.
+Secret creation is configured by default over HTTP, subject to the `functions` feature, read-only mode, and client and platform support. The production API remains the default and uses `https://supabase.com/dashboard/mcp/secrets?ref={ref}&name={name}`. Selecting `--api-url https://api.supabase.green` uses `https://supabase.green/dashboard/mcp/secrets?ref={ref}&name={name}` without an override.
+
+The optional HTTP-only `--secret-url-template` overrides this URL. Custom API origins require an explicit template; no dashboard host is derived from them. The template must be an absolute URL containing both `{ref}` and `{name}`. An explicitly empty value is invalid, not a fallback to the default.
+
+For a custom local API, replace the placeholders:
+
+```bash
+pnpm dev:http --api-url 'http://127.0.0.1:<port>' --secret-url-template '<absolute URL containing {ref} and {name}>'
+```
+
+Signed `requestState` used by HTTP secret collection and cost confirmation expires after 120 seconds. The secret tool retains its 600-second timestamp-based recovery window. Watch restarts invalidate pending state. Restart the server in your MCP client after each change.
+
+Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--secret-url-template`, `--version`.
 
 To try the HTTP entry from a PR without cloning, run the preview build published by pkg.pr.new:
 

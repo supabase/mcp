@@ -19,6 +19,7 @@ async function main() {
       ['read-only']: readOnly,
       ['api-url']: apiUrl,
       ['content-api-url']: cliContentApiUrl,
+      ['secret-url-template']: secretUrlTemplate,
       ['version']: showVersion,
       ['features']: cliFeatures,
       ['http']: http,
@@ -40,6 +41,9 @@ async function main() {
         type: 'string',
       },
       ['content-api-url']: {
+        type: 'string',
+      },
+      ['secret-url-template']: {
         type: 'string',
       },
       ['version']: {
@@ -64,18 +68,30 @@ async function main() {
     process.exit(0);
   }
 
+  if (secretUrlTemplate !== undefined && !http) {
+    console.error('--secret-url-template requires --http.');
+    process.exitCode = 1;
+    return;
+  }
+
   const features = cliFeatures ? parseList(cliFeatures) : undefined;
 
   const contentApiUrl =
     cliContentApiUrl ?? process.env.SUPABASE_CONTENT_API_URL;
 
   if (http) {
-    const entry = await startLocalHttpEntry({
-      port: Number(cliPort),
-      apiUrl,
-      contentApiUrl,
-    });
-    console.error(`Supabase MCP server listening on ${entry.url}`);
+    try {
+      const entry = await startLocalHttpEntry({
+        port: Number(cliPort),
+        apiUrl,
+        contentApiUrl,
+        secretUrlTemplate,
+      });
+      console.error(`Supabase MCP server listening on ${entry.url}`);
+    } catch (error) {
+      console.error(error);
+      process.exitCode = 1;
+    }
     return;
   }
 
