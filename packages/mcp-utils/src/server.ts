@@ -16,6 +16,14 @@ import { z } from 'zod/v4';
 
 import type { ExtractParams } from './types.js';
 import { assertValidUri, compareUris, matchUriTemplate } from './util.js';
+import { beginObservation } from './observation.js';
+import type {
+  ObservationEnd,
+  ObservationFact,
+  ObservationScope,
+  ObservedTool,
+  RequestObserver,
+} from './observation.js';
 
 export type Scheme = string;
 export type Annotations = NonNullable<
@@ -64,10 +72,17 @@ export type Tool<
    * passed straight to the client instead of being JSON-wrapped; any other
    * value is wrapped as today (`{ content: [{ type: 'text', text:
    * JSON.stringify(value) }] }`).
+   *
+   * The optional third `record` argument is a safe, synchronous recorder
+   * for {@link ObservationFact}s tied to this call's observation scope.
+   * It is `undefined` whenever no observer is configured for this server;
+   * it never throws back into the tool and never returns a promise the
+   * tool needs to handle.
    */
   execute(
     params: z.infer<Params>,
-    ctx: ServerContext
+    ctx: ServerContext,
+    record?: (fact: ObservationFact) => void
   ): Promise<z.infer<OutputSchema> | InputRequiredResult | CallToolResult>;
 };
 
@@ -289,7 +304,33 @@ export type McpServerOptions = {
   requestState?: {
     verify?: (state: string, ctx: ServerContext) => unknown | Promise<unknown>;
   };
+
+  /**
+   * Optional per-request observation factory for lightweight, payload-free
+   * lifecycle instrumentation. Invoked synchronously at most once per
+   * registered handler entry (`tools/call`, `tools/list`, `resources/list`,
+   * `resources/templates/list`, `resources/read`); its return value is
+   * never awaited. Omitting it disables observation entirely: no context
+   * object, clock read, or fact is ever produced.
+   */
+  observer?: RequestObserver;
 };
+
+/**
+ * Normalizes a raw tool name to the closed {@link ObservedTool} allowlist.
+ * Unlisted tools — including any not yet registered — become `'other'`.
+ */
+function normalizeObservedTool(name: string): ObservedTool {
+  switch (name) {
+    case 'create_project':
+    case 'create_branch':
+    case 'execute_sql':
+    case 'apply_migration':
+      return name;
+    default:
+      return 'other';
+  }
+}
 
 /**
  * Creates an MCP server with the given options.
@@ -365,106 +406,178 @@ export function createMcpServer(options: McpServerOptions) {
     server.setRequestHandler(
       'resources/list',
       async (): Promise<ListResourcesResult> => {
-        const allResources = await getResources();
-        return {
-          resources: allResources
-            .filter((resource) => 'uri' in resource)
-            .map(({ uri, name, description, mimeType }) => {
-              return {
-                uri,
-                name,
-                description,
-                mimeType,
-              };
-            }),
-        };
+        let scope: ObservationScope | undefined;
+        let startedAt = 0;
+
+        if (options.observer) {
+          startedAt = performance.now();
+          scope = beginObservation(options.observer, {
+            method: 'resources/list',
+            tool: 'not_applicable',
+          });
+        }
+
+        let outcome: ObservationEnd['result'] = 'completed';
+
+        try {
+          const allResources = await getResources();
+          return {
+            resources: allResources
+              .filter((resource) => 'uri' in resource)
+              .map(({ uri, name, description, mimeType }) => {
+                return {
+                  uri,
+                  name,
+                  description,
+                  mimeType,
+                };
+              }),
+          };
+        } catch (error) {
+          outcome = 'handler_error';
+          throw error;
+        } finally {
+          scope?.end({
+            result: outcome,
+            durationMs: performance.now() - startedAt,
+          });
+        }
       }
     );
 
     server.setRequestHandler(
       'resources/templates/list',
       async (): Promise<ListResourceTemplatesResult> => {
-        const allResources = await getResources();
-        return {
-          resourceTemplates: allResources
-            .filter((resource) => 'uriTemplate' in resource)
-            .map(({ uriTemplate, name, description, mimeType }) => {
-              return {
-                uriTemplate,
-                name,
-                description,
-                mimeType,
-              };
-            }),
-        };
+        let scope: ObservationScope | undefined;
+        let startedAt = 0;
+
+        if (options.observer) {
+          startedAt = performance.now();
+          scope = beginObservation(options.observer, {
+            method: 'resources/templates/list',
+            tool: 'not_applicable',
+          });
+        }
+
+        let outcome: ObservationEnd['result'] = 'completed';
+
+        try {
+          const allResources = await getResources();
+          return {
+            resourceTemplates: allResources
+              .filter((resource) => 'uriTemplate' in resource)
+              .map(({ uriTemplate, name, description, mimeType }) => {
+                return {
+                  uriTemplate,
+                  name,
+                  description,
+                  mimeType,
+                };
+              }),
+          };
+        } catch (error) {
+          outcome = 'handler_error';
+          throw error;
+        } finally {
+          scope?.end({
+            result: outcome,
+            durationMs: performance.now() - startedAt,
+          });
+        }
       }
     );
 
     server.setRequestHandler(
       'resources/read',
       async (request): Promise<ReadResourceResult> => {
+        let scope: ObservationScope | undefined;
+        let startedAt = 0;
+
+        if (options.observer) {
+          startedAt = performance.now();
+          scope = beginObservation(options.observer, {
+            method: 'resources/read',
+            tool: 'not_applicable',
+          });
+        }
+
+        let outcome: ObservationEnd['result'] = 'completed';
+
         try {
-          const allResources = await getResources();
-          const { uri } = request.params;
+          try {
+            const allResources = await getResources();
+            const { uri } = request.params;
 
-          const resources = allResources.filter(
-            (resource) => 'uri' in resource
-          );
-          const resource = resources.find((resource) =>
-            compareUris(resource.uri, uri)
-          );
+            const resources = allResources.filter(
+              (resource) => 'uri' in resource
+            );
+            const resource = resources.find((resource) =>
+              compareUris(resource.uri, uri)
+            );
 
-          if (resource) {
-            const result = await resource.read(uri as `${string}://${string}`);
+            if (resource) {
+              const result = await resource.read(
+                uri as `${string}://${string}`
+              );
+
+              const contents = Array.isArray(result) ? result : [result];
+
+              return {
+                contents,
+              };
+            }
+
+            const resourceTemplates = allResources.filter(
+              (resource) => 'uriTemplate' in resource
+            );
+            const resourceTemplateUris = resourceTemplates.map(
+              ({ uriTemplate }) => assertValidUri(uriTemplate)
+            );
+
+            const templateMatch = matchUriTemplate(uri, resourceTemplateUris);
+
+            if (!templateMatch) {
+              throw new Error('resource not found');
+            }
+
+            const resourceTemplate = resourceTemplates.find(
+              (r) => r.uriTemplate === templateMatch.uri
+            );
+
+            if (!resourceTemplate) {
+              throw new Error('resource not found');
+            }
+
+            const result = await resourceTemplate.read(
+              uri as `${string}://${string}`,
+              templateMatch.params
+            );
 
             const contents = Array.isArray(result) ? result : [result];
 
             return {
               contents,
             };
+          } catch (error) {
+            outcome = 'tool_error';
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ error: enumerateError(error) }),
+                },
+              ],
+            } as any;
           }
-
-          const resourceTemplates = allResources.filter(
-            (resource) => 'uriTemplate' in resource
-          );
-          const resourceTemplateUris = resourceTemplates.map(
-            ({ uriTemplate }) => assertValidUri(uriTemplate)
-          );
-
-          const templateMatch = matchUriTemplate(uri, resourceTemplateUris);
-
-          if (!templateMatch) {
-            throw new Error('resource not found');
-          }
-
-          const resourceTemplate = resourceTemplates.find(
-            (r) => r.uriTemplate === templateMatch.uri
-          );
-
-          if (!resourceTemplate) {
-            throw new Error('resource not found');
-          }
-
-          const result = await resourceTemplate.read(
-            uri as `${string}://${string}`,
-            templateMatch.params
-          );
-
-          const contents = Array.isArray(result) ? result : [result];
-
-          return {
-            contents,
-          };
         } catch (error) {
-          return {
-            isError: true,
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({ error: enumerateError(error) }),
-              },
-            ],
-          } as any;
+          outcome = 'handler_error';
+          throw error;
+        } finally {
+          scope?.end({
+            result: outcome,
+            durationMs: performance.now() - startedAt,
+          });
         }
       }
     );
@@ -474,104 +587,172 @@ export function createMcpServer(options: McpServerOptions) {
     server.setRequestHandler(
       'tools/list',
       async (_request, ctx): Promise<ListToolsResult> => {
-        const tools = await getTools(ctx);
+        let scope: ObservationScope | undefined;
+        let startedAt = 0;
 
-        return {
-          tools: await Promise.all(
-            Object.entries(tools)
-              .filter(([, tool]) => !tool.hidden)
-              .map(async ([name, { description, annotations, parameters }]) => {
-                const inputSchema = z.toJSONSchema(parameters, {
-                  target: 'draft-7',
-                });
+        if (options.observer) {
+          startedAt = performance.now();
+          scope = beginObservation(options.observer, {
+            method: 'tools/list',
+            tool: 'not_applicable',
+          });
+        }
 
-                return {
-                  name,
-                  description:
-                    typeof description === 'function'
-                      ? await description()
-                      : description,
-                  annotations,
-                  // Casting the same as the SDK does:
-                  // https://github.com/modelcontextprotocol/typescript-sdk/blob/fb07af810b51003c338dc4885a9e42f54519f9af/src/server/mcp.ts#L154
-                  inputSchema: inputSchema as McpTool['inputSchema'],
-                };
-              })
-          ),
-        } satisfies ListToolsResult;
+        let outcome: ObservationEnd['result'] = 'completed';
+
+        try {
+          const tools = await getTools(ctx);
+
+          return {
+            tools: await Promise.all(
+              Object.entries(tools)
+                .filter(([, tool]) => !tool.hidden)
+                .map(
+                  async ([name, { description, annotations, parameters }]) => {
+                    const inputSchema = z.toJSONSchema(parameters, {
+                      target: 'draft-7',
+                    });
+
+                    return {
+                      name,
+                      description:
+                        typeof description === 'function'
+                          ? await description()
+                          : description,
+                      annotations,
+                      // Casting the same as the SDK does:
+                      // https://github.com/modelcontextprotocol/typescript-sdk/blob/fb07af810b51003c338dc4885a9e42f54519f9af/src/server/mcp.ts#L154
+                      inputSchema: inputSchema as McpTool['inputSchema'],
+                    };
+                  }
+                )
+            ),
+          } satisfies ListToolsResult;
+        } catch (error) {
+          outcome = 'handler_error';
+          throw error;
+        } finally {
+          scope?.end({
+            result: outcome,
+            durationMs: performance.now() - startedAt,
+          });
+        }
       }
     );
 
     server.setRequestHandler('tools/call', async (request, ctx) => {
+      const toolName = request.params.name;
+      let scope: ObservationScope | undefined;
+      let startedAt = 0;
+
+      if (options.observer) {
+        startedAt = performance.now();
+        scope = beginObservation(options.observer, {
+          method: 'tools/call',
+          tool: normalizeObservedTool(toolName),
+        });
+      }
+
+      let outcome: ObservationEnd['result'] = 'completed';
+
       try {
-        const tools = await getTools(ctx);
-        const toolName = request.params.name;
+        try {
+          const tools = await getTools(ctx);
 
-        if (!(toolName in tools)) {
-          throw new Error('tool not found');
-        }
-
-        const tool = tools[toolName];
-
-        if (!tool) {
-          throw new Error('tool not found');
-        }
-        const args = tool.parameters
-          .strict()
-          .parse(request.params.arguments ?? {});
-
-        const executeWithCallback = async (tool: Tool) => {
-          // Wrap success or error in a result value
-          const res = await tool
-            .execute(args, ctx)
-            .then((data: unknown) => ({ success: true as const, data }))
-            .catch((error) => ({ success: false as const, error }));
-
-          try {
-            options.onToolCall?.({
-              name: toolName,
-              arguments: args,
-              annotations: tool.annotations,
-              ...res,
-            });
-          } catch (error) {
-            // Don't fail the tool call if the callback fails
-            console.error('Failed to run tool callback', error);
+          if (!(toolName in tools)) {
+            throw new Error('tool not found');
           }
 
-          // Unwrap result
-          if (!res.success) {
-            throw res.error;
+          const tool = tools[toolName];
+
+          if (!tool) {
+            throw new Error('tool not found');
           }
-          return res.data;
-        };
+          const args = tool.parameters
+            .strict()
+            .parse(request.params.arguments ?? {});
 
-        const result = await executeWithCallback(tool);
+          const executeWithCallback = async (tool: Tool) => {
+            // Wrap success or error in a result value
+            const res = await tool
+              .execute(args, ctx, scope?.record)
+              .then((data: unknown) => ({ success: true as const, data }))
+              .catch((error) => ({ success: false as const, error }));
 
-        // An InputRequiredResult or a direct CallToolResult is already
-        // shaped for the wire; pass it through instead of JSON-wrapping it.
-        if (isInputRequiredResult(result) || isCallToolResult(result)) {
-          return result;
+            try {
+              options.onToolCall?.({
+                name: toolName,
+                arguments: args,
+                annotations: tool.annotations,
+                ...res,
+              });
+            } catch (error) {
+              // Don't fail the tool call if the callback fails
+              console.error('Failed to run tool callback', error);
+            }
+
+            // Unwrap result
+            if (!res.success) {
+              throw res.error;
+            }
+            return res.data;
+          };
+
+          const result = await executeWithCallback(tool);
+
+          // An InputRequiredResult is already shaped for the wire.
+          if (isInputRequiredResult(result)) {
+            if (scope) {
+              outcome =
+                'isError' in result && result.isError === true
+                  ? 'tool_error'
+                  : 'input_required';
+            }
+            return result;
+          }
+
+          // A direct CallToolResult is already shaped for the wire; pass it
+          // through instead of JSON-wrapping it.
+          if (isCallToolResult(result)) {
+            if (scope) {
+              outcome =
+                result.isError === true
+                  ? 'tool_error'
+                  : (scope.consumedTerminal() ?? 'completed');
+            }
+            return result;
+          }
+
+          outcome = scope?.consumedTerminal() ?? 'completed';
+
+          const content =
+            result != null
+              ? [{ type: 'text' as const, text: JSON.stringify(result) }]
+              : [];
+
+          return {
+            content,
+          };
+        } catch (error) {
+          outcome = 'tool_error';
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: enumerateError(error) }),
+              },
+            ],
+          };
         }
-
-        const content =
-          result != null
-            ? [{ type: 'text' as const, text: JSON.stringify(result) }]
-            : [];
-
-        return {
-          content,
-        };
       } catch (error) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({ error: enumerateError(error) }),
-            },
-          ],
-        };
+        outcome = 'handler_error';
+        throw error;
+      } finally {
+        scope?.end({
+          result: outcome,
+          durationMs: performance.now() - startedAt,
+        });
       }
     });
   }
