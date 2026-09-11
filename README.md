@@ -160,7 +160,7 @@ The PostgREST MCP server allows you to connect your own users to your app via RE
 
 See [CONTRIBUTING](./CONTRIBUTING.md) for details on how to contribute to this project.
 
-See [Observability](docs/observability.md) for the observer API.
+See [Observability](./docs/observability.md) for the optional observer API and versioned extension guidance.
 
 ## License
 
