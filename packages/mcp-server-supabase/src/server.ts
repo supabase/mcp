@@ -1,6 +1,7 @@
 import { createRequestStateCodec } from '@modelcontextprotocol/server';
 import {
   createMcpServer,
+  type RequestObserver,
   type Tool,
   type ToolCallCallback,
 } from '@supabase/mcp-utils';
@@ -60,6 +61,14 @@ export type SupabaseMcpServerOptions = {
    * Callback for after a supabase tool is called.
    */
   onToolCall?: ToolCallCallback;
+
+  /**
+   * Optional observer invoked once per general MCP handler entry
+   * (`tools/call`, `tools/list`, `resources/list`,
+   * `resources/templates/list`, `resources/read`) and forwarded unchanged
+   * to the underlying `@supabase/mcp-utils` server.
+   */
+  observer?: RequestObserver;
 
   /**
    * Enables cost confirmation via elicitation for clients that declare
@@ -122,6 +131,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
     onToolCall,
     costConfirmation,
+    observer,
   } = options;
 
   const contentApiClientPromise = createContentApiClient(contentApiUrl, {
@@ -168,6 +178,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       ]);
     },
     onToolCall,
+    observer,
     requestState: costConfirmationCodec && {
       verify: costConfirmationCodec.verify,
     },
