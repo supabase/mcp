@@ -4,7 +4,7 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { tool } from '@supabase/mcp-utils';
+import { type ObservationFact, tool } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
 import type { BranchingOperations } from '../platform/types.js';
 import { branchSchema } from '../platform/types.js';
@@ -201,19 +201,34 @@ export function getBranchingTools({
           name,
           confirm_cost_id,
         }: z.infer<typeof createBranchInputSchemaWithElicitation>,
-        ctx: ServerContext
+        ctx: ServerContext,
+        record?: (fact: ObservationFact) => void
       ) => {
         if (readOnly) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'blocked',
+            reason: 'read_only',
+          });
           throw new Error('Cannot create a branch in read-only mode.');
         }
 
         if (costConfirmation && isFormCapable(ctx)) {
           const { codec } = costConfirmation;
           const cost = getBranchCost();
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'inline',
+            reason: 'eligible',
+          });
           const costSuffix = { hourly: '/hr' }[cost.recurrence];
 
-          const askForConfirmation = async () =>
-            inputRequired({
+          const askForConfirmation = async (
+            reason: 'initial' | 'missing_response' | 'changed_quote'
+          ) => {
+            const result = inputRequired({
               inputRequests: {
                 confirm_cost: inputRequired.elicit({
                   mode: 'form',
@@ -230,13 +245,26 @@ export function getBranchingTools({
                 ctx
               ),
             });
+            record?.({
+              kind: 'input_required',
+              feature: 'cost',
+              mode: 'form',
+              reason,
+            });
+            return result;
+          };
 
           const state = ctx.mcpReq.requestState<CostConfirmationState>();
           if (!state) {
-            return askForConfirmation();
+            return askForConfirmation('initial');
           }
 
           if (state.tool !== 'create_branch') {
+            record?.({
+              kind: 'resume_validation',
+              feature: 'cost',
+              result: 'tool_mismatch',
+            });
             return {
               content: [
                 {
@@ -250,6 +278,11 @@ export function getBranchingTools({
           }
 
           if (state.project_id !== project_id || state.name !== name) {
+            record?.({
+              kind: 'resume_validation',
+              feature: 'cost',
+              result: 'arguments_mismatch',
+            });
             return {
               content: [
                 {
@@ -267,10 +300,20 @@ export function getBranchingTools({
             'confirm_cost'
           );
           if (response.kind !== 'elicit') {
-            return askForConfirmation();
+            record?.({
+              kind: 'resume_validation',
+              feature: 'cost',
+              result: 'missing_response',
+            });
+            return askForConfirmation('missing_response');
           }
 
           if (response.action === 'decline') {
+            record?.({
+              kind: 'input_response',
+              feature: 'cost',
+              action: 'decline',
+            });
             return {
               content: [
                 {
@@ -283,6 +326,11 @@ export function getBranchingTools({
           }
 
           if (response.action !== 'accept') {
+            record?.({
+              kind: 'input_response',
+              feature: 'cost',
+              action: 'cancel',
+            });
             return {
               content: [
                 {
@@ -294,6 +342,12 @@ export function getBranchingTools({
             };
           }
 
+          record?.({
+            kind: 'input_response',
+            feature: 'cost',
+            action: 'accept',
+          });
+
           if (
             state.cost.type !== cost.type ||
             state.cost.recurrence !== cost.recurrence ||
@@ -302,22 +356,84 @@ export function getBranchingTools({
             // Pricing changed since the state was minted - reissue a
             // fresh prompt bound to the recomputed cost rather than
             // honoring a stale quote.
-            return askForConfirmation();
+            record?.({
+              kind: 'resume_validation',
+              feature: 'cost',
+              result: 'changed_quote',
+            });
+            return askForConfirmation('changed_quote');
           }
 
-          return await branching.createBranch(state.project_id, {
-            name: state.name,
+          record?.({
+            kind: 'resume_validation',
+            feature: 'cost',
+            result: 'valid',
           });
+          const startedAt = record ? performance.now() : 0;
+          record?.({
+            kind: 'operation',
+            feature: 'cost',
+            disposition: 'started',
+          });
+          try {
+            const result = await branching.createBranch(state.project_id, {
+              name: state.name,
+            });
+            record?.({
+              kind: 'operation',
+              feature: 'cost',
+              disposition: 'returned',
+              durationMs: performance.now() - startedAt,
+            });
+            return result;
+          } catch (error) {
+            record?.({
+              kind: 'operation',
+              feature: 'cost',
+              disposition: 'threw',
+              durationMs: performance.now() - startedAt,
+            });
+            throw error;
+          }
         }
 
         const cost = getBranchCost();
+        record?.({
+          kind: 'confirmation_decision',
+          feature: 'cost',
+          route: 'legacy',
+          reason: costConfirmation ? 'capability_missing' : 'not_configured',
+        });
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
           throw new Error(
             'Cost confirmation ID does not match the expected cost of creating a branch.'
           );
         }
-        return await branching.createBranch(project_id, { name });
+        const startedAt = record ? performance.now() : 0;
+        record?.({
+          kind: 'operation',
+          feature: 'cost',
+          disposition: 'started',
+        });
+        try {
+          const result = await branching.createBranch(project_id, { name });
+          record?.({
+            kind: 'operation',
+            feature: 'cost',
+            disposition: 'returned',
+            durationMs: performance.now() - startedAt,
+          });
+          return result;
+        } catch (error) {
+          record?.({
+            kind: 'operation',
+            feature: 'cost',
+            disposition: 'threw',
+            durationMs: performance.now() - startedAt,
+          });
+          throw error;
+        }
       },
     }),
     list_branches: injectableTool({
