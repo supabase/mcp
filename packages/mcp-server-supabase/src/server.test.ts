@@ -9,6 +9,10 @@ import type {
   ClientCapabilities,
   InputRequiredResult,
 } from '@modelcontextprotocol/client';
+import {
+  createRequestStateCodec,
+  type ServerContext,
+} from '@modelcontextprotocol/server';
 import { StreamTransport } from '@supabase/mcp-utils';
 import { codeBlock, stripIndent } from 'common-tags';
 import gqlmin from 'gqlmin';
@@ -44,6 +48,7 @@ import {
   instructions,
   type SupabaseMcpServerOptions,
 } from './server.js';
+import type { ConfirmationState } from './tools/confirmation.js';
 import {
   createToolSchemas,
   supabaseMcpToolSchemas,
@@ -180,6 +185,9 @@ const FORM_CAPABLE: ClientCapabilities = { elicitation: { form: {} } };
 
 // https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/
 const MODERN_PROTOCOL_VERSION = '2026-07-28';
+const RESOURCE_EXHAUSTING_SQL = `SELECT ${'('.repeat(10_000)}1${')'.repeat(
+  10_000
+)};`;
 const MCP_ENDPOINT = new URL('https://mcp.test');
 
 /**
@@ -4492,6 +4500,215 @@ describe('tools', () => {
     project.status = 'ACTIVE_HEALTHY';
     return project;
   }
+
+  async function mintSqlConfirmationState(state: ConfirmationState) {
+    const codec = createRequestStateCodec<ConfirmationState>({
+      key: COST_CONFIRMATION.requestStateKey,
+      bind: (ctx) => `${ctx.mcpReq.method}:${COST_CONFIRMATION.principal}`,
+    });
+    return codec.mint(state, {
+      mcpReq: { method: 'tools/call' },
+    } as ServerContext);
+  }
+
+  test.each([
+    [
+      'execute_sql',
+      "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;",
+      'This SQL contains a DO block whose body contains text suggesting potentially destructive operations.',
+    ],
+    [
+      'apply_migration',
+      "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;",
+      'This SQL contains a DO block whose body contains text suggesting potentially destructive operations.',
+    ],
+    [
+      'execute_sql',
+      'DELETE FROM',
+      'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.',
+    ],
+    [
+      'apply_migration',
+      'DELETE FROM',
+      'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.',
+    ],
+  ] as const)(
+    'destructive confirmation via elicitation: $tool presents the approved classification wording and approval attempts the original SQL',
+    async (tool, query, firstLine) => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const project = await createActiveProject();
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+      const params = {
+        name: tool,
+        arguments: {
+          project_id: project.id,
+          query,
+          ...(tool === 'apply_migration' ? { name: 'parser_policy' } : {}),
+        },
+      } satisfies CallToolRequestParams;
+
+      const first = (await client.request(
+        { method: 'tools/call', params },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an input_required result');
+      }
+      const confirmationRequest = first.inputRequests?.confirm_destructive;
+      if (
+        confirmationRequest?.method !== 'elicitation/create' ||
+        !confirmationRequest.params ||
+        !('message' in confirmationRequest.params) ||
+        typeof confirmationRequest.params.message !== 'string'
+      ) {
+        throw new Error('expected a form elicitation request');
+      }
+      expect(confirmationRequest.params.message.split('\n')[0]).toBe(firstLine);
+      expect(executeSql).not.toHaveBeenCalled();
+      expect(applyMigration).not.toHaveBeenCalled();
+
+      await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            ...params,
+            requestState: first.requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'accept', content: {} },
+            },
+          },
+        },
+        { allowInputRequired: true }
+      );
+
+      const operation = tool === 'execute_sql' ? executeSql : applyMigration;
+      expect(operation).toHaveBeenCalledOnce();
+      expect(operation.mock.calls[0]?.[1]).toMatchObject({ query });
+    }
+  );
+
+  test.each(['execute_sql', 'apply_migration'] as const)(
+    '$tool accepts a matching hand-minted destructive confirmation',
+    async (tool) => {
+      const query = 'DROP TABLE films;';
+      const name = 'parser_positive_control';
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const project = await createActiveProject();
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+      const queryHash = await hashObject({ query });
+      const requestState = await mintSqlConfirmationState(
+        tool === 'execute_sql'
+          ? { tool, project_id: project.id, queryHash }
+          : { tool, project_id: project.id, name, queryHash }
+      );
+      const result = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: tool,
+            arguments: {
+              project_id: project.id,
+              query,
+              ...(tool === 'apply_migration' ? { name } : {}),
+            },
+            requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'accept', content: {} },
+            },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(result)).toBe(false);
+      const operation = tool === 'execute_sql' ? executeSql : applyMigration;
+      const otherOperation =
+        tool === 'execute_sql' ? applyMigration : executeSql;
+      expect(operation).toHaveBeenCalledOnce();
+      expect(operation.mock.calls[0]?.[1]).toMatchObject({ query });
+      expect(otherOperation).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each(['execute_sql', 'apply_migration'] as const)(
+    '$tool keeps parser resource failures terminal before and after bound acceptance',
+    async (tool) => {
+      expect(Buffer.byteLength(RESOURCE_EXHAUSTING_SQL)).toBe(20_009);
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const project = await createActiveProject();
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+      const params = {
+        name: tool,
+        arguments: {
+          project_id: project.id,
+          query: RESOURCE_EXHAUSTING_SQL,
+          ...(tool === 'apply_migration' ? { name: 'parser_resource' } : {}),
+        },
+      } satisfies CallToolRequestParams;
+
+      const initial = (await client.request(
+        { method: 'tools/call', params },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+      expect(isInputRequiredResult(initial)).toBe(false);
+      if (isInputRequiredResult(initial)) {
+        throw new Error('resource failure must not elicit');
+      }
+      expect(initial.isError).toBe(true);
+      expect(initial.content).toContainEqual({
+        type: 'text',
+        text: expect.stringContaining('memory exhausted'),
+      });
+      expect(executeSql).not.toHaveBeenCalled();
+      expect(applyMigration).not.toHaveBeenCalled();
+
+      const queryHash = await hashObject({ query: RESOURCE_EXHAUSTING_SQL });
+      const state =
+        tool === 'execute_sql'
+          ? { tool, project_id: project.id, queryHash }
+          : {
+              tool,
+              project_id: project.id,
+              name: 'parser_resource',
+              queryHash,
+            };
+      const requestState = await mintSqlConfirmationState(state);
+      const accepted = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            ...params,
+            requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'accept', content: {} },
+            },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(accepted)).toBe(false);
+      if (isInputRequiredResult(accepted)) {
+        throw new Error('resource failure retry must not elicit');
+      }
+      expect(accepted.isError).toBe(true);
+      expect(accepted.content).toContainEqual({
+        type: 'text',
+        text: expect.stringContaining('memory exhausted'),
+      });
+      expect(executeSql).not.toHaveBeenCalled();
+      expect(applyMigration).not.toHaveBeenCalled();
+    }
+  );
 
   describe('execute_sql destructive confirmation via elicitation', () => {
     test('form-capable client: non-destructive SQL runs without elicitation', async () => {

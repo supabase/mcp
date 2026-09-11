@@ -25,7 +25,10 @@ import {
   executeSqlStateSchema,
   isFormCapable,
 } from './confirmation.js';
-import { isDestructiveSql } from './destructive-sql.js';
+import {
+  getSqlConfirmationReason,
+  type SqlConfirmationReason,
+} from './destructive-sql.js';
 import {
   injectableTool,
   type ToolDefs,
@@ -41,6 +44,17 @@ type DatabaseOperationToolsOptions = {
     enabledTools: readonly ('execute_sql' | 'apply_migration')[];
   };
 };
+
+function sqlConfirmationFirstLine(reason: SqlConfirmationReason) {
+  switch (reason) {
+    case 'destructive':
+      return 'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).';
+    case 'do-heuristic':
+      return 'This SQL contains a DO block whose body contains text suggesting potentially destructive operations.';
+    case 'unclassified':
+      return 'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.';
+  }
+}
 
 const listTablesInputSchema = z.object({
   project_id: z.string(),
@@ -393,11 +407,12 @@ export function getDatabaseTools({
           throw new Error('Cannot apply migration in read-only mode.');
         }
 
-        if (
+        const confirmationReason =
           confirmation?.enabledTools.includes('apply_migration') &&
-          isFormCapable(ctx) &&
-          isDestructiveSql(query)
-        ) {
+          isFormCapable(ctx)
+            ? await getSqlConfirmationReason(query)
+            : undefined;
+        if (confirmationReason && confirmation) {
           const { codec } = confirmation;
           const queryHash = await hashObject({ query });
           const askForConfirmation = async () =>
@@ -406,7 +421,7 @@ export function getDatabaseTools({
                 confirm_destructive: inputRequired.elicit({
                   mode: 'form',
                   message: [
-                    'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
+                    sqlConfirmationFirstLine(confirmationReason),
                     'It may permanently remove data, tables, schemas or other objects.',
                     `Apply the migration to project ${project_id}?`,
                   ].join('\n'),
@@ -461,12 +476,13 @@ export function getDatabaseTools({
       },
       inject: { project_id },
       execute: async ({ query, project_id }, ctx: ServerContext) => {
-        if (
+        const confirmationReason =
           !readOnly &&
           confirmation?.enabledTools.includes('execute_sql') &&
-          isFormCapable(ctx) &&
-          isDestructiveSql(query)
-        ) {
+          isFormCapable(ctx)
+            ? await getSqlConfirmationReason(query)
+            : undefined;
+        if (confirmationReason && confirmation) {
           const { codec } = confirmation;
           const queryHash = await hashObject({ query });
           const askForConfirmation = async () =>
@@ -475,7 +491,7 @@ export function getDatabaseTools({
                 confirm_destructive: inputRequired.elicit({
                   mode: 'form',
                   message: [
-                    'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
+                    sqlConfirmationFirstLine(confirmationReason),
                     'It may permanently remove data, tables, schemas or other objects.',
                     `Run it on project ${project_id}?`,
                   ].join('\n'),
