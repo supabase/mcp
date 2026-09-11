@@ -1,0 +1,136 @@
+version: "1"
+description: "Supabase MCP — strict policy. Default deny. Only read and query tools are accessible."
+default: deny
+
+tools:
+  # Account — read-only
+  list_projects:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  get_project:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  list_organizations:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  get_organization:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  get_cost:
+    rules:
+      - action: allow
+        rate_limit: "10/minute"
+
+  confirm_cost:
+    rules:
+      - action: allow
+        rate_limit: "10/minute"
+
+  # Database — read-only queries only
+  list_tables:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  list_extensions:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  list_migrations:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  execute_sql:
+    rules:
+      - name: "allow-select-only"
+        when:
+          args.query: "(?i)^\\s*SELECT\\b"
+        action: allow
+        rate_limit: "30/minute"
+      - name: "allow-explain"
+        when:
+          args.query: "(?i)^\\s*EXPLAIN\\b"
+        action: allow
+        rate_limit: "30/minute"
+      - name: "allow-show"
+        when:
+          args.query: "(?i)^\\s*SHOW\\b"
+        action: allow
+        rate_limit: "30/minute"
+      - name: "block-all-other-sql"
+        action: deny
+        on_deny: "Only SELECT, EXPLAIN, and SHOW queries are allowed in strict mode"
+
+  # Debugging — read-only
+  get_logs:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  get_advisors:
+    rules:
+      - action: allow
+        rate_limit: "10/minute"
+
+  # Development — read-only
+  get_project_url:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  get_publishable_keys:
+    rules:
+      - action: allow
+        rate_limit: "10/minute"
+
+  generate_typescript_types:
+    rules:
+      - action: allow
+        rate_limit: "10/minute"
+
+  # Knowledge base
+  search_docs:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  # Edge Functions — read-only
+  list_edge_functions:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  get_edge_function:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  # Branching — read-only
+  list_branches:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  # Storage — read-only
+  list_storage_buckets:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  get_storage_config:
+    rules:
+      - action: allow
+        rate_limit: "30/minute"
+
+  # Everything else blocked by default: deny
+  # To allow writes, copy rules from recommended.yaml
