@@ -1,6 +1,5 @@
 import {
   inputRequired,
-  inputResponse,
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
@@ -12,9 +11,11 @@ import { getBranchCost } from '../pricing.js';
 import { hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
+  branchCostStateSchema,
+  checkConfirmationState,
   isFormCapable,
-  type CostConfirmationState,
-} from './cost-confirmation.js';
+  type ConfirmationState,
+} from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
 
 type BranchingToolsOptions = {
@@ -22,13 +23,13 @@ type BranchingToolsOptions = {
   projectId?: string;
   readOnly?: boolean;
   /**
-   * Enables cost confirmation via elicitation inside `create_branch` for
-   * clients that declare per-request form capability (see
-   * `isFormCapable`). Absent, `create_branch` keeps requiring
-   * `confirm_cost_id` from `confirm_cost` unchanged.
+   * Enables confirmation via elicitation inside `create_branch` for clients
+   * that declare per-request form capability (see `isFormCapable`). Absent,
+   * `create_branch` keeps requiring `confirm_cost_id` from `confirm_cost`
+   * unchanged.
    */
-  costConfirmation?: {
-    codec: RequestStateCodec<CostConfirmationState>;
+  confirmation?: {
+    codec: RequestStateCodec<ConfirmationState>;
   };
 };
 
@@ -184,14 +185,14 @@ export function getBranchingTools({
   branching,
   projectId,
   readOnly,
-  costConfirmation,
+  confirmation,
 }: BranchingToolsOptions) {
   const project_id = projectId;
 
   return {
     create_branch: injectableTool({
       ...branchingToolDefs.create_branch,
-      parameters: costConfirmation
+      parameters: confirmation
         ? createBranchInputSchemaWithElicitation
         : createBranchInputSchema,
       inject: { project_id },
@@ -207,8 +208,8 @@ export function getBranchingTools({
           throw new Error('Cannot create a branch in read-only mode.');
         }
 
-        if (costConfirmation && isFormCapable(ctx)) {
-          const { codec } = costConfirmation;
+        if (confirmation && isFormCapable(ctx)) {
+          const { codec } = confirmation;
           const cost = getBranchCost();
           const costSuffix = { hourly: '/hr' }[cost.recurrence];
 
@@ -231,83 +232,32 @@ export function getBranchingTools({
               ),
             });
 
-          const state = ctx.mcpReq.requestState<CostConfirmationState>();
-          if (!state) {
-            return askForConfirmation();
-          }
-
-          if (state.tool !== 'create_branch') {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: 'Request state was not issued for create_branch.',
-                },
-              ],
-              structuredContent: { status: 'error' },
-              isError: true,
-            };
-          }
-
-          if (state.project_id !== project_id || state.name !== name) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: 'Request state arguments do not match the current arguments.',
-                },
-              ],
-              structuredContent: { status: 'error' },
-              isError: true,
-            };
-          }
-
-          const response = inputResponse(
-            ctx.mcpReq.inputResponses,
-            'confirm_cost'
-          );
-          if (response.kind !== 'elicit') {
-            return askForConfirmation();
-          }
-
-          if (response.action === 'decline') {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: 'Branch creation was declined.',
-                },
-              ],
-              structuredContent: { status: 'declined' },
-            };
-          }
-
-          if (response.action !== 'accept') {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: 'Branch creation was cancelled.',
-                },
-              ],
-              structuredContent: { status: 'cancelled' },
-            };
-          }
-
-          if (
-            state.cost.type !== cost.type ||
-            state.cost.recurrence !== cost.recurrence ||
-            state.cost.amount !== cost.amount
-          ) {
-            // Pricing changed since the state was minted - reissue a
-            // fresh prompt bound to the recomputed cost rather than
-            // honoring a stale quote.
-            return askForConfirmation();
-          }
-
-          return await branching.createBranch(state.project_id, {
-            name: state.name,
+          const confirmationState = await checkConfirmationState({
+            ctx,
+            tool: 'create_branch',
+            schema: branchCostStateSchema,
+            requestKey: 'confirm_cost',
+            askForConfirmation,
+            argsMatch: (state) =>
+              state.project_id === project_id && state.name === name,
+            payloadMatch: (state) =>
+              state.cost.type === cost.type &&
+              state.cost.recurrence === cost.recurrence &&
+              state.cost.amount === cost.amount,
+            declinedText: 'Branch creation was declined.',
+            cancelledText: 'Branch creation was cancelled.',
           });
+
+          switch (confirmationState.kind) {
+            case 'reprompt':
+            case 'terminal':
+              return confirmationState.result;
+            case 'proceed':
+              return await branching.createBranch(
+                confirmationState.state.project_id,
+                { name: confirmationState.state.name }
+              );
+          }
         }
 
         const cost = getBranchCost();

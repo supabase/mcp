@@ -1,6 +1,5 @@
 import {
   inputRequired,
-  inputResponse,
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
@@ -9,9 +8,11 @@ import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
 import {
   actionOnlyElicitationSchema,
+  checkConfirmationState,
   isFormCapable,
-  type CostConfirmationState,
-} from './cost-confirmation.js';
+  projectCostStateSchema,
+  type ConfirmationState,
+} from './confirmation.js';
 import type { AccountOperations } from '../platform/types.js';
 import { organizationSchema, projectSchema } from '../platform/types.js';
 import { getBranchCost, getNextProjectCost } from '../pricing.js';
@@ -22,13 +23,13 @@ type AccountToolsOptions = {
   account: AccountOperations;
   readOnly?: boolean;
   /**
-   * Enables cost confirmation via elicitation inside `create_project` for
-   * clients that declare per-request form capability (see
-   * `isFormCapable`). Absent, `create_project` keeps requiring
-   * `confirm_cost_id` from `confirm_cost` unchanged.
+   * Enables confirmation via elicitation inside `create_project` for clients
+   * that declare per-request form capability (see `isFormCapable`). Absent,
+   * `create_project` keeps requiring `confirm_cost_id` from `confirm_cost`
+   * unchanged.
    */
-  costConfirmation?: {
-    codec: RequestStateCodec<CostConfirmationState>;
+  confirmation?: {
+    codec: RequestStateCodec<ConfirmationState>;
   };
 };
 
@@ -249,7 +250,7 @@ export const accountToolDefs = {
 export function getAccountTools({
   account,
   readOnly,
-  costConfirmation,
+  confirmation,
 }: AccountToolsOptions) {
   return {
     list_organizations: tool({
@@ -297,7 +298,7 @@ export function getAccountTools({
     }),
     create_project: tool({
       ...accountToolDefs.create_project,
-      parameters: costConfirmation
+      parameters: confirmation
         ? createProjectInputSchemaWithElicitation
         : createProjectInputSchema,
       execute: async (
@@ -313,10 +314,10 @@ export function getAccountTools({
           throw new Error('Cannot create a project in read-only mode.');
         }
 
-        if (costConfirmation && isFormCapable(ctx)) {
-          const { codec } = costConfirmation;
+        if (confirmation && isFormCapable(ctx)) {
+          const { codec } = confirmation;
           const cost = await getNextProjectCost(account, organization_id);
-          const state = ctx.mcpReq.requestState<CostConfirmationState>();
+          const state = ctx.mcpReq.requestState<unknown>();
           if (!state && cost.amount === 0) {
             return await account.createProject({
               name,
@@ -346,90 +347,36 @@ export function getAccountTools({
               ),
             });
 
-          if (!state) {
-            return askForConfirmation();
-          }
-
-          if (state.tool !== 'create_project') {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: 'Request state was not issued for create_project.',
-                },
-              ],
-              structuredContent: { status: 'error' },
-              isError: true,
-            };
-          }
-
-          if (
-            state.name !== name ||
-            state.region !== region ||
-            state.organization_id !== organization_id
-          ) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: 'Request state arguments do not match the current arguments.',
-                },
-              ],
-              structuredContent: { status: 'error' },
-              isError: true,
-            };
-          }
-
-          const response = inputResponse(
-            ctx.mcpReq.inputResponses,
-            'confirm_cost'
-          );
-          if (response.kind !== 'elicit') {
-            return askForConfirmation();
-          }
-
-          if (response.action === 'decline') {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: 'Project creation was declined.',
-                },
-              ],
-              structuredContent: { status: 'declined' },
-            };
-          }
-
-          if (response.action !== 'accept') {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: 'Project creation was cancelled.',
-                },
-              ],
-              structuredContent: { status: 'cancelled' },
-            };
-          }
-
-          if (
-            cost.amount !== 0 &&
-            (state.cost.type !== cost.type ||
-              state.cost.recurrence !== cost.recurrence ||
-              state.cost.amount !== cost.amount)
-          ) {
-            // Pricing changed since the state was minted (e.g. the org's
-            // plan or active-project count shifted) - reissue a fresh
-            // prompt bound to the recomputed cost rather than honoring a
-            // stale quote.
-            return askForConfirmation();
-          }
-
-          return await account.createProject({
-            name: state.name,
-            region: state.region,
-            organization_id: state.organization_id,
+          const confirmationState = await checkConfirmationState({
+            ctx,
+            tool: 'create_project',
+            schema: projectCostStateSchema,
+            requestKey: 'confirm_cost',
+            askForConfirmation,
+            argsMatch: (state) =>
+              state.name === name &&
+              state.region === region &&
+              state.organization_id === organization_id,
+            payloadMatch: (state) =>
+              cost.amount === 0 ||
+              (state.cost.type === cost.type &&
+                state.cost.recurrence === cost.recurrence &&
+                state.cost.amount === cost.amount),
+            declinedText: 'Project creation was declined.',
+            cancelledText: 'Project creation was cancelled.',
           });
+
+          switch (confirmationState.kind) {
+            case 'reprompt':
+            case 'terminal':
+              return confirmationState.result;
+            case 'proceed':
+              return await account.createProject({
+                name: confirmationState.state.name,
+                region: confirmationState.state.region,
+                organization_id: confirmationState.state.organization_id,
+              });
+          }
         }
 
         const cost = await getNextProjectCost(account, organization_id);

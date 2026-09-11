@@ -38,7 +38,8 @@ let logLines!: string[];
 const cleanups: Array<() => Promise<void>> = [];
 
 beforeEach(async () => {
-  mockServer = setupMockApis();
+  // Modern stateless requests do not run the platform's onInitialize telemetry.
+  mockServer = setupMockApis({ expectedUserAgent: null });
   logLines = [];
   entry = await startLocalHttpEntry({
     port: 0,
@@ -185,4 +186,102 @@ describe('startLocalHttpEntry', () => {
       `${'tools/call create_branch'.padEnd(28)}  ${`${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION}`.padEnd(24)}  (${MODERN_PROTOCOL_VERSION})`
     );
   });
+
+  test.each(['execute_sql', 'apply_migration'] as const)(
+    '%s confirms destructive SQL for form clients and preserves no-form execution',
+    async (tool) => {
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      cleanups.push(() => project.destroy());
+      project.status = 'ACTIVE_HEALTHY';
+      await project.db.exec('create table films (id int)');
+
+      const query = `features=database&read_only=false&project_ref=${project.id}`;
+      const formClient = await connect(
+        { pin: MODERN_PROTOCOL_VERSION },
+        query,
+        {
+          capabilities: { elicitation: { form: {} } },
+          inputRequired: { autoFulfill: false },
+        }
+      );
+      const params = {
+        name: tool,
+        arguments: {
+          query: 'drop table films;',
+          ...(tool === 'apply_migration' ? { name: 'drop_films' } : {}),
+        },
+      };
+      const first = (await formClient.request(
+        { method: 'tools/call', params },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an input_required result');
+      }
+      expect(first.inputRequests?.confirm_destructive).toMatchObject({
+        method: 'elicitation/create',
+        params: { mode: 'form' },
+      });
+      expect(
+        (await project.db.query("select to_regclass('public.films') as name"))
+          .rows
+      ).toEqual([{ name: 'films' }]);
+      expect(project.migrations).toEqual([]);
+
+      const accepted = (await formClient.request(
+        {
+          method: 'tools/call',
+          params: {
+            ...params,
+            requestState: first.requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'accept', content: {} },
+            },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      if (isInputRequiredResult(accepted)) {
+        throw new Error(
+          'expected accepted SQL to execute without re-prompting'
+        );
+      }
+      expect(accepted.isError).toBeFalsy();
+      expect(
+        (await project.db.query("select to_regclass('public.films') as name"))
+          .rows
+      ).toEqual([{ name: null }]);
+
+      await project.db.exec('create table films (id int)');
+      const noFormClient = await connect(
+        { pin: MODERN_PROTOCOL_VERSION },
+        query,
+        { inputRequired: { autoFulfill: false } }
+      );
+      const unconfirmed = (await noFormClient.request(
+        { method: 'tools/call', params },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      if (isInputRequiredResult(unconfirmed)) {
+        throw new Error('expected no-form SQL to execute without elicitation');
+      }
+      expect(unconfirmed.isError).toBeFalsy();
+      expect(
+        (await project.db.query("select to_regclass('public.films') as name"))
+          .rows
+      ).toEqual([{ name: null }]);
+    }
+  );
 });
