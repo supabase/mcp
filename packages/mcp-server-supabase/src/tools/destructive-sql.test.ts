@@ -9,6 +9,10 @@ vi.mock('libpg-query', async (importOriginal) => {
   return { ...actual, parse: vi.fn(actual.parse) };
 });
 
+const RESOURCE_EXHAUSTING_SQL = `SELECT ${'('.repeat(10_000)}1${')'.repeat(
+  10_000
+)};`;
+
 describe('getSqlConfirmationReason', () => {
   test.each([
     'DROP TABLE films;',
@@ -137,12 +141,55 @@ describe('getSqlConfirmationReason', () => {
     await expect(getSqlConfirmationReason(sql)).resolves.toBeUndefined();
   });
 
-  test.each(['', '   ', 'DELETE FROM'])(
-    'classifies known-empty or malformed SQL as unknown: %s',
-    async (sql) => {
-      await expect(getSqlConfirmationReason(sql)).resolves.toBe('unclassified');
-    }
-  );
+  test.each([
+    '',
+    '   ',
+    'DELETE FROM',
+    "SELECT 'unterminated",
+    'SELECT "";',
+    'SELECT 1abc;',
+    'SELECT 1 LIMIT 1, 2;',
+    'SELECT 1 FETCH FIRST 1 ROWS WITH TIES;',
+    'SELECT * FROM a.b.c.d;',
+    'CREATE TABLE t (a text COLLATE "C" COLLATE "POSIX");',
+    "SELECT E'\\uZZZZ';",
+    "SELECT U&'\\+110000';",
+    "SELECT U&'\\D800';",
+  ])('classifies known-empty or malformed SQL as unknown: %s', async (sql) => {
+    await expect(getSqlConfirmationReason(sql)).resolves.toBe('unclassified');
+  });
+
+  test('keeps a real parser resource failure terminal', async () => {
+    expect(Buffer.byteLength(RESOURCE_EXHAUSTING_SQL)).toBe(20_009);
+
+    await expect(
+      getSqlConfirmationReason(RESOURCE_EXHAUSTING_SQL)
+    ).rejects.toThrow('memory exhausted');
+  });
+
+  test('keeps an unknown SqlError terminal at the scanner seam', async () => {
+    const error = new parser.SqlError('unexpected parser failure', {
+      message: 'unexpected parser failure',
+      cursorPosition: 0,
+      fileName: 'scan.l',
+      functionName: 'scanner_yyerror',
+    });
+    vi.mocked(parser.parse).mockRejectedValueOnce(error);
+
+    await expect(getSqlConfirmationReason('SELECT 1')).rejects.toBe(error);
+  });
+
+  test('keeps a nearby parser helper internal error terminal', async () => {
+    const error = new parser.SqlError('invalid hexadecimal digit', {
+      message: 'invalid hexadecimal digit',
+      cursorPosition: 0,
+      fileName: 'src_backend_parser_parser.c',
+      functionName: 'hexval',
+    });
+    vi.mocked(parser.parse).mockRejectedValueOnce(error);
+
+    await expect(getSqlConfirmationReason('SELECT 1')).rejects.toBe(error);
+  });
 
   test.each([
     [{}, 'SQL parser returned an invalid statement list.'],

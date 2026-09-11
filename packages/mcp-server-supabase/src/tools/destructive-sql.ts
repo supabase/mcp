@@ -1,4 +1,4 @@
-import type { ParseResult } from 'libpg-query';
+import type { ParseResult, SqlError } from 'libpg-query';
 
 /** Adapted from supabase/supabase apps/studio (SQLEditor.constants.ts, SQLEditor.utils.ts, lib/helpers.ts), Apache-2.0. */
 
@@ -82,6 +82,67 @@ export type SqlConfirmationReason =
   | 'do-heuristic'
   | 'unclassified';
 type ClassifiedReason = Exclude<SqlConfirmationReason, 'unclassified'>;
+const scannerSyntaxErrorPrefixes = [
+  'syntax error',
+  'unterminated ',
+  'invalid Unicode ',
+  'zero-length delimited identifier',
+  'operator too long',
+  'parameter number too large',
+  'trailing junk after ',
+  'invalid hexadecimal integer',
+  'invalid octal integer',
+  'invalid binary integer',
+  'UESCAPE must be followed by a simple string literal',
+] as const;
+
+function isSupportedSyntaxError(error: SqlError): boolean {
+  const { fileName, functionName } = error.sqlDetails ?? {};
+
+  if (fileName === 'gram.y') {
+    switch (functionName) {
+      case 'base_yyparse':
+      case 'makeOrderedSetArgs':
+      case 'insertSelectOptions':
+      case 'mergeTableFuncParameters':
+      case 'makeRangeVarFromAnyName':
+      case 'makeRangeVarFromQualifiedName':
+      case 'processCASbits':
+      case 'parsePartitionStrategy':
+      case 'preprocess_pubobj_list':
+        return true;
+      case 'SplitColQualList':
+        return error.message === 'multiple COLLATE clauses not allowed';
+    }
+  }
+
+  if (fileName === 'scan.l' && functionName === 'core_yylex') {
+    return error.message === 'invalid Unicode escape';
+  }
+
+  if (fileName === 'src_backend_parser_parser.c') {
+    if (functionName === 'check_unicode_value') {
+      return error.message === 'invalid Unicode escape value';
+    }
+    if (functionName === 'str_udeescape') {
+      return (
+        error.message === 'invalid Unicode escape' ||
+        error.message === 'invalid Unicode surrogate pair'
+      );
+    }
+  }
+
+  // Bison grammar errors and scan.l's lexer errors share this function.
+  // Match only source-backed messages: resource errors use the same SqlError
+  // class, source file, and scanner function.
+  return (
+    fileName === 'scan.l' &&
+    functionName === 'scanner_yyerror' &&
+    scannerSyntaxErrorPrefixes.some((prefix) =>
+      error.message.startsWith(prefix)
+    )
+  );
+}
 
 const dropNodeNames = [
   'DropStmt',
@@ -247,7 +308,9 @@ export async function getSqlConfirmationReason(
   try {
     parsed = await parser.parse(sql);
   } catch (error) {
-    if (error instanceof parser.SqlError) return 'unclassified';
+    if (error instanceof parser.SqlError && isSupportedSyntaxError(error)) {
+      return 'unclassified';
+    }
     throw error;
   }
   if (!Array.isArray(parsed.stmts)) {
