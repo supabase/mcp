@@ -4493,6 +4493,85 @@ describe('tools', () => {
     return project;
   }
 
+  test.each([
+    [
+      'execute_sql',
+      "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;",
+      'This SQL contains a DO block whose body contains text suggesting potentially destructive operations.',
+    ],
+    [
+      'apply_migration',
+      "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;",
+      'This SQL contains a DO block whose body contains text suggesting potentially destructive operations.',
+    ],
+    [
+      'execute_sql',
+      'DELETE FROM',
+      'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.',
+    ],
+    [
+      'apply_migration',
+      'DELETE FROM',
+      'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.',
+    ],
+  ] as const)(
+    'destructive confirmation via elicitation: $tool presents the approved classification wording and approval attempts the original SQL',
+    async (tool, query, firstLine) => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const project = await createActiveProject();
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+      const params = {
+        name: tool,
+        arguments: {
+          project_id: project.id,
+          query,
+          ...(tool === 'apply_migration' ? { name: 'parser_policy' } : {}),
+        },
+      } satisfies CallToolRequestParams;
+
+      const first = (await client.request(
+        { method: 'tools/call', params },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an input_required result');
+      }
+      const confirmationRequest = first.inputRequests?.confirm_destructive;
+      if (
+        confirmationRequest?.method !== 'elicitation/create' ||
+        !confirmationRequest.params ||
+        !('message' in confirmationRequest.params) ||
+        typeof confirmationRequest.params.message !== 'string'
+      ) {
+        throw new Error('expected a form elicitation request');
+      }
+      expect(confirmationRequest.params.message.split('\n')[0]).toBe(firstLine);
+      expect(executeSql).not.toHaveBeenCalled();
+      expect(applyMigration).not.toHaveBeenCalled();
+
+      await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            ...params,
+            requestState: first.requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'accept', content: {} },
+            },
+          },
+        },
+        { allowInputRequired: true }
+      );
+
+      const operation = tool === 'execute_sql' ? executeSql : applyMigration;
+      expect(operation).toHaveBeenCalledOnce();
+      expect(operation.mock.calls[0]?.[1]).toMatchObject({ query });
+    }
+  );
+
   describe('execute_sql destructive confirmation via elicitation', () => {
     test('form-capable client: non-destructive SQL runs without elicitation', async () => {
       const { client, platform } = await setupModern({

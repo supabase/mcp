@@ -58,6 +58,7 @@
     "common-tags": "^1.8.2",
     "gqlmin": "^0.3.1",
     "graphql": "^16.11.0",
+    "libpg-query": "18.1.5-lowmem-32.0",
     "openapi-fetch": "^0.13.5"
   },
   "peerDependencies": {
