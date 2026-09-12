@@ -612,6 +612,74 @@ export const mockManagementApi = [
     }
   ),
 
+  http.post<{ projectId: string }>(
+    `${API_URL}/v2/projects/:projectId/advisors/run`,
+    async ({ params, request }) => {
+      const project = mockProjects.get(params.projectId);
+      if (!project) {
+        return HttpResponse.json(
+          { message: 'Project not found' },
+          { status: 404 }
+        );
+      }
+
+      const bodySchema = z.object({
+        data: z.object({
+          type: z.literal('project_advisors'),
+          attributes: z.object({
+            lints: z.array(z.object({ name: z.string() })),
+          }),
+        }),
+      });
+      const body = bodySchema.parse(await request.json());
+
+      expect(body.data.attributes.lints).toEqual([
+        { name: 'db_not_reachable' },
+        { name: 'db_connection_limit_reached' },
+        { name: 'instance_db_down' },
+        { name: 'instance_alert_firing' },
+        { name: 'log_data_api_error_rate_high' },
+        { name: 'log_auth_error_rate_high' },
+        { name: 'log_storage_error_rate_high' },
+        { name: 'log_edge_function_error_rate_high' },
+      ]);
+
+      return HttpResponse.json({
+        data: {
+          type: 'project_advisors',
+          attributes: {
+            lints: [
+              {
+                name: 'instance_db_down',
+                title: 'Database instance is down',
+                level: 'ERROR',
+                facing: 'EXTERNAL',
+                categories: ['HEALTH'],
+                description: 'The database instance is unavailable.',
+                detail: 'The instance did not respond to a health check.',
+                remediation: 'https://supabase.com/docs/guides/platform/health',
+                cache_key: 'instance_db_down',
+              },
+              ...['project_not_active', 'advisor_check_unavailable'].map(
+                (name) => ({
+                  name,
+                  title: 'Health check unavailable',
+                  level: 'INFO',
+                  facing: 'EXTERNAL',
+                  categories: ['HEALTH'],
+                  description: 'The health check could not run.',
+                  detail: 'No project health assessment is available.',
+                  remediation: '',
+                  cache_key: name,
+                })
+              ),
+            ],
+          },
+        },
+      });
+    }
+  ),
+
   /**
    * Create a new branch for a project
    */
