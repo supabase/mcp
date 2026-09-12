@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.13.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.12.0...mcp-server-supabase-v0.13.0) (2026-09-12)
+
+
+### Features
+
+* add --http local HTTP entry to mcp-server-supabase ([#401](https://github.com/supabase/mcp/issues/401)) ([ff063b4](https://github.com/supabase/mcp/commit/ff063b44a934c3b9d0b7bc54370aaa8ff168c1de))
+* **management:** add v2 api client ([#419](https://github.com/supabase/mcp/issues/419)) ([02ca542](https://github.com/supabase/mcp/commit/02ca54273202ac8de5a7d7b6b5d1a2c8800b1374))
+
+
+### Bug Fixes
+
+* discourage host-filesystem access in raw-SQL tool descriptions ([#410](https://github.com/supabase/mcp/issues/410)) ([641ed1e](https://github.com/supabase/mcp/commit/641ed1ef09dbd0597dd53e763ab80c7a1209e0c3))
+
 ## [0.12.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.11.0...mcp-server-supabase-v0.12.0) (2026-09-04)
 
 
