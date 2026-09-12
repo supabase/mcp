@@ -4127,7 +4127,8 @@ export interface components {
         };
         JitAuthorizeAccessResponse_Output: {
             /** Format: uuid */
-            user_id: string;
+            user_id?: string;
+            act?: string;
             user_role: {
                 role: string;
                 expires_at?: number;
