@@ -4512,14 +4512,8 @@ describe('tools', () => {
   }
 
   test.each([
-    [
-      'execute_sql',
-      "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;",
-    ],
-    [
-      'apply_migration',
-      "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;",
-    ],
+    ['execute_sql', "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;"],
+    ['apply_migration', "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;"],
     ['execute_sql', 'DO $$ BEGIN DROP TABLE films; END $$;'],
     ['apply_migration', 'DO $$ BEGIN DROP TABLE films; END $$;'],
     ['execute_sql', 'DELETE FROM'],
