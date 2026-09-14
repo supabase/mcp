@@ -285,6 +285,25 @@ function classifyStatement(node: AstObject): ClassifiedReason | undefined {
     return selectStatement ? classifyStatement(selectStatement) : undefined;
   }
 
+  const createTableAs = nodeValue(node, 'CreateTableAsStmt');
+  if (createTableAs) {
+    if (
+      createTableAs.objtype !== 'OBJECT_TABLE' ||
+      asObject(createTableAs.into)?.skipData
+    ) {
+      return undefined;
+    }
+    const query = asObject(createTableAs.query);
+    return query ? classifyStatement(query) : undefined;
+  }
+
+  const copy = nodeValue(node, 'CopyStmt');
+  if (copy) {
+    if (copy.is_from) return undefined;
+    const query = asObject(copy.query);
+    return query ? classifyStatement(query) : undefined;
+  }
+
   const explain = nodeValue(node, 'ExplainStmt');
   if (explain) {
     if (!explainExecutes(explain)) return undefined;

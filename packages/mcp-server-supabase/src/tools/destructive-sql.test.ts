@@ -23,6 +23,7 @@ describe('getSqlConfirmationReason', () => {
     'DROP USER MAPPING FOR archivist SERVER warehouse;',
     'DROP SUBSCRIPTION archive;',
     'DELETE FROM films WHERE id = 1;',
+    'COPY (DELETE FROM films RETURNING *) TO STDOUT;',
     'TRUNCATE films;',
   ])('classifies destructive statements: %s', async (sql) => {
     await expect(getSqlConfirmationReason(sql)).resolves.toBe('destructive');
@@ -38,6 +39,7 @@ describe('getSqlConfirmationReason', () => {
     'UPDATE films SET title = null;',
     'UPDATE films SET title = (SELECT title FROM archive WHERE id = 1);',
     "UPDATE films SET title = 'where now';",
+    'COPY (UPDATE films SET title = null RETURNING *) TO STDOUT;',
   ])('classifies UPDATE using its own WHERE clause: %s', async (sql) => {
     await expect(getSqlConfirmationReason(sql)).resolves.toBe('destructive');
   });
@@ -45,6 +47,7 @@ describe('getSqlConfirmationReason', () => {
   test.each([
     'UPDATE films SET title = null WHERE id = 1;',
     'UPDATE films SET title = null WHERE true;',
+    'COPY (UPDATE films SET title = null WHERE id = 1 RETURNING *) TO STDOUT;',
   ])('does not classify UPDATE with an outer WHERE: %s', async (sql) => {
     await expect(getSqlConfirmationReason(sql)).resolves.toBeUndefined();
   });
@@ -73,6 +76,9 @@ describe('getSqlConfirmationReason', () => {
     'WITH removed AS (DELETE FROM films RETURNING *) SELECT * FROM removed;',
     'WITH removed AS (DELETE FROM films RETURNING *) UPDATE films SET title = null WHERE id = 1;',
     'INSERT INTO archive WITH removed AS (DELETE FROM films RETURNING *) SELECT * FROM removed;',
+    'CREATE TABLE archive AS WITH removed AS (DELETE FROM films RETURNING *) SELECT * FROM removed;',
+    'CREATE TABLE archive AS WITH updated AS (UPDATE films SET title = null RETURNING *) SELECT * FROM updated WITH DATA;',
+    'COPY (WITH removed AS (DELETE FROM films RETURNING *) SELECT * FROM removed) TO STDOUT;',
   ])('classifies executing destructive CTEs: %s', async (sql) => {
     await expect(getSqlConfirmationReason(sql)).resolves.toBe('destructive');
   });
@@ -83,6 +89,7 @@ describe('getSqlConfirmationReason', () => {
     'EXPLAIN (ANALYZE ON) DELETE FROM films;',
     'EXPLAIN (ANALYZE 1) DELETE FROM films;',
     'EXPLAIN (ANALYZE false, ANALYZE true) DELETE FROM films;',
+    'EXPLAIN ANALYZE CREATE TABLE archive AS WITH removed AS (DELETE FROM films RETURNING *) SELECT * FROM removed;',
   ])('classifies executing EXPLAIN statements: %s', async (sql) => {
     await expect(getSqlConfirmationReason(sql)).resolves.toBe('destructive');
   });
@@ -93,6 +100,7 @@ describe('getSqlConfirmationReason', () => {
     'EXPLAIN (ANALYZE OFF) DELETE FROM films;',
     'EXPLAIN (ANALYZE 0) DELETE FROM films;',
     'EXPLAIN (ANALYZE true, ANALYZE false) DELETE FROM films;',
+    'EXPLAIN CREATE TABLE archive AS WITH removed AS (DELETE FROM films RETURNING *) SELECT * FROM removed;',
   ])('does not classify nonexecuting EXPLAIN statements: %s', async (sql) => {
     await expect(getSqlConfirmationReason(sql)).resolves.toBeUndefined();
   });
@@ -139,6 +147,13 @@ describe('getSqlConfirmationReason', () => {
     'CREATE POLICY p ON films FOR DELETE USING (true);',
     '-- DROP TABLE films;\nSELECT 1;',
     'PREPARE remove_films AS DELETE FROM films;',
+    'CREATE TABLE archive AS WITH removed AS (DELETE FROM films RETURNING *) SELECT * FROM removed WITH NO DATA;',
+    'CREATE MATERIALIZED VIEW archive AS WITH removed AS (DELETE FROM films RETURNING *) SELECT * FROM removed;',
+    'CREATE TABLE archive AS SELECT * FROM films;',
+    'CREATE TABLE archive AS WITH updated AS (UPDATE films SET title = null WHERE id = 1 RETURNING *) SELECT * FROM updated;',
+    'COPY films FROM STDIN;',
+    'COPY films TO STDOUT;',
+    'COPY (SELECT * FROM films) TO STDOUT;',
     '-- comment only',
   ])('does not traverse data or nonexecuting wrappers: %s', async (sql) => {
     await expect(getSqlConfirmationReason(sql)).resolves.toBeUndefined();

@@ -4518,6 +4518,19 @@ describe('tools', () => {
     ['apply_migration', 'DO $$ BEGIN DROP TABLE films; END $$;'],
     ['execute_sql', 'DELETE FROM'],
     ['apply_migration', 'DELETE FROM'],
+    [
+      'execute_sql',
+      'CREATE TABLE archive AS WITH removed AS (DELETE FROM films RETURNING *) SELECT * FROM removed;',
+    ],
+    [
+      'apply_migration',
+      'CREATE TABLE archive AS WITH updated AS (UPDATE films SET title = null RETURNING *) SELECT * FROM updated WITH DATA;',
+    ],
+    ['execute_sql', 'COPY (DELETE FROM films RETURNING *) TO STDOUT;'],
+    [
+      'apply_migration',
+      'COPY (WITH removed AS (DELETE FROM films RETURNING *) SELECT * FROM removed) TO STDOUT;',
+    ],
   ] as const)(
     'destructive confirmation via elicitation: %s requires a form before execution and approval attempts the original SQL (%s)',
     async (tool, query) => {
@@ -4525,8 +4538,12 @@ describe('tools', () => {
         clientCapabilities: FORM_CAPABLE,
       });
       const project = await createActiveProject();
-      const executeSql = vi.spyOn(platform.database!, 'executeSql');
-      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+      const executeSql = vi
+        .spyOn(platform.database!, 'executeSql')
+        .mockResolvedValue([]);
+      const applyMigration = vi
+        .spyOn(platform.database!, 'applyMigration')
+        .mockResolvedValue(undefined);
       const params = {
         name: tool,
         arguments: {
@@ -4550,6 +4567,23 @@ describe('tools', () => {
       ) {
         throw new Error('expected a form elicitation request');
       }
+      expect(executeSql).not.toHaveBeenCalled();
+      expect(applyMigration).not.toHaveBeenCalled();
+
+      const declined = await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            ...params,
+            requestState: first.requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'decline' },
+            },
+          },
+        },
+        { allowInputRequired: true }
+      );
+      expect(declined.structuredContent).toEqual({ status: 'declined' });
       expect(executeSql).not.toHaveBeenCalled();
       expect(applyMigration).not.toHaveBeenCalled();
 
