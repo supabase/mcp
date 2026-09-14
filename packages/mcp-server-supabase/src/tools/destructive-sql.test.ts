@@ -107,6 +107,9 @@ describe('getSqlConfirmationReason', () => {
   });
 
   test.each([
+    'DO $$ BEGIN DROP TABLE films; END $$;',
+    'DO $body$ bEgIn /* comment */ DROP TABLE films; END $body$;',
+    'DO $$ BEGIN DELETE FROM films; END $$;',
     "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;",
     "DO $$ BEGIN EXECUTE format('DROP TABLE %I', 'films'); END $$;",
     "DO $$ BEGIN EXECUTE concat('DROP ', 'TABLE films'); END $$;",
@@ -119,7 +122,7 @@ describe('getSqlConfirmationReason', () => {
   );
 
   test.each([
-    'DO $$ BEGIN DELETE FROM films; END $$;',
+    'DO $$ BEGIN NULL; END $$;',
     "DO $$ DECLARE command text := 'DROP TABLE films'; BEGIN EXECUTE command; END $$;",
     "DO $$ BEGIN RAISE NOTICE 'DELETE FROM films'; END $$;",
     "DO $$ BEGIN -- EXECUTE 'DROP TABLE films';\nRAISE NOTICE 'done'; END $$;",

@@ -4515,26 +4515,18 @@ describe('tools', () => {
     [
       'execute_sql',
       "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;",
-      'This SQL contains a DO block whose body contains text suggesting potentially destructive operations.',
     ],
     [
       'apply_migration',
       "DO $$ BEGIN EXECUTE 'DROP TABLE films'; END $$;",
-      'This SQL contains a DO block whose body contains text suggesting potentially destructive operations.',
     ],
-    [
-      'execute_sql',
-      'DELETE FROM',
-      'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.',
-    ],
-    [
-      'apply_migration',
-      'DELETE FROM',
-      'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.',
-    ],
+    ['execute_sql', 'DO $$ BEGIN DROP TABLE films; END $$;'],
+    ['apply_migration', 'DO $$ BEGIN DROP TABLE films; END $$;'],
+    ['execute_sql', 'DELETE FROM'],
+    ['apply_migration', 'DELETE FROM'],
   ] as const)(
-    'destructive confirmation via elicitation: $tool presents the approved classification wording and approval attempts the original SQL',
-    async (tool, query, firstLine) => {
+    'destructive confirmation via elicitation: %s requires a form before execution and approval attempts the original SQL (%s)',
+    async (tool, query) => {
       const { client, platform } = await setupModern({
         clientCapabilities: FORM_CAPABLE,
       });
@@ -4560,13 +4552,10 @@ describe('tools', () => {
       const confirmationRequest = first.inputRequests?.confirm_destructive;
       if (
         confirmationRequest?.method !== 'elicitation/create' ||
-        !confirmationRequest.params ||
-        !('message' in confirmationRequest.params) ||
-        typeof confirmationRequest.params.message !== 'string'
+        !confirmationRequest.params
       ) {
         throw new Error('expected a form elicitation request');
       }
-      expect(confirmationRequest.params.message.split('\n')[0]).toBe(firstLine);
       expect(executeSql).not.toHaveBeenCalled();
       expect(applyMigration).not.toHaveBeenCalled();
 

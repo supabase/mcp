@@ -5,8 +5,8 @@ import type { ParseResult, SqlError } from 'libpg-query';
 const sqlIdentifier = String.raw`(?:"(?:[^"]|"")+"|[a-z_\u0080-\uffff][\w$\u0080-\uffff]*)`;
 
 const destructiveSqlRegex = [
-  // Direct destructive statements at top level or after semicolon
-  /^(.*;)?\s*(drop|delete|truncate|alter\s+table\s+.*\s+drop\s+column)\s/is,
+  // Direct destructive statements at start/semicolon, optionally after BEGIN in a DO body.
+  /^(.*;)?\s*(?:begin\s+)?(drop|delete|truncate|alter\s+table\s+.*\s+drop\s+column)\s/is,
   // Single direct DROP-column action, including omitted COLUMN. ONLY target is
   // supported, not ONLY (target); do not traverse other ALTER actions.
   new RegExp(
