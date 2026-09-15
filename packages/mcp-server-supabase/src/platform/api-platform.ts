@@ -62,6 +62,11 @@ const healthAdvisorNames = [
   'log_edge_function_error_rate_high',
 ] as const satisfies readonly HealthAdvisorName[];
 
+const hiddenHealthAdvisorResultNames: ReadonlySet<string> = new Set([
+  'project_not_active',
+  'advisor_check_unavailable',
+]);
+
 export type SupabaseApiPlatformOptions = {
   /**
    * The access token for the Supabase Management API.
@@ -374,7 +379,14 @@ export function createSupabaseApiPlatform(
 
       assertSuccess(response, 'Failed to fetch health advisors');
 
-      return response.data.data.attributes;
+      const attributes = response.data.data.attributes;
+
+      return {
+        ...attributes,
+        lints: attributes.lints.filter(
+          ({ name }) => !hiddenHealthAdvisorResultNames.has(name)
+        ),
+      };
     },
   };
 

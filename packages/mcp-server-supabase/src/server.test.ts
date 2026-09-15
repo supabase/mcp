@@ -3095,7 +3095,7 @@ describe('tools', () => {
     expect(result).toEqual({ lints: [] });
   });
 
-  test('get health advisors returns error-rate findings and unavailable statuses', async () => {
+  test('get health advisors returns error-rate findings and hides unavailable statuses', async () => {
     const { callTool } = await setup();
 
     const org = await createOrganization({
@@ -3136,17 +3136,6 @@ describe('tools', () => {
             },
           ],
         },
-        ...['project_not_active', 'advisor_check_unavailable'].map((name) => ({
-          name,
-          title: 'Health check unavailable',
-          level: 'INFO',
-          facing: 'EXTERNAL',
-          categories: ['HEALTH'],
-          description: 'The health check could not run.',
-          remediation: '',
-          count: 1,
-          findings: [{ detail: 'No project health assessment is available.' }],
-        })),
       ],
     });
   });
