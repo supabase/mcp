@@ -4,7 +4,7 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { tool } from '@supabase/mcp-utils';
+import { type ObservationFact, tool } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
 import {
@@ -307,9 +307,16 @@ export function getAccountTools({
           organization_id,
           confirm_cost_id,
         }: z.infer<typeof createProjectInputSchemaWithElicitation>,
-        ctx: ServerContext
+        ctx: ServerContext,
+        record?: (fact: ObservationFact) => void
       ) => {
         if (readOnly) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'blocked',
+            reason: 'read_only',
+          });
           throw new Error('Cannot create a project in read-only mode.');
         }
 
@@ -318,17 +325,55 @@ export function getAccountTools({
           const cost = await getNextProjectCost(account, organization_id);
           const state = ctx.mcpReq.requestState<CostConfirmationState>();
           if (!state && cost.amount === 0) {
-            return await account.createProject({
-              name,
-              region,
-              organization_id,
+            record?.({
+              kind: 'confirmation_decision',
+              feature: 'cost',
+              route: 'bypass',
+              reason: 'zero_cost',
             });
+            const startedAt = record ? performance.now() : 0;
+            record?.({
+              kind: 'operation',
+              feature: 'cost',
+              disposition: 'started',
+            });
+            try {
+              const result = await account.createProject({
+                name,
+                region,
+                organization_id,
+              });
+              record?.({
+                kind: 'operation',
+                feature: 'cost',
+                disposition: 'returned',
+                durationMs: performance.now() - startedAt,
+              });
+              return result;
+            } catch (error) {
+              record?.({
+                kind: 'operation',
+                feature: 'cost',
+                disposition: 'threw',
+                durationMs: performance.now() - startedAt,
+              });
+              throw error;
+            }
           }
+
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'inline',
+            reason: 'eligible',
+          });
 
           const costSuffix = cost.recurrence === 'monthly' ? '/month' : '/hr';
 
-          const askForConfirmation = async () =>
-            inputRequired({
+          const askForConfirmation = async (
+            reason: 'initial' | 'missing_response' | 'changed_quote'
+          ) => {
+            const result = inputRequired({
               inputRequests: {
                 confirm_cost: inputRequired.elicit({
                   mode: 'form',
@@ -345,12 +390,25 @@ export function getAccountTools({
                 ctx
               ),
             });
+            record?.({
+              kind: 'input_required',
+              feature: 'cost',
+              mode: 'form',
+              reason,
+            });
+            return result;
+          };
 
           if (!state) {
-            return askForConfirmation();
+            return askForConfirmation('initial');
           }
 
           if (state.tool !== 'create_project') {
+            record?.({
+              kind: 'resume_validation',
+              feature: 'cost',
+              result: 'tool_mismatch',
+            });
             return {
               content: [
                 {
@@ -368,6 +426,11 @@ export function getAccountTools({
             state.region !== region ||
             state.organization_id !== organization_id
           ) {
+            record?.({
+              kind: 'resume_validation',
+              feature: 'cost',
+              result: 'arguments_mismatch',
+            });
             return {
               content: [
                 {
@@ -385,10 +448,20 @@ export function getAccountTools({
             'confirm_cost'
           );
           if (response.kind !== 'elicit') {
-            return askForConfirmation();
+            record?.({
+              kind: 'resume_validation',
+              feature: 'cost',
+              result: 'missing_response',
+            });
+            return askForConfirmation('missing_response');
           }
 
           if (response.action === 'decline') {
+            record?.({
+              kind: 'input_response',
+              feature: 'cost',
+              action: 'decline',
+            });
             return {
               content: [
                 {
@@ -401,6 +474,11 @@ export function getAccountTools({
           }
 
           if (response.action !== 'accept') {
+            record?.({
+              kind: 'input_response',
+              feature: 'cost',
+              action: 'cancel',
+            });
             return {
               content: [
                 {
@@ -412,6 +490,12 @@ export function getAccountTools({
             };
           }
 
+          record?.({
+            kind: 'input_response',
+            feature: 'cost',
+            action: 'accept',
+          });
+
           if (
             cost.amount !== 0 &&
             (state.cost.type !== cost.type ||
@@ -422,17 +506,56 @@ export function getAccountTools({
             // plan or active-project count shifted) - reissue a fresh
             // prompt bound to the recomputed cost rather than honoring a
             // stale quote.
-            return askForConfirmation();
+            record?.({
+              kind: 'resume_validation',
+              feature: 'cost',
+              result: 'changed_quote',
+            });
+            return askForConfirmation('changed_quote');
           }
 
-          return await account.createProject({
-            name: state.name,
-            region: state.region,
-            organization_id: state.organization_id,
+          record?.({
+            kind: 'resume_validation',
+            feature: 'cost',
+            result: 'valid',
           });
+          const startedAt = record ? performance.now() : 0;
+          record?.({
+            kind: 'operation',
+            feature: 'cost',
+            disposition: 'started',
+          });
+          try {
+            const result = await account.createProject({
+              name: state.name,
+              region: state.region,
+              organization_id: state.organization_id,
+            });
+            record?.({
+              kind: 'operation',
+              feature: 'cost',
+              disposition: 'returned',
+              durationMs: performance.now() - startedAt,
+            });
+            return result;
+          } catch (error) {
+            record?.({
+              kind: 'operation',
+              feature: 'cost',
+              disposition: 'threw',
+              durationMs: performance.now() - startedAt,
+            });
+            throw error;
+          }
         }
 
         const cost = await getNextProjectCost(account, organization_id);
+        record?.({
+          kind: 'confirmation_decision',
+          feature: 'cost',
+          route: 'legacy',
+          reason: costConfirmation ? 'capability_missing' : 'not_configured',
+        });
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
           throw new Error(
@@ -440,11 +563,34 @@ export function getAccountTools({
           );
         }
 
-        return await account.createProject({
-          name,
-          region,
-          organization_id,
+        const startedAt = record ? performance.now() : 0;
+        record?.({
+          kind: 'operation',
+          feature: 'cost',
+          disposition: 'started',
         });
+        try {
+          const result = await account.createProject({
+            name,
+            region,
+            organization_id,
+          });
+          record?.({
+            kind: 'operation',
+            feature: 'cost',
+            disposition: 'returned',
+            durationMs: performance.now() - startedAt,
+          });
+          return result;
+        } catch (error) {
+          record?.({
+            kind: 'operation',
+            feature: 'cost',
+            disposition: 'threw',
+            durationMs: performance.now() - startedAt,
+          });
+          throw error;
+        }
       },
     }),
     pause_project: tool({
