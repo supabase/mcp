@@ -45,6 +45,8 @@ The dev server supports the same [query params as the hosted endpoint](https://s
 
 Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--version`.
 
+For this package's local HTTP server, the optional `skip_elicitations` query parameter accepts comma-separated values (`create_project`, `create_branch`) to use legacy cost confirmation instead of elicitation. It does not bypass cost confirmation. Omitting it or leaving it blank preserves existing behavior.
+
 To try the HTTP entry from a PR without cloning, run the preview build published by pkg.pr.new:
 
 ```bash
