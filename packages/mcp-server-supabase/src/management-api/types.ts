@@ -1235,7 +1235,6 @@ export interface paths {
         };
         /**
          * Gets project performance advisors.
-         * @deprecated
          * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
          */
         get: operations["v1-get-performance-advisors"];
@@ -1256,7 +1255,6 @@ export interface paths {
         };
         /**
          * Gets project security advisors.
-         * @deprecated
          * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
          */
         get: operations["v1-get-security-advisors"];
@@ -1515,7 +1513,6 @@ export interface paths {
         };
         /**
          * Gets database metadata for the given project.
-         * @deprecated
          * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
          */
         get: operations["v1-get-database-metadata"];
