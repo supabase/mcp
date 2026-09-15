@@ -56,10 +56,6 @@ type HealthAdvisorName =
   ManagementApiV2Components['schemas']['V2RunProjectAdvisorsBody']['data']['attributes']['lints'][number]['name'];
 
 const healthAdvisorNames = [
-  'db_not_reachable',
-  'db_connection_limit_reached',
-  'instance_db_down',
-  'instance_alert_firing',
   'log_data_api_error_rate_high',
   'log_auth_error_rate_high',
   'log_storage_error_rate_high',
@@ -378,14 +374,7 @@ export function createSupabaseApiPlatform(
 
       assertSuccess(response, 'Failed to fetch health advisors');
 
-      return {
-        ...response.data.data.attributes,
-        lints: response.data.data.attributes.lints.filter(
-          ({ name }) =>
-            name !== 'project_not_active' &&
-            name !== 'advisor_check_unavailable'
-        ),
-      };
+      return response.data.data.attributes;
     },
   };
 

@@ -634,10 +634,6 @@ export const mockManagementApi = [
       const body = bodySchema.parse(await request.json());
 
       expect(body.data.attributes.lints).toEqual([
-        { name: 'db_not_reachable' },
-        { name: 'db_connection_limit_reached' },
-        { name: 'instance_db_down' },
-        { name: 'instance_alert_firing' },
         { name: 'log_data_api_error_rate_high' },
         { name: 'log_auth_error_rate_high' },
         { name: 'log_storage_error_rate_high' },
@@ -650,15 +646,15 @@ export const mockManagementApi = [
           attributes: {
             lints: [
               {
-                name: 'instance_db_down',
-                title: 'Database instance is down',
+                name: 'log_data_api_error_rate_high',
+                title: 'Data API error rate is high',
                 level: 'ERROR',
                 facing: 'EXTERNAL',
                 categories: ['HEALTH'],
-                description: 'The database instance is unavailable.',
-                detail: 'The instance did not respond to a health check.',
+                description: 'The Data API is returning elevated errors.',
+                detail: 'The Data API error rate exceeded the threshold.',
                 remediation: 'https://supabase.com/docs/guides/platform/health',
-                cache_key: 'instance_db_down',
+                cache_key: 'log_data_api_error_rate_high',
               },
               ...['project_not_active', 'advisor_check_unavailable'].map(
                 (name) => ({
