@@ -17,7 +17,7 @@ import { getDocsTools } from './tools/docs-tools.js';
 import { getEdgeFunctionTools } from './tools/edge-function-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
 import { writeToolSet } from './tools/tool-schemas.js';
-import type { FeatureGroup } from './types.js';
+import type { ElicitationToolName, FeatureGroup } from './types.js';
 import { parseFeatureGroups } from './util.js';
 import { z } from 'zod/v4';
 
@@ -73,12 +73,7 @@ export type SupabaseMcpServerOptions = {
     /** How long a minted `requestState` stays valid, in seconds. */
     ttlSeconds?: number;
     /** Tools that accept a confirmation elicitation. */
-    enabledTools: readonly (
-      | 'create_project'
-      | 'create_branch'
-      | 'execute_sql'
-      | 'apply_migration'
-    )[];
+    enabledTools: readonly ElicitationToolName[];
   };
 };
 
