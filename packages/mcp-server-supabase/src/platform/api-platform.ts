@@ -12,6 +12,8 @@ import {
   assertSuccess,
   createManagementApiClient,
 } from '../management-api/index.js';
+import { createManagementApiV2Client } from '../management-api-v2/index.js';
+import type { components as ManagementApiV2Components } from '../management-api-v2/types.js';
 import { generatePassword } from '../password.js';
 import {
   applyMigrationOptionsSchema,
@@ -50,6 +52,21 @@ const { version } = packageJson;
 
 const SUCCESS_RESPONSE: SuccessResponse = { success: true };
 
+type HealthAdvisorName =
+  ManagementApiV2Components['schemas']['V2RunProjectAdvisorsBody']['data']['attributes']['lints'][number]['name'];
+
+const healthAdvisorNames = [
+  'log_data_api_error_rate_high',
+  'log_auth_error_rate_high',
+  'log_storage_error_rate_high',
+  'log_edge_function_error_rate_high',
+] as const satisfies readonly HealthAdvisorName[];
+
+const hiddenHealthAdvisorResultNames: ReadonlySet<string> = new Set([
+  'project_not_active',
+  'advisor_check_unavailable',
+]);
+
 export type SupabaseApiPlatformOptions = {
   /**
    * The access token for the Supabase Management API.
@@ -73,6 +90,10 @@ export function createSupabaseApiPlatform(
   const managementApiUrl = apiUrl ?? 'https://api.supabase.com';
 
   let managementApiClient = createManagementApiClient(
+    managementApiUrl,
+    accessToken
+  );
+  let managementApiV2Client = createManagementApiV2Client(
     managementApiUrl,
     accessToken
   );
@@ -335,6 +356,37 @@ export function createSupabaseApiPlatform(
       assertSuccess(response, 'Failed to fetch performance advisors');
 
       return response.data;
+    },
+    async getHealthAdvisors(projectId: string) {
+      const response = await managementApiV2Client.POST(
+        '/v2/projects/{ref}/advisors/run',
+        {
+          params: {
+            path: {
+              ref: projectId,
+            },
+          },
+          body: {
+            data: {
+              type: 'project_advisors',
+              attributes: {
+                lints: healthAdvisorNames.map((name) => ({ name })),
+              },
+            },
+          },
+        }
+      );
+
+      assertSuccess(response, 'Failed to fetch health advisors');
+
+      const attributes = response.data.data.attributes;
+
+      return {
+        ...attributes,
+        lints: attributes.lints.filter(
+          ({ name }) => !hiddenHealthAdvisorResultNames.has(name)
+        ),
+      };
     },
   };
 
@@ -824,6 +876,13 @@ export function createSupabaseApiPlatform(
 
       // Re-initialize the management API client with the user agent
       managementApiClient = createManagementApiClient(
+        managementApiUrl,
+        accessToken,
+        {
+          'User-Agent': `supabase-mcp/${version} (${clientInfo.name}/${clientInfo.version})`,
+        }
+      );
+      managementApiV2Client = createManagementApiV2Client(
         managementApiUrl,
         accessToken,
         {
