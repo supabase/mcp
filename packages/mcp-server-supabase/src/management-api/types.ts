@@ -1235,7 +1235,6 @@ export interface paths {
         };
         /**
          * Gets project performance advisors.
-         * @deprecated
          * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
          */
         get: operations["v1-get-performance-advisors"];
@@ -1256,7 +1255,6 @@ export interface paths {
         };
         /**
          * Gets project security advisors.
-         * @deprecated
          * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
          */
         get: operations["v1-get-security-advisors"];
@@ -1515,7 +1513,6 @@ export interface paths {
         };
         /**
          * Gets database metadata for the given project.
-         * @deprecated
          * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
          */
         get: operations["v1-get-database-metadata"];
@@ -2768,24 +2765,24 @@ export interface components {
                 result: {
                     id: string;
                     hostname: string;
-                    ssl: {
-                        status: string;
+                    ssl?: {
+                        status?: string;
                         validation_records?: {
-                            txt_name: string;
-                            txt_value: string;
+                            txt_name?: string;
+                            txt_value?: string;
                         }[];
                         validation_errors?: {
                             message: string;
                         }[];
                     };
                     ownership_verification?: {
-                        type: string;
-                        name: string;
-                        value: string;
+                        type?: string;
+                        name?: string;
+                        value?: string;
                     };
-                    custom_origin_server: string;
+                    custom_origin_server?: string;
                     verification_errors?: string[];
-                    status: string;
+                    status?: string;
                 };
             };
         };
@@ -4127,7 +4124,8 @@ export interface components {
         };
         JitAuthorizeAccessResponse_Output: {
             /** Format: uuid */
-            user_id: string;
+            user_id?: string;
+            act?: string;
             user_role: {
                 role: string;
                 expires_at?: number;
@@ -4519,6 +4517,7 @@ export interface components {
             capabilities: {
                 list_v2: boolean;
                 iceberg_catalog: boolean;
+                object_versioning: boolean;
             };
             external: {
                 /** @enum {string} */
@@ -5177,6 +5176,27 @@ export interface operations {
                     "application/json": components["schemas"]["BranchDetailResponse_Output"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Failed to retrieve database branch */
             500: {
                 headers: {
@@ -5208,6 +5228,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BranchDeleteResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to delete database branch */
             500: {
@@ -5242,6 +5283,27 @@ export interface operations {
                     "application/json": components["schemas"]["BranchResponse_Output"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Failed to update database branch */
             500: {
                 headers: {
@@ -5274,6 +5336,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BranchUpdateResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to push database branch */
             500: {
@@ -5308,6 +5391,27 @@ export interface operations {
                     "application/json": components["schemas"]["BranchUpdateResponse_Output"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Failed to merge database branch */
             500: {
                 headers: {
@@ -5341,6 +5445,27 @@ export interface operations {
                     "application/json": components["schemas"]["BranchUpdateResponse_Output"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Failed to reset database branch */
             500: {
                 headers: {
@@ -5369,6 +5494,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BranchRestoreResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to restore database branch */
             500: {
@@ -5407,6 +5553,27 @@ export interface operations {
                 content: {
                     "text/plain": string;
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to diff database branch */
             500: {
@@ -5654,6 +5821,27 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     "v1-exchange-oauth-token": {
@@ -5677,6 +5865,27 @@ export interface operations {
                     "application/json": components["schemas"]["OAuthTokenResponse_Output"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     "v1-revoke-token": {
@@ -5693,6 +5902,27 @@ export interface operations {
         };
         responses: {
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6506,6 +6736,27 @@ export interface operations {
                     "application/json": components["schemas"]["BranchResponse_Output"][];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Failed to retrieve database branches */
             500: {
                 headers: {
@@ -6538,6 +6789,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BranchResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to create database branch */
             500: {
@@ -6616,6 +6888,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BranchResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to fetch database branch */
             500: {
@@ -13201,6 +13494,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["V1OrganizationMemberResponse_Output"][];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
