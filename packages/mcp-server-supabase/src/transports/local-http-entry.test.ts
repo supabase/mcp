@@ -21,8 +21,6 @@ import {
   MCP_CLIENT_NAME,
   MCP_CLIENT_VERSION,
   mockBranches,
-  mockContentApi,
-  mockManagementApi,
   setupMockApis,
 } from '../../test/mocks.js';
 import {
@@ -40,11 +38,8 @@ let logLines!: string[];
 const cleanups: Array<() => Promise<void>> = [];
 
 beforeEach(async () => {
-  mockServer = setupMockApis();
-  // Modern HTTP requests do not run the legacy initialization hook that sets
-  // the User-Agent. Keep authorization and API routes, not that legacy assertion.
-  const [authorization, _legacyUserAgent, ...routes] = mockManagementApi;
-  mockServer.resetHandlers(...mockContentApi, authorization!, ...routes);
+  // Modern stateless requests do not run the platform's onInitialize telemetry.
+  mockServer = setupMockApis({ expectedUserAgent: null });
   logLines = [];
   entry = await startLocalHttpEntry({
     port: 0,
@@ -199,10 +194,196 @@ describe('startLocalHttpEntry', () => {
     );
   });
 
+  test.each(['execute_sql', 'apply_migration'] as const)(
+    '%s confirms destructive SQL for form clients and preserves no-form execution',
+    async (tool) => {
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      cleanups.push(() => project.destroy());
+      project.status = 'ACTIVE_HEALTHY';
+      await project.db.exec('create table films (id int)');
+
+      const query = `features=database&read_only=false&project_ref=${project.id}`;
+      const formClient = await connect(
+        { pin: MODERN_PROTOCOL_VERSION },
+        query,
+        {
+          capabilities: { elicitation: { form: {} } },
+          inputRequired: { autoFulfill: false },
+        }
+      );
+      const params = {
+        name: tool,
+        arguments: {
+          query: 'drop table films;',
+          ...(tool === 'apply_migration' ? { name: 'drop_films' } : {}),
+        },
+      };
+      const first = (await formClient.request(
+        { method: 'tools/call', params },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an input_required result');
+      }
+      expect(first.inputRequests?.confirm_destructive).toMatchObject({
+        method: 'elicitation/create',
+        params: { mode: 'form' },
+      });
+      expect(
+        (await project.db.query("select to_regclass('public.films') as name"))
+          .rows
+      ).toEqual([{ name: 'films' }]);
+      expect(project.migrations).toEqual([]);
+
+      const accepted = (await formClient.request(
+        {
+          method: 'tools/call',
+          params: {
+            ...params,
+            requestState: first.requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'accept', content: {} },
+            },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      if (isInputRequiredResult(accepted)) {
+        throw new Error(
+          'expected accepted SQL to execute without re-prompting'
+        );
+      }
+      expect(accepted.isError).toBeFalsy();
+      expect(
+        (await project.db.query("select to_regclass('public.films') as name"))
+          .rows
+      ).toEqual([{ name: null }]);
+
+      await project.db.exec('create table films (id int)');
+      const noFormClient = await connect(
+        { pin: MODERN_PROTOCOL_VERSION },
+        query,
+        { inputRequired: { autoFulfill: false } }
+      );
+      const unconfirmed = (await noFormClient.request(
+        { method: 'tools/call', params },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+
+      if (isInputRequiredResult(unconfirmed)) {
+        throw new Error('expected no-form SQL to execute without elicitation');
+      }
+      expect(unconfirmed.isError).toBeFalsy();
+      expect(
+        (await project.db.query("select to_regclass('public.films') as name"))
+          .rows
+      ).toEqual([{ name: null }]);
+    }
+  );
+
+  test.each([
+    '',
+    ' , ',
+    'execute_sql',
+    'apply_migration',
+    'create_project,create_branch,execute_sql,apply_migration',
+  ])('isolates SQL skips and preserves cost eligibility: %j', async (skip) => {
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'pro',
+      allowed_release_channels: ['ga'],
+    });
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    cleanups.push(() => project.destroy());
+    project.status = 'ACTIVE_HEALTHY';
+    const client = await connect(
+      { pin: MODERN_PROTOCOL_VERSION },
+      `features=account,branching,database&skip_elicitations=${encodeURIComponent(skip)}`,
+      {
+        capabilities: { elicitation: { form: {} } },
+        inputRequired: { autoFulfill: false },
+      }
+    );
+
+    for (const tool of ['execute_sql', 'apply_migration'] as const) {
+      await project.db.exec('create table films (id int)');
+      const result = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: tool,
+            arguments: {
+              project_id: project.id,
+              query: 'drop table films;',
+              ...(tool === 'apply_migration' ? { name: 'drop_films' } : {}),
+            },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+      if (skip.includes(tool)) {
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect((result as CallToolResult).isError).toBeFalsy();
+        expect(
+          (await project.db.query("select to_regclass('public.films') as name"))
+            .rows
+        ).toEqual([{ name: null }]);
+      } else {
+        expect(isInputRequiredResult(result)).toBe(true);
+        expect(
+          (result as InputRequiredResult).inputRequests?.confirm_destructive
+        ).toMatchObject({
+          method: 'elicitation/create',
+          params: { mode: 'form' },
+        });
+        expect(
+          (await project.db.query("select to_regclass('public.films') as name"))
+            .rows
+        ).toEqual([{ name: 'films' }]);
+        await project.db.exec('drop table films');
+      }
+    }
+
+    const { tools } = await client.listTools();
+    for (const name of ['create_project', 'create_branch']) {
+      expect(
+        tools
+          .find((tool) => tool.name === name)
+          ?.inputSchema.required?.includes('confirm_cost_id') ?? false
+      ).toBe(skip.includes(name));
+    }
+    for (const name of ['get_cost', 'confirm_cost']) {
+      const cost = tools.find((tool) => tool.name === name);
+      if (skip.includes('create_project')) {
+        expect(cost?.inputSchema.properties?.type).toMatchObject({
+          enum: ['project', 'branch'],
+        });
+      } else {
+        expect(cost).toBeUndefined();
+      }
+    }
+  });
+
   test.each([
     'create_project',
     'create_branch',
     ' create_project, ,create_branch ',
+    'create_project,create_branch,execute_sql,apply_migration',
   ])('uses legacy confirmation only for skipped tools: %s', async (skip) => {
     const client = await connect(
       { pin: MODERN_PROTOCOL_VERSION },
@@ -310,7 +491,7 @@ describe('startLocalHttpEntry', () => {
     }
   );
 
-  test.each(['unknown', 'Create_Project', 'execute_sql', 'apply_migration'])(
+  test.each(['unknown', 'Create_Project'])(
     'rejects unsupported skip name %s over HTTP',
     async (skip) => {
       const response = await fetch(`${entry.url}?skip_elicitations=${skip}`, {

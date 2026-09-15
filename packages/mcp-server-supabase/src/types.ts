@@ -1,5 +1,14 @@
 import { z } from 'zod/v4';
 
+export const CURRENT_ELICITATION_TOOLS = [
+  'create_project',
+  'create_branch',
+  'execute_sql',
+  'apply_migration',
+] as const;
+
+export type ElicitationToolName = (typeof CURRENT_ELICITATION_TOOLS)[number];
+
 export const CURRENT_FEATURE_GROUPS = [
   'docs',
   'account',
