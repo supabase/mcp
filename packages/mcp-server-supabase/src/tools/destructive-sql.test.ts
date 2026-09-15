@@ -99,6 +99,28 @@ describe('isDestructiveSql', () => {
   });
 
   test.each([
+    "EXECUTE format('DROP TABLE %I', 'films');",
+    "EXECUTE format('%s', '') || 'DELETE FROM films';",
+    "EXECUTE IMMEDIATE 'TRUNCATE films';",
+    "OPEN films_cursor FOR EXECUTE 'DROP TABLE films';",
+    "RETURN QUERY EXECUTE format('DELETE FROM %I', 'films');",
+    'EXECUTE $sql$ALTER TABLE films DROP COLUMN title$sql$;',
+    "EXECUTE concat('DROP', ' TABLE films');",
+    "EXECUTE concat_ws(' ', 'ALTER TABLE films', 'DROP COLUMN title');",
+    "EXECUTE E'DROP TABLE films';",
+    "EXECUTE 'SELECT 1'; EXECUTE $sql$DROP TABLE films$sql$;",
+    "EXECUTE format('SELECT 1; ' || 'ALTER TABLE %I', 'films') || ' DROP COLUMN title';",
+  ])('dynamic destructive warning is preserved: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+
+  test('repeated dynamic-looking text does not skip a later warning', () => {
+    const select = `SELECT '${'execute '.repeat(4000)}';`;
+    expect(isDestructiveSql(select)).toBe(false);
+    expect(isDestructiveSql(`${select}\nDROP TABLE films;`)).toBe(true);
+  });
+
+  test.each([
     'ALTER TABLE films DROP title;',
     'ALTER TABLE public.films DROP title;',
     'ALTER TABLE "public"."film archive" DROP "display title";',

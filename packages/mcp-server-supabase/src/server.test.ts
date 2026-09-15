@@ -4449,12 +4449,12 @@ describe('tools', () => {
         throw new Error('expected an input_required result');
       }
 
-      // Flip the last character to tamper the HMAC signature; the framework
+      // Change a decoded MAC byte, not base64url padding bits. The framework
       // rejects it before the handler runs (ProtocolError -32602).
-      const originalState = first.requestState as string;
-      const lastChar = originalState.slice(-1);
-      const tamperedState =
-        originalState.slice(0, -1) + (lastChar === 'a' ? 'b' : 'a');
+      const parts = (first.requestState as string).split('.');
+      const mac = Buffer.from(parts.pop()!, 'base64url');
+      mac[0] = mac[0]! ^ 1;
+      const tamperedState = [...parts, mac.toString('base64url')].join('.');
 
       await expect(
         client.request(

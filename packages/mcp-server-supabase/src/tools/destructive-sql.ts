@@ -2,36 +2,34 @@
 
 const sqlIdentifier = String.raw`(?:"(?:[^"]|"")+"|[a-z_\u0080-\uffff][\w$\u0080-\uffff]*)`;
 
-const destructiveSqlRegex = [
-  // Direct destructive statements at top level or after semicolon
-  /^(.*;)?\s*(drop|delete|truncate|alter\s+table\s+.*\s+drop\s+column)\s/is,
-  // Single direct DROP-column action, including omitted COLUMN. ONLY target is
-  // supported, not ONLY (target); do not traverse other ALTER actions.
-  new RegExp(
-    String.raw`(?:^|;)\s*alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?${sqlIdentifier}(?:\s*\.\s*${sqlIdentifier})?\s+drop\s+(?!constraint(?![\w$\u0080-\uffff]))(?:column\s+)?(?:if\s+exists\s+)?${sqlIdentifier}(?:\s+(?:cascade|restrict))?\s*(?:;|$)`,
-    'i'
-  ),
-  // EXECUTE with string literal: EXECUTE 'DROP TABLE ...' or EXECUTE 'ALTER TABLE ... DROP COLUMN ...'
-  /execute\s+(?:format\s*\([^)]*\)\s*\|\||[^;]*['"])\s*(?:(drop|delete|truncate)\b|alter\s+table[^;]*\bdrop\s+column\b)/is,
-  // EXECUTE format(): EXECUTE format('DROP TABLE %I', ...)
-  /execute\s+format\s*\([^)]*['"]\s*(?:(drop|delete|truncate)\b|alter\s+table[^;]*\bdrop\s+column\b)/is,
-  // EXECUTE IMMEDIATE (Oracle compatibility via orafce)
-  /execute\s+immediate\s+['"]\s*(?:(drop|delete|truncate)\b|alter\s+table[^;]*\bdrop\s+column\b)/is,
-  // OPEN cursor FOR EXECUTE
-  /open\s+\w+\s+for\s+execute\s+(?:format\s*\([^)]*\)\s*\|\||[^;]*['"])\s*(?:(drop|delete|truncate)\b|alter\s+table[^;]*\bdrop\s+column\b)/is,
-  // OPEN cursor FOR EXECUTE format()
-  /open\s+\w+\s+for\s+execute\s+format\s*\([^)]*['"]\s*(?:(drop|delete|truncate)\b|alter\s+table[^;]*\bdrop\s+column\b)/is,
-  // RETURN QUERY EXECUTE
-  /return\s+query\s+execute\s+(?:format\s*\([^)]*\)\s*\|\||[^;]*['"])\s*(?:(drop|delete|truncate)\b|alter\s+table[^;]*\bdrop\s+column\b)/is,
-  // RETURN QUERY EXECUTE format()
-  /return\s+query\s+execute\s+format\s*\([^)]*['"]\s*(?:(drop|delete|truncate)\b|alter\s+table[^;]*\bdrop\s+column\b)/is,
-  // EXECUTE with dollar-quoted string: EXECUTE $tag$DROP TABLE$tag$
-  /execute\s+\$\w*\$\s*(?:(drop|delete|truncate)\b|alter\s+table[^;]*\bdrop\s+column\b)/is,
-  // EXECUTE concat() / concat_ws()
-  /execute\s+concat(?:_ws)?\s*\([^)]*\b(?:(drop|delete|truncate)|alter\s+table[^)]*\bdrop\s+column\b)/i,
-  // EXECUTE with E'' escape strings: EXECUTE E'DROP TABLE ...'
-  /execute\s+e['"]\s*(?:(drop|delete|truncate)\b|alter\s+table[^;]*\bdrop\s+column\b)/is,
-];
+// Match starts only: no candidate is allowed to rescan the remaining SQL.
+const directDropColumnRegex = new RegExp(
+  String.raw`^\s*alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?${sqlIdentifier}(?:\s*\.\s*${sqlIdentifier})?\s+drop\s+(?!constraint(?![\w$\u0080-\uffff]))(?:column\s+)?(?:if\s+exists\s+)?${sqlIdentifier}(?:\s+(?:cascade|restrict))?\s*$`,
+  'i'
+);
+const quotedDestructiveStart =
+  /['"]\s*(drop\b|delete\b|truncate\b|alter\s+table\b)/gi;
+const dollarDestructiveStart =
+  /execute\s+\$\w*\$\s*(drop\b|delete\b|truncate\b|alter\s+table\b)/gi;
+const concatDestructiveStart = /\b(drop|delete|truncate|alter\s+table)\b/gi;
+
+function hasDestructiveStart(sql: string, starts: RegExp): boolean {
+  starts.lastIndex = 0;
+  let firstAlterEnd = -1;
+  let match: RegExpExecArray | null;
+  while ((match = starts.exec(sql)) !== null) {
+    if (!/^alter/i.test(match[1]!)) {
+      return true;
+    }
+    if (firstAlterEnd === -1) {
+      firstAlterEnd = starts.lastIndex;
+    }
+  }
+  // Only the earliest ALTER matters: every later suffix is contained in it.
+  return (
+    firstAlterEnd !== -1 && /\bdrop\s+column\b/i.test(sql.slice(firstAlterEnd))
+  );
+}
 
 const updateWithoutWhereRegex =
   /(?:^|;)\s*update\s+(?:"(?:[^"]|"")+"|[\w]+)(?:\.(?:"(?:[^"]|"")+"|[\w]+))?\s+set\s+[\w\W]+?(?!\s*where\s)/is;
@@ -40,15 +38,78 @@ export function removeCommentsFromSql(sql: string): string {
   // Removing single-line comments:
   let cleanedSql = sql.replace(/--.*$/gm, '');
 
-  // Removing multi-line comments:
-  cleanedSql = cleanedSql.replace(/\/\*[\s\S]*?\*\//gm, '');
+  // Advance past each closed block once. A missing terminator must not make
+  // every subsequent /* retry the same suffix. This remains a comment heuristic,
+  // not a SQL lexer (including inside string literals).
+  const parts: string[] = [];
+  let offset = 0;
+  let start = cleanedSql.indexOf('/*', offset);
+  while (start !== -1) {
+    const end = cleanedSql.indexOf('*/', start + 2);
+    if (end === -1) {
+      break;
+    }
+    parts.push(cleanedSql.slice(offset, start));
+    offset = end + 2;
+    start = cleanedSql.indexOf('/*', offset);
+  }
+  if (offset !== 0) {
+    parts.push(cleanedSql.slice(offset));
+    cleanedSql = parts.join('');
+  }
 
   return cleanedSql;
 }
 
 export function checkDestructiveQuery(sql: string): boolean {
   const cleanedSql = removeCommentsFromSql(sql);
-  return destructiveSqlRegex.some((regex) => regex.test(cleanedSql));
+  // Retain the broad explicit-column warning, but search its suffix only once.
+  const alter = /(?:^|;)\s*alter\s+table\s+/i.exec(cleanedSql);
+  if (
+    alter &&
+    /\sdrop\s+column\s/i.test(cleanedSql.slice(alter.index + alter[0].length))
+  ) {
+    return true;
+  }
+
+  for (const statement of cleanedSql.split(';')) {
+    if (
+      /^\s*(drop|delete|truncate)\s/i.test(statement) ||
+      directDropColumnRegex.test(statement)
+    ) {
+      return true;
+    }
+    const execute = /execute\s+/i.exec(statement);
+    if (
+      execute &&
+      (hasDestructiveStart(
+        statement.slice(execute.index + execute[0].length),
+        quotedDestructiveStart
+      ) ||
+        hasDestructiveStart(statement, dollarDestructiveStart))
+    ) {
+      return true;
+    }
+  }
+
+  // These original patterns allow semicolons inside their arguments. Consume
+  // through the first closing parenthesis and its statement suffix, preserving
+  // literal concatenation without revisiting overlapping call starts.
+  const calls = /execute\s+(format|concat(?:_ws)?)\s*\([^)]*(?:\)[^;]*|$)/gi;
+  let call: RegExpExecArray | null;
+  while ((call = calls.exec(cleanedSql)) !== null) {
+    if (
+      hasDestructiveStart(
+        call[0],
+        call[1]!.toLowerCase() === 'format'
+          ? quotedDestructiveStart
+          : concatDestructiveStart
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // Replace the contents of single-quoted string literals and double-quoted
