@@ -21,6 +21,8 @@ import {
   MCP_CLIENT_NAME,
   MCP_CLIENT_VERSION,
   mockBranches,
+  mockContentApi,
+  mockManagementApi,
   setupMockApis,
 } from '../../test/mocks.js';
 import {
@@ -39,6 +41,10 @@ const cleanups: Array<() => Promise<void>> = [];
 
 beforeEach(async () => {
   mockServer = setupMockApis();
+  // Modern HTTP requests do not run the legacy initialization hook that sets
+  // the User-Agent. Keep authorization and API routes, not that legacy assertion.
+  const [authorization, _legacyUserAgent, ...routes] = mockManagementApi;
+  mockServer.resetHandlers(...mockContentApi, authorization!, ...routes);
   logLines = [];
   entry = await startLocalHttpEntry({
     port: 0,
@@ -78,6 +84,13 @@ async function connect(
   await client.connect(transport);
   cleanups.push(() => client.close());
   return client;
+}
+
+function toolOutput(result: CallToolResult) {
+  expect(result.isError, JSON.stringify(result)).not.toBe(true);
+  const [content] = result.content;
+  if (content?.type !== 'text') throw new Error('expected a text tool result');
+  return JSON.parse(content.text);
 }
 
 describe('startLocalHttpEntry', () => {
@@ -184,5 +197,166 @@ describe('startLocalHttpEntry', () => {
     expect(logLines.at(-1)).toBe(
       `${'tools/call create_branch'.padEnd(28)}  ${`${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION}`.padEnd(24)}  (${MODERN_PROTOCOL_VERSION})`
     );
+  });
+
+  test.each([
+    'create_project',
+    'create_branch',
+    ' create_project, ,create_branch ',
+  ])('uses legacy confirmation only for skipped tools: %s', async (skip) => {
+    const client = await connect(
+      { pin: MODERN_PROTOCOL_VERSION },
+      `features=account,branching&skip_elicitations=${encodeURIComponent(skip)}`,
+      {
+        capabilities: { elicitation: { form: {} } },
+        inputRequired: { autoFulfill: false },
+      }
+    );
+    const org = await createOrganization({
+      name: 'Paid Org',
+      plan: 'pro',
+      allowed_release_channels: ['ga'],
+    });
+    const project = await createProject({
+      name: 'Existing Project',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+    const { tools } = await client.listTools();
+
+    for (const type of ['project', 'branch'] as const) {
+      const name = `create_${type}` as const;
+      const skipped = skip.includes(name);
+      const tool = tools.find((tool) => tool.name === name)!;
+      expect(
+        tool.inputSchema.required?.includes('confirm_cost_id') ?? false
+      ).toBe(skipped);
+      const args =
+        type === 'project'
+          ? {
+              name: 'New Project',
+              organization_id: org.id,
+              region: 'us-east-1',
+            }
+          : { name: 'feature', project_id: project.id };
+      const result = (await client.request(
+        { method: 'tools/call', params: { name, arguments: args } },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+      if (!skipped) {
+        expect(isInputRequiredResult(result), JSON.stringify(result)).toBe(
+          true
+        );
+        expect(
+          (result as InputRequiredResult).inputRequests?.confirm_cost
+        ).toMatchObject({
+          method: 'elicitation/create',
+          params: { mode: 'form' },
+        });
+        continue;
+      }
+
+      // Skipping the prompt does not waive the existing cost confirmation.
+      expect(isInputRequiredResult(result)).toBe(false);
+      expect((result as CallToolResult).isError).toBe(true);
+      const cost = await client.callTool({
+        name: 'get_cost',
+        arguments: { type, organization_id: org.id },
+      });
+      const confirmed = await client.callTool({
+        name: 'confirm_cost',
+        arguments: toolOutput(cost),
+      });
+      const created = await client.callTool({
+        name,
+        arguments: {
+          ...args,
+          confirm_cost_id: toolOutput(confirmed).confirmation_id,
+        },
+      });
+      expect(toolOutput(created)).toMatchObject({ name: args.name });
+    }
+
+    // The same process must not retain a previous request's skips.
+    const unchanged = await connect(
+      { pin: MODERN_PROTOCOL_VERSION },
+      'features=account,branching',
+      { capabilities: { elicitation: { form: {} } } }
+    );
+    const defaults = await unchanged.listTools();
+    expect(defaults.tools.map((tool) => tool.name)).not.toContain(
+      'confirm_cost'
+    );
+    const again = await client.listTools();
+    expect(again.tools).toEqual(tools);
+  });
+
+  test.each(['', ' , '])(
+    'keeps elicitation defaults for blank CSV %j',
+    async (skip) => {
+      const client = await connect(
+        { pin: MODERN_PROTOCOL_VERSION },
+        `features=account,branching&skip_elicitations=${encodeURIComponent(skip)}`,
+        { capabilities: { elicitation: { form: {} } } }
+      );
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name)).not.toContain('confirm_cost');
+      for (const name of ['create_project', 'create_branch']) {
+        expect(
+          tools.find((tool) => tool.name === name)?.inputSchema.properties
+        ).not.toHaveProperty('confirm_cost_id');
+      }
+    }
+  );
+
+  test.each(['unknown', 'Create_Project', 'execute_sql', 'apply_migration'])(
+    'rejects unsupported skip name %s over HTTP',
+    async (skip) => {
+      const response = await fetch(`${entry.url}?skip_elicitations=${skip}`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toHaveProperty('error');
+    }
+  );
+
+  test('preserves last-value query handling for repeated skip parameters', async () => {
+    const client = await connect(
+      { pin: MODERN_PROTOCOL_VERSION },
+      'features=account,branching&skip_elicitations=create_project&skip_elicitations=create_branch',
+      { capabilities: { elicitation: { form: {} } } }
+    );
+    const { tools } = await client.listTools();
+    expect(
+      tools.find((tool) => tool.name === 'create_project')?.inputSchema
+        .properties
+    ).not.toHaveProperty('confirm_cost_id');
+    expect(
+      tools.find((tool) => tool.name === 'create_branch')?.inputSchema.required
+    ).toContain('confirm_cost_id');
+  });
+
+  test('skips cannot restore tools excluded by read-only mode', async () => {
+    const client = await connect(
+      { pin: MODERN_PROTOCOL_VERSION },
+      'features=account,branching&read_only=true&skip_elicitations=create_project,create_branch',
+      { capabilities: { elicitation: { form: {} } } }
+    );
+    const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name)).not.toContain('create_project');
+    expect(tools.map((tool) => tool.name)).not.toContain('create_branch');
+    const result = await client.callTool({
+      name: 'create_project',
+      arguments: {
+        name: 'Forbidden',
+        organization_id: 'org',
+        region: 'us-east-1',
+        confirm_cost_id: 'invalid',
+      },
+    });
+    expect(result.isError).toBe(true);
   });
 });

@@ -27,6 +27,8 @@ export type LocalHttpEntryOptions = {
   log?: (line: string) => void;
 };
 
+const supportedElicitationTools = ['create_project', 'create_branch'] as const;
+
 // https://supabase.com/docs/guides/ai-tools/mcp#configuration-options
 const querySchema = z.object({
   project_ref: z.string().optional(),
@@ -35,6 +37,11 @@ const querySchema = z.object({
     .string()
     .transform((value) => parseList(value))
     .optional(),
+  skip_elicitations: z
+    .string()
+    .transform((value) => parseList(value))
+    .optional()
+    .pipe(z.array(z.enum(supportedElicitationTools)).optional()),
 });
 
 /** e.g. `tools/call create_branch  claude-code/2.1.260  (2026-07-28)` */
@@ -112,6 +119,7 @@ export async function startLocalHttpEntry({
             project_ref: projectId,
             read_only: readOnly,
             features,
+            skip_elicitations: skipElicitations,
           } = query.data;
 
           log(
@@ -139,7 +147,9 @@ export async function startLocalHttpEntry({
                   principal: createHash('sha256')
                     .update(accessToken)
                     .digest('hex'),
-                  enabledTools: ['create_project', 'create_branch'],
+                  enabledTools: supportedElicitationTools.filter(
+                    (tool) => !skipElicitations?.includes(tool)
+                  ),
                 },
               }),
             { legacy: 'stateless', onerror: console.error }

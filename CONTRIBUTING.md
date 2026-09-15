@@ -43,6 +43,8 @@ Example client config:
 
 The dev server supports the same [query params as the hosted endpoint](https://supabase.com/docs/guides/ai-tools/mcp#configuration-options). The access token comes from the client's `Authorization` header on each request. Restart the server in your MCP client after each change.
 
+The package local HTTP entry also accepts the optional `skip_elicitations` query parameter, a comma-separated list containing only `create_project` and `create_branch`. Whitespace is trimmed and empty entries are ignored; omitted or blank values keep the current defaults. Unsupported names, case variants, and SQL tool names return HTTP 400. Selected tools use the existing `get_cost` / `confirm_cost` flow instead of elicitation, without bypassing cost confirmation or authorization. This option is specific to the package local HTTP entry, not a CLI flag or core API option. For example: `?skip_elicitations=create_project,create_branch`.
+
 Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--version`.
 
 To try the HTTP entry from a PR without cloning, run the preview build published by pkg.pr.new:
