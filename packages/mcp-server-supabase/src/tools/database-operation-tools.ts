@@ -20,7 +20,7 @@ import { hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
   applyMigrationStateSchema,
-  checkConfirmationState,
+  inspectConfirmationState,
   type ConfirmationState,
   executeSqlStateSchema,
   isFormCapable,
@@ -395,11 +395,13 @@ export function getDatabaseTools({
 
         if (
           confirmation?.enabledTools.includes('apply_migration') &&
-          isFormCapable(ctx) &&
-          isDestructiveSql(query)
+          isFormCapable(ctx)
         ) {
           const { codec } = confirmation;
-          const queryHash = await hashObject({ query });
+          const queryHash =
+            ctx.mcpReq.requestState() === undefined
+              ? undefined
+              : await hashObject({ query });
           const askForConfirmation = async () =>
             inputRequired({
               inputRequests: {
@@ -414,17 +416,21 @@ export function getDatabaseTools({
                 }),
               },
               requestState: await codec.mint(
-                { tool: 'apply_migration', project_id, name, queryHash },
+                {
+                  tool: 'apply_migration',
+                  project_id,
+                  name,
+                  queryHash: queryHash ?? (await hashObject({ query })),
+                },
                 ctx
               ),
             });
 
-          const confirmationState = await checkConfirmationState({
+          const confirmationState = inspectConfirmationState({
             ctx,
             tool: 'apply_migration',
             schema: applyMigrationStateSchema,
             requestKey: 'confirm_destructive',
-            askForConfirmation,
             argsMatch: (state) =>
               state.project_id === project_id &&
               state.name === name &&
@@ -433,19 +439,10 @@ export function getDatabaseTools({
             cancelledText: 'Migration was cancelled.',
           });
 
-          switch (confirmationState.kind) {
-            case 'reprompt':
-            case 'terminal':
-              return confirmationState.result;
-            case 'proceed':
-              await database.applyMigration(
-                confirmationState.state.project_id,
-                {
-                  name: confirmationState.state.name,
-                  query,
-                }
-              );
-              return { success: true };
+          if (confirmationState.kind !== 'proceed' && isDestructiveSql(query)) {
+            return confirmationState.kind === 'reprompt'
+              ? await askForConfirmation()
+              : confirmationState.result;
           }
         }
 
@@ -464,11 +461,13 @@ export function getDatabaseTools({
         if (
           !readOnly &&
           confirmation?.enabledTools.includes('execute_sql') &&
-          isFormCapable(ctx) &&
-          isDestructiveSql(query)
+          isFormCapable(ctx)
         ) {
           const { codec } = confirmation;
-          const queryHash = await hashObject({ query });
+          const queryHash =
+            ctx.mcpReq.requestState() === undefined
+              ? undefined
+              : await hashObject({ query });
           const askForConfirmation = async () =>
             inputRequired({
               inputRequests: {
@@ -483,29 +482,30 @@ export function getDatabaseTools({
                 }),
               },
               requestState: await codec.mint(
-                { tool: 'execute_sql', project_id, queryHash },
+                {
+                  tool: 'execute_sql',
+                  project_id,
+                  queryHash: queryHash ?? (await hashObject({ query })),
+                },
                 ctx
               ),
             });
 
-          const confirmationState = await checkConfirmationState({
+          const confirmationState = inspectConfirmationState({
             ctx,
             tool: 'execute_sql',
             schema: executeSqlStateSchema,
             requestKey: 'confirm_destructive',
-            askForConfirmation,
             argsMatch: (state) =>
               state.project_id === project_id && state.queryHash === queryHash,
             declinedText: 'SQL execution was declined.',
             cancelledText: 'SQL execution was cancelled.',
           });
 
-          switch (confirmationState.kind) {
-            case 'reprompt':
-            case 'terminal':
-              return confirmationState.result;
-            case 'proceed':
-              break;
+          if (confirmationState.kind !== 'proceed' && isDestructiveSql(query)) {
+            return confirmationState.kind === 'reprompt'
+              ? await askForConfirmation()
+              : confirmationState.result;
           }
         }
 

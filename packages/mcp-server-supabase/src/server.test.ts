@@ -44,6 +44,7 @@ import {
   instructions,
   type SupabaseMcpServerOptions,
 } from './server.js';
+import * as destructiveSql from './tools/destructive-sql.js';
 import {
   createToolSchemas,
   supabaseMcpToolSchemas,
@@ -4494,6 +4495,115 @@ describe('tools', () => {
   }
 
   describe('execute_sql destructive confirmation via elicitation', () => {
+    test.each(['execute_sql', 'apply_migration'] as const)(
+      '%s accepted retry executes original SQL when classification is unavailable',
+      async (tool) => {
+        const { client, platform } = await setupModern({
+          clientCapabilities: FORM_CAPABLE,
+        });
+        const query = '-- preserve this comment\nDROP TABLE films;';
+        const args = {
+          project_id: 'test-project',
+          query,
+          ...(tool === 'apply_migration' && { name: 'drop_films' }),
+        };
+        const executeSql = vi
+          .spyOn(platform.database!, 'executeSql')
+          .mockResolvedValue([]);
+        const applyMigration = vi
+          .spyOn(platform.database!, 'applyMigration')
+          .mockResolvedValue(undefined);
+        const originalClassify = destructiveSql.isDestructiveSql;
+        const classify = vi.spyOn(destructiveSql, 'isDestructiveSql');
+        try {
+          classify.mockImplementation(() => {
+            throw new Error('classification unavailable');
+          });
+          const initialFailure = await client.request(
+            { method: 'tools/call', params: { name: tool, arguments: args } },
+            { allowInputRequired: true }
+          );
+          expect(initialFailure).toMatchObject({ isError: true });
+          expect(isInputRequiredResult(initialFailure)).toBe(false);
+          expect(executeSql).not.toHaveBeenCalled();
+          expect(applyMigration).not.toHaveBeenCalled();
+          classify.mockImplementation(originalClassify);
+
+          const first = await client.request(
+            { method: 'tools/call', params: { name: tool, arguments: args } },
+            { allowInputRequired: true }
+          );
+          if (!isInputRequiredResult(first)) {
+            throw new Error('expected an issued SQL confirmation');
+          }
+          expect(executeSql).not.toHaveBeenCalled();
+          expect(applyMigration).not.toHaveBeenCalled();
+          classify.mockImplementation(() => {
+            throw new Error('classification unavailable');
+          });
+          for (const action of [undefined, 'decline', 'cancel'] as const) {
+            const unaccepted = await client.request(
+              {
+                method: 'tools/call',
+                params: {
+                  name: tool,
+                  arguments: args,
+                  requestState: first.requestState,
+                  ...(action && {
+                    inputResponses: {
+                      confirm_destructive: { action },
+                    },
+                  }),
+                },
+              },
+              { allowInputRequired: true }
+            );
+            // Non-acceptance retains classification failure precedence.
+            expect(unaccepted).toMatchObject({ isError: true });
+            expect(executeSql).not.toHaveBeenCalled();
+            expect(applyMigration).not.toHaveBeenCalled();
+          }
+
+          const accepted = await client.request(
+            {
+              method: 'tools/call',
+              params: {
+                name: tool,
+                arguments: args,
+                requestState: first.requestState,
+                inputResponses: {
+                  confirm_destructive: { action: 'accept', content: {} },
+                },
+              },
+            },
+            { allowInputRequired: true }
+          );
+          expect(isInputRequiredResult(accepted)).toBe(false);
+          expect((accepted as CallToolResult).isError).not.toBe(true);
+          if (tool === 'execute_sql') {
+            expect(executeSql).toHaveBeenCalledWith(
+              'test-project',
+              expect.objectContaining({ query })
+            );
+            expect(applyMigration).not.toHaveBeenCalled();
+          } else {
+            expect(applyMigration).toHaveBeenCalledWith('test-project', {
+              name: 'drop_films',
+              query,
+            });
+            expect((accepted as CallToolResult).content).toContainEqual({
+              type: 'text',
+              text: JSON.stringify({ success: true }),
+            });
+            expect(executeSql).not.toHaveBeenCalled();
+          }
+        } finally {
+          classify.mockRestore();
+          await client.close();
+        }
+      }
+    );
+
     test('form-capable client: non-destructive SQL runs without elicitation', async () => {
       const { client, platform } = await setupModern({
         clientCapabilities: FORM_CAPABLE,

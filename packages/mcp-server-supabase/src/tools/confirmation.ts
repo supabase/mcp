@@ -107,19 +107,27 @@ export type CheckConfirmationStateResult =
   | { kind: 'reprompt'; result: InputRequiredResult }
   | { kind: 'terminal'; result: CallToolResult };
 
-export async function checkConfirmationState<
-  S extends ConfirmationState,
->(options: {
+type ConfirmationStateOptions<S extends ConfirmationState> = {
   ctx: ServerContext;
   tool: S['tool'];
   schema: z.ZodType<S>;
   requestKey: string;
-  askForConfirmation: () => Promise<InputRequiredResult>;
   argsMatch: (state: S) => boolean;
   payloadMatch?: (state: S) => boolean;
   declinedText: string;
   cancelledText: string;
-}): Promise<
+};
+
+type ConfirmationDecision<S extends ConfirmationState> =
+  | { kind: 'proceed'; state: S }
+  | { kind: 'reprompt' }
+  | { kind: 'terminal'; result: CallToolResult };
+
+export async function checkConfirmationState<S extends ConfirmationState>(
+  options: ConfirmationStateOptions<S> & {
+    askForConfirmation: () => Promise<InputRequiredResult>;
+  }
+): Promise<
   CheckConfirmationStateResult &
     (
       | { kind: 'proceed'; state: S }
@@ -127,12 +135,21 @@ export async function checkConfirmationState<
       | { kind: 'terminal' }
     )
 > {
+  const decision = inspectConfirmationState(options);
+  return decision.kind === 'reprompt'
+    ? { kind: 'reprompt', result: await options.askForConfirmation() }
+    : decision;
+}
+
+/** Inspect SDK-verified state without issuing a new confirmation. */
+export function inspectConfirmationState<S extends ConfirmationState>(
+  options: ConfirmationStateOptions<S>
+): ConfirmationDecision<S> {
   const {
     ctx,
     tool,
     schema,
     requestKey,
-    askForConfirmation,
     argsMatch,
     payloadMatch,
     declinedText,
@@ -140,7 +157,7 @@ export async function checkConfirmationState<
   } = options;
   const raw = ctx.mcpReq.requestState<unknown>();
   if (raw === undefined) {
-    return { kind: 'reprompt', result: await askForConfirmation() };
+    return { kind: 'reprompt' };
   }
 
   const parsed = schema.safeParse(raw);
@@ -179,7 +196,7 @@ export async function checkConfirmationState<
 
   const response = inputResponse(ctx.mcpReq.inputResponses, requestKey);
   if (response.kind !== 'elicit') {
-    return { kind: 'reprompt', result: await askForConfirmation() };
+    return { kind: 'reprompt' };
   }
 
   if (response.action === 'decline') {
@@ -203,7 +220,7 @@ export async function checkConfirmationState<
   }
 
   if (payloadMatch && !payloadMatch(state)) {
-    return { kind: 'reprompt', result: await askForConfirmation() };
+    return { kind: 'reprompt' };
   }
 
   return { kind: 'proceed', state };
