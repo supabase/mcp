@@ -323,13 +323,35 @@ describe('startLocalHttpEntry', () => {
     }
   );
 
-  test('preserves last-value query handling for repeated skip parameters', async () => {
+  test.each([
+    'skip_elicitations=create_project&skip_elicitations=create_branch',
+    'skip_elicitations=create_project&skip_elicitations=create_project',
+    'skip_elicitations=&skip_elicitations=',
+    'skip_elicitations=execute_sql&skip_elicitations=create_branch',
+    'skip_elicitations[]=create_branch',
+    'skip_elicitations[0]=create_project',
+    'skip_elicitations[tool]=create_branch',
+    'skip_elicitations%5B%5D=create_branch',
+    'skip_elicitations[tool][name]=create_project',
+    'skip_elicitations=create_project&skip_elicitations[]=create_branch',
+  ])('rejects non-string skip query shapes: %s', async (query) => {
+    const response = await fetch(`${entry.url}?${query}`, {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toHaveProperty('error');
+  });
+
+  test('preserves last-value normalization for unrelated query parameters', async () => {
     const client = await connect(
       { pin: MODERN_PROTOCOL_VERSION },
-      'features=account,branching&skip_elicitations=create_project&skip_elicitations=create_branch',
+      'features=database&features=account,branching&read_only=true&read_only=false&skip_elicitations=create_branch',
       { capabilities: { elicitation: { form: {} } } }
     );
     const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name)).not.toContain('execute_sql');
     expect(
       tools.find((tool) => tool.name === 'create_project')?.inputSchema
         .properties

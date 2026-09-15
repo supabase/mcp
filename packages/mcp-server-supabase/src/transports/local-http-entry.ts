@@ -106,6 +106,18 @@ export async function startLocalHttpEntry({
           }
 
           const url = new URL(request.url);
+          // Hosted query parsing turns repeated or bracketed skips into
+          // non-string values. Reject those before flattening query parameters.
+          let skipCount = 0;
+          for (const key of url.searchParams.keys()) {
+            if (key === 'skip_elicitations') skipCount++;
+            if (skipCount > 1 || /^skip_elicitations\[[^[\]]*\]/.test(key)) {
+              return Response.json(
+                { error: 'skip_elicitations must be a single CSV string' },
+                { status: 400 }
+              );
+            }
+          }
           const query = querySchema.safeParse(
             Object.fromEntries(url.searchParams)
           );
