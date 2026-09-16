@@ -3628,66 +3628,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
-                    };
-                };
-            };
             /** @description GenericUnauthorized */
             401: {
                 headers: {
@@ -4036,66 +3976,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
-                    };
-                };
-            };
             /** @description GenericUnauthorized */
             401: {
                 headers: {
@@ -4388,66 +4268,6 @@ export interface operations {
                                 created_at: string;
                             };
                         }[];
-                    };
-                };
-            };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
                     };
                 };
             };
@@ -4744,66 +4564,6 @@ export interface operations {
                                  */
                                 created_at: string;
                             };
-                        };
-                    };
-                };
-            };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
                         };
                     };
                 };
@@ -5138,66 +4898,6 @@ export interface operations {
                                  */
                                 created_at: string;
                             };
-                        };
-                    };
-                };
-            };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
                         };
                     };
                 };
@@ -5586,66 +5286,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
-                    };
-                };
-            };
             /** @description GenericUnauthorized */
             401: {
                 headers: {
@@ -5989,66 +5629,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
-                    };
-                };
-            };
             /** @description GenericUnauthorized */
             401: {
                 headers: {
@@ -6383,52 +5963,6 @@ export interface operations {
                             code: "bad_request.endpoint.test.wrong_event_type";
                             /** @constant */
                             message: "Bad Request: Provided event type is not subscribed to by the endpoint";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6788,66 +6322,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
-                    };
-                };
-            };
             /** @description GenericUnauthorized */
             401: {
                 headers: {
@@ -7123,66 +6597,6 @@ export interface operations {
                              */
                             type: "ingress";
                             id: string;
-                        };
-                    };
-                };
-            };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
                         };
                     };
                 };
@@ -7548,66 +6962,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
-                    };
-                };
-            };
             /** @description GenericUnauthorized */
             401: {
                 headers: {
@@ -7956,66 +7310,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
-                    };
-                };
-            };
             /** @description GenericUnauthorized */
             401: {
                 headers: {
@@ -8308,66 +7602,6 @@ export interface operations {
                                 created_at: string;
                             };
                         }[];
-                    };
-                };
-            };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
                     };
                 };
             };
@@ -8664,66 +7898,6 @@ export interface operations {
                                  */
                                 created_at: string;
                             };
-                        };
-                    };
-                };
-            };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
                         };
                     };
                 };
@@ -9058,66 +8232,6 @@ export interface operations {
                                  */
                                 created_at: string;
                             };
-                        };
-                    };
-                };
-            };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
                         };
                     };
                 };
@@ -9506,66 +8620,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
-                    };
-                };
-            };
             /** @description GenericUnauthorized */
             401: {
                 headers: {
@@ -9909,66 +8963,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
-                    };
-                };
-            };
             /** @description GenericUnauthorized */
             401: {
                 headers: {
@@ -10303,52 +9297,6 @@ export interface operations {
                             code: "bad_request.endpoint.test.wrong_event_type";
                             /** @constant */
                             message: "Bad Request: Provided event type is not subscribed to by the endpoint";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10708,66 +9656,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
-                        };
-                    };
-                };
-            };
             /** @description GenericUnauthorized */
             401: {
                 headers: {
@@ -11043,66 +9931,6 @@ export interface operations {
                              */
                             type: "ingress";
                             id: string;
-                        };
-                    };
-                };
-            };
-            /** @description Multiple error responses */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_slug";
-                            /** @constant */
-                            message: "Bad Request: Invalid organization slug";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        } | {
-                            id?: string;
-                            /** @constant */
-                            code: "bad_request.invalid_ref";
-                            /** @constant */
-                            message: "Bad Request: Invalid project ref";
-                            description?: string;
-                            links?: {
-                                [key: string]: {
-                                    href: string;
-                                    rel?: string;
-                                    title?: string;
-                                    type?: string;
-                                    describedby?: string;
-                                    meta?: {
-                                        [key: string]: unknown;
-                                    };
-                                };
-                            };
-                            meta?: {
-                                [key: string]: unknown;
-                            };
-                            issues?: components["schemas"]["APIErrorObject"][];
-                        };
-                        $defs: {
-                            APIErrorObject: components["schemas"]["APIErrorObject"];
                         };
                     };
                 };
