@@ -19,7 +19,10 @@ import { getDebuggingTools } from './tools/debugging-tools.js';
 import { getDevelopmentTools } from './tools/development-tools.js';
 import { getDocsTools } from './tools/docs-tools.js';
 import { getEdgeFunctionTools } from './tools/edge-function-tools.js';
-import { getSecretTools } from './tools/secret-tools.js';
+import {
+  assertValidConnectUrlTemplate,
+  getSecretTools,
+} from './tools/secret-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
 import { writeToolSet } from './tools/tool-schemas.js';
 import type { ElicitationToolName, FeatureGroup } from './types.js';
@@ -148,22 +151,9 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
   } = options;
 
   if (elicitation?.secretCollection) {
-    const { connectUrlTemplate } = elicitation.secretCollection;
-    let absolute = true;
-    try {
-      new URL(connectUrlTemplate);
-    } catch {
-      absolute = false;
-    }
-    if (
-      !absolute ||
-      !connectUrlTemplate.includes('{ref}') ||
-      !connectUrlTemplate.includes('{name}')
-    ) {
-      throw new Error(
-        'elicitation.secretCollection.connectUrlTemplate must be an absolute URL containing the {ref} and {name} placeholders.'
-      );
-    }
+    assertValidConnectUrlTemplate(
+      elicitation.secretCollection.connectUrlTemplate
+    );
   }
   const contentApiClientPromise = createContentApiClient(contentApiUrl, {
     'User-Agent': `supabase-mcp/${version}`,

@@ -274,6 +274,19 @@ async function setupModern(options: ModernSetupOptions = {}) {
   return { client, platform };
 }
 
+function callModernTool(
+  client: Client,
+  params: CallToolRequestParams & {
+    inputResponses?: Record<string, unknown>;
+    requestState?: string;
+  }
+) {
+  return client.request(
+    { method: 'tools/call', params },
+    { allowInputRequired: true }
+  ) as Promise<CallToolResult | InputRequiredResult>;
+}
+
 /**
  * Sets up an MCP client with URL elicitation capability for the
  * `create_edge_function_secret` secret-collection elicitation lane.
@@ -865,20 +878,14 @@ describe('tools', () => {
         allowed_release_channels: ['ga'],
       });
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              name: 'New Project',
-              region: 'us-east-1',
-              organization_id: freeOrg.id,
-            },
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: freeOrg.id,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(result)).toBe(false);
       if (isInputRequiredResult(result)) {
@@ -971,43 +978,31 @@ describe('tools', () => {
         allowed_release_channels: ['ga'],
       });
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              name: 'New Project',
-              region: 'us-east-1',
-              organization_id: org.id,
-            },
-          },
+      const first = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: org.id,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              name: 'New Project',
-              region: 'us-east-1',
-              organization_id: otherOrg.id,
-            },
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: otherOrg.id,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -1031,13 +1026,10 @@ describe('tools', () => {
         organization_id: org.id,
       };
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'create_project', arguments: args },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
@@ -1045,20 +1037,14 @@ describe('tools', () => {
 
       existingProject.status = 'INACTIVE';
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: args,
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(second)).toBe(false);
       if (isInputRequiredResult(second)) {
@@ -1081,13 +1067,10 @@ describe('tools', () => {
         organization_id: org.id,
       };
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'create_project', arguments: args },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
@@ -1095,20 +1078,14 @@ describe('tools', () => {
 
       existingProject.status = 'INACTIVE';
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: args,
-            inputResponses: {
-              confirm_cost: { action: 'decline' },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+        inputResponses: {
+          confirm_cost: { action: 'decline' },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -4124,32 +4101,23 @@ describe('tools', () => {
       project.status = 'ACTIVE_HEALTHY';
 
       const args = { project_id: project.id, name: 'test-branch' };
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'create_branch', arguments: args },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: args,
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: args,
-            inputResponses: {
-              confirm_cost: { roots: [] },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: args,
+        inputResponses: {
+          confirm_cost: { roots: [] },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(second)).toBe(true);
       expect(mockBranches.size).toBe(0);
@@ -4186,13 +4154,10 @@ describe('tools', () => {
         project.status = 'ACTIVE_HEALTHY';
 
         const args = { project_id: project.id, name: 'test-branch' };
-        const first = (await client.request(
-          {
-            method: 'tools/call',
-            params: { name: 'create_branch', arguments: args },
-          },
-          { allowInputRequired: true }
-        )) as CallToolResult | InputRequiredResult;
+        const first = (await callModernTool(client, {
+          name: 'create_branch',
+          arguments: args,
+        })) as CallToolResult | InputRequiredResult;
 
         if (!isInputRequiredResult(first)) {
           throw new Error('expected an input_required result');
@@ -4223,20 +4188,14 @@ describe('tools', () => {
           },
         });
 
-        const second = (await client.request(
-          {
-            method: 'tools/call',
-            params: {
-              name: 'create_branch',
-              arguments: args,
-              inputResponses: {
-                confirm_cost: { action: 'decline' },
-              },
-              requestState: first.requestState,
-            },
+        const second = (await callModernTool(client, {
+          name: 'create_branch',
+          arguments: args,
+          inputResponses: {
+            confirm_cost: { action: 'decline' },
           },
-          { allowInputRequired: true }
-        )) as CallToolResult | InputRequiredResult;
+          requestState: first.requestState,
+        })) as CallToolResult | InputRequiredResult;
 
         if (isInputRequiredResult(second)) {
           throw new Error('expected a CallToolResult');
@@ -4270,20 +4229,14 @@ describe('tools', () => {
       // schema, so even a valid confirmation ID must not reach creation.
       const legacyConfirmCostId = await hashObject(getBranchCost());
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: {
-              project_id: project.id,
-              name: 'test-branch',
-              confirm_cost_id: legacyConfirmCostId,
-            },
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: {
+          project_id: project.id,
+          name: 'test-branch',
+          confirm_cost_id: legacyConfirmCostId,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(result)) {
         throw new Error('expected a tool error, not an input_required result');
@@ -4310,35 +4263,23 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: project.id, name: 'test-branch' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: project.id, name: 'test-branch' },
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: project.id, name: 'renamed-branch' },
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: project.id, name: 'renamed-branch' },
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -4418,20 +4359,14 @@ describe('tools', () => {
       });
       existingProject.status = 'ACTIVE_HEALTHY';
 
-      const projectFirst = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              organization_id: org.id,
-              name: 'My Project',
-              region: 'us-east-1',
-            },
-          },
+      const projectFirst = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          organization_id: org.id,
+          name: 'My Project',
+          region: 'us-east-1',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(projectFirst)) {
         throw new Error(
@@ -4439,20 +4374,14 @@ describe('tools', () => {
         );
       }
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: existingProject.id, name: 'test-branch' },
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: projectFirst.requestState,
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: existingProject.id, name: 'test-branch' },
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: projectFirst.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(result)) {
         throw new Error('expected a CallToolResult');
@@ -4487,16 +4416,10 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: project.id, name: 'test-branch' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: project.id, name: 'test-branch' },
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
@@ -4510,20 +4433,14 @@ describe('tools', () => {
       const tamperedState = [...parts, mac.toString('base64url')].join('.');
 
       await expect(
-        client.request(
-          {
-            method: 'tools/call',
-            params: {
-              name: 'create_branch',
-              arguments: { project_id: project.id, name: 'test-branch' },
-              inputResponses: {
-                confirm_cost: { action: 'accept', content: {} },
-              },
-              requestState: tamperedState,
-            },
+        callModernTool(client, {
+          name: 'create_branch',
+          arguments: { project_id: project.id, name: 'test-branch' },
+          inputResponses: {
+            confirm_cost: { action: 'accept', content: {} },
           },
-          { allowInputRequired: true }
-        )
+          requestState: tamperedState,
+        })
       ).rejects.toMatchObject({
         code: -32602,
         message: 'Invalid or expired requestState',
@@ -4571,20 +4488,20 @@ describe('tools', () => {
           classify.mockImplementation(() => {
             throw new Error('classification unavailable');
           });
-          const initialFailure = await client.request(
-            { method: 'tools/call', params: { name: tool, arguments: args } },
-            { allowInputRequired: true }
-          );
+          const initialFailure = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+          });
           expect(initialFailure).toMatchObject({ isError: true });
           expect(isInputRequiredResult(initialFailure)).toBe(false);
           expect(executeSql).not.toHaveBeenCalled();
           expect(applyMigration).not.toHaveBeenCalled();
           classify.mockImplementation(originalClassify);
 
-          const first = await client.request(
-            { method: 'tools/call', params: { name: tool, arguments: args } },
-            { allowInputRequired: true }
-          );
+          const first = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+          });
           if (!isInputRequiredResult(first)) {
             throw new Error('expected an issued SQL confirmation');
           }
@@ -4594,42 +4511,30 @@ describe('tools', () => {
             throw new Error('classification unavailable');
           });
           for (const action of [undefined, 'decline', 'cancel'] as const) {
-            const unaccepted = await client.request(
-              {
-                method: 'tools/call',
-                params: {
-                  name: tool,
-                  arguments: args,
-                  requestState: first.requestState,
-                  ...(action && {
-                    inputResponses: {
-                      confirm_destructive: { action },
-                    },
-                  }),
+            const unaccepted = await callModernTool(client, {
+              name: tool,
+              arguments: args,
+              requestState: first.requestState,
+              ...(action && {
+                inputResponses: {
+                  confirm_destructive: { action },
                 },
-              },
-              { allowInputRequired: true }
-            );
+              }),
+            });
             // Non-acceptance retains classification failure precedence.
             expect(unaccepted).toMatchObject({ isError: true });
             expect(executeSql).not.toHaveBeenCalled();
             expect(applyMigration).not.toHaveBeenCalled();
           }
 
-          const accepted = await client.request(
-            {
-              method: 'tools/call',
-              params: {
-                name: tool,
-                arguments: args,
-                requestState: first.requestState,
-                inputResponses: {
-                  confirm_destructive: { action: 'accept', content: {} },
-                },
-              },
+          const accepted = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+            requestState: first.requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'accept', content: {} },
             },
-            { allowInputRequired: true }
-          );
+          });
           expect(isInputRequiredResult(accepted)).toBe(false);
           expect((accepted as CallToolResult).isError).not.toBe(true);
           if (tool === 'execute_sql') {
@@ -4802,40 +4707,28 @@ describe('tools', () => {
       const project = await createActiveProject();
       const executeSql = vi.spyOn(platform.database!, 'executeSql');
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'execute_sql',
-            arguments: {
-              project_id: project.id,
-              query: 'drop table films;',
-            },
-          },
+      const first = (await callModernTool(client, {
+        name: 'execute_sql',
+        arguments: {
+          project_id: project.id,
+          query: 'drop table films;',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'execute_sql',
-            arguments: {
-              project_id: project.id,
-              query: 'drop table actors;',
-            },
-            inputResponses: {
-              confirm_destructive: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'execute_sql',
+        arguments: {
+          project_id: project.id,
+          query: 'drop table actors;',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        inputResponses: {
+          confirm_destructive: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -4947,42 +4840,30 @@ describe('tools', () => {
       const project = await createActiveProject();
       const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'apply_migration',
-            arguments: {
-              project_id: project.id,
-              name: 'drop_films',
-              query: 'drop table films;',
-            },
-          },
+      const first = (await callModernTool(client, {
+        name: 'apply_migration',
+        arguments: {
+          project_id: project.id,
+          name: 'drop_films',
+          query: 'drop table films;',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'apply_migration',
-            arguments: {
-              project_id: project.id,
-              name: 'drop_actors',
-              query: 'drop table films;',
-            },
-            inputResponses: {
-              confirm_destructive: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'apply_migration',
+        arguments: {
+          project_id: project.id,
+          name: 'drop_actors',
+          query: 'drop table films;',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        inputResponses: {
+          confirm_destructive: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -5032,16 +4913,10 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: { project_id: project.id, name: ' MY KEY&x ' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: ' MY KEY&x ' },
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(result)).toBe(true);
       if (isInputRequiredResult(result)) {
@@ -5130,13 +5005,9 @@ describe('tools', () => {
         (tool) => tool.name === 'create_edge_function_secret'
       );
 
-      expect(secretTool?.inputSchema.properties).toHaveProperty('project_id');
-      expect(secretTool?.inputSchema.properties).toHaveProperty('name');
-      expect(secretTool?.inputSchema.properties).not.toHaveProperty('value');
       expect(
-        Object.keys(secretTool?.inputSchema.properties ?? {})
-      ).toHaveLength(3);
-      expect(secretTool?.inputSchema.properties).toHaveProperty('replace');
+        Object.keys(secretTool?.inputSchema.properties ?? {}).sort()
+      ).toEqual(['name', 'project_id', 'replace']);
     });
 
     test('name starting with SUPABASE_ is rejected', async () => {
@@ -5177,16 +5048,10 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: { project_id: project.id, name: 'MY_SECRET' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(first)).toBe(true);
       if (!isInputRequiredResult(first)) {
@@ -5202,20 +5067,14 @@ describe('tools', () => {
         },
       ]);
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: { project_id: project.id, name: 'MY_SECRET' },
-            inputResponses: {
-              store_secret: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+        inputResponses: {
+          store_secret: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult;
+        requestState: first.requestState,
+      })) as CallToolResult;
 
       const textContent = second.content.find((c: any) => c.type === 'text');
       expect((textContent as any)?.text).toContain(
@@ -5223,6 +5082,64 @@ describe('tools', () => {
       );
       expect((second as any).structuredContent?.stored).toBe(true);
     });
+
+    test.each(['project_id', 'name'] as const)(
+      'rejects a signed secret continuation when only %s changes',
+      async (changedField) => {
+        const { client } = await setupUrlCapable();
+        const clock = vi
+          .spyOn(Date, 'now')
+          .mockReturnValue(Date.parse('2030-01-01T00:00:00Z'));
+        try {
+          const project = await createActiveProject();
+          const args = { project_id: project.id, name: 'MY_SECRET' };
+          const first = await callModernTool(client, {
+            name: 'create_edge_function_secret',
+            arguments: args,
+          });
+          if (!isInputRequiredResult(first)) {
+            throw new Error('expected InputRequiredResult');
+          }
+
+          const changedArgs = {
+            ...args,
+            ...(changedField === 'project_id'
+              ? { project_id: (await createActiveProject()).id }
+              : { name: 'OTHER_SECRET' }),
+          };
+          // The alternate target qualifies as stored if its signed binding
+          // is not checked before accepting the continuation.
+          mockSecrets.set(changedArgs.project_id, [
+            {
+              name: changedArgs.name,
+              value: 'secret-value',
+              updated_at: '2030-01-01T00:00:00Z',
+            },
+          ]);
+
+          const second = await callModernTool(client, {
+            name: 'create_edge_function_secret',
+            arguments: changedArgs,
+            inputResponses: {
+              store_secret: { action: 'accept', content: {} },
+            },
+            requestState: first.requestState,
+          });
+          expect(isInputRequiredResult(second)).toBe(false);
+          if (isInputRequiredResult(second)) {
+            throw new Error('expected CallToolResult, not InputRequiredResult');
+          }
+          expect(second.isError).toBe(true);
+          expect(second.structuredContent ?? {}).not.toHaveProperty(
+            'stored',
+            true
+          );
+        } finally {
+          clock.mockRestore();
+          await client.close();
+        }
+      }
+    );
 
     test('accept with old or missing secret reissues elicitation with same issued_at', async () => {
       const { client } = await setupUrlCapable();
@@ -5239,16 +5156,10 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: { project_id: project.id, name: 'MY_SECRET' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(first)).toBe(true);
       if (!isInputRequiredResult(first)) {
@@ -5265,20 +5176,14 @@ describe('tools', () => {
         },
       ]);
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: { project_id: project.id, name: 'MY_SECRET' },
-            inputResponses: {
-              store_secret: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+        inputResponses: {
+          store_secret: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(second)).toBe(true);
       if (isInputRequiredResult(second)) {
@@ -5315,16 +5220,10 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: { project_id: project.id, name: 'MY_SECRET' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(first)).toBe(true);
       if (!isInputRequiredResult(first)) {
@@ -5347,16 +5246,13 @@ describe('tools', () => {
         },
       ]);
 
-      const result = (await client.request({
-        method: 'tools/call',
-        params: {
-          name: 'create_edge_function_secret',
-          arguments: { project_id: project.id, name: 'MY_SECRET' },
-          inputResponses: {
-            store_secret: { action: 'accept', content: {} },
-          },
-          requestState: first.requestState,
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+        inputResponses: {
+          store_secret: { action: 'accept', content: {} },
         },
+        requestState: first.requestState,
       })) as CallToolResult;
 
       expect(result.isError).toBeFalsy();
@@ -5388,36 +5284,24 @@ describe('tools', () => {
       project.status = 'ACTIVE_HEALTHY';
 
       for (const action of ['decline', 'cancel'] as const) {
-        const first = (await client.request(
-          {
-            method: 'tools/call',
-            params: {
-              name: 'create_edge_function_secret',
-              arguments: { project_id: project.id, name: 'MY_SECRET' },
-            },
-          },
-          { allowInputRequired: true }
-        )) as CallToolResult | InputRequiredResult;
+        const first = (await callModernTool(client, {
+          name: 'create_edge_function_secret',
+          arguments: { project_id: project.id, name: 'MY_SECRET' },
+        })) as CallToolResult | InputRequiredResult;
 
         expect(isInputRequiredResult(first)).toBe(true);
         if (!isInputRequiredResult(first)) {
           throw new Error('expected InputRequiredResult');
         }
 
-        const second = (await client.request(
-          {
-            method: 'tools/call',
-            params: {
-              name: 'create_edge_function_secret',
-              arguments: { project_id: project.id, name: 'MY_SECRET' },
-              inputResponses: {
-                store_secret: { action, content: {} },
-              },
-              requestState: first.requestState,
-            },
+        const second = (await callModernTool(client, {
+          name: 'create_edge_function_secret',
+          arguments: { project_id: project.id, name: 'MY_SECRET' },
+          inputResponses: {
+            store_secret: { action, content: {} },
           },
-          { allowInputRequired: true }
-        )) as CallToolResult;
+          requestState: first.requestState,
+        })) as CallToolResult;
 
         expect((second as any).structuredContent).toEqual({
           status: action === 'decline' ? 'declined' : 'cancelled',
@@ -5488,20 +5372,14 @@ describe('tools', () => {
         },
       ]);
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: {
-              project_id: project.id,
-              name: 'MY_SECRET',
-              replace: true,
-            },
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: {
+          project_id: project.id,
+          name: 'MY_SECRET',
+          replace: true,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(result)) {
         throw new Error('expected InputRequiredResult');
@@ -5560,20 +5438,14 @@ describe('tools', () => {
       existingProject.status = 'ACTIVE_HEALTHY';
 
       // Get a requestState from create_project (requires a pro org with existing project)
-      const projectFirst = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              organization_id: org.id,
-              name: 'My Project',
-              region: 'us-east-1',
-            },
-          },
+      const projectFirst = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          organization_id: org.id,
+          name: 'My Project',
+          region: 'us-east-1',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(projectFirst)) {
         throw new Error(
@@ -5581,20 +5453,14 @@ describe('tools', () => {
         );
       }
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: { project_id: existingProject.id, name: 'MY_SECRET' },
-            inputResponses: {
-              store_secret: { action: 'accept', content: {} },
-            },
-            requestState: projectFirst.requestState,
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: existingProject.id, name: 'MY_SECRET' },
+        inputResponses: {
+          store_secret: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult;
+        requestState: projectFirst.requestState,
+      })) as CallToolResult;
 
       expect(result.isError).toBe(true);
     });
@@ -5617,16 +5483,10 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const result = await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: { project_id: project.id, name },
-          },
-        },
-        { allowInputRequired: true }
-      );
+      const result = await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name },
+      });
 
       expect(isInputRequiredResult(result)).toBe(false);
       if (isInputRequiredResult(result)) {
@@ -5657,20 +5517,14 @@ describe('tools', () => {
         })
       );
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: {
-              project_id: project.id,
-              name: 'MY_SECRET',
-              replace: true,
-            },
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: {
+          project_id: project.id,
+          name: 'MY_SECRET',
+          replace: true,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(result)).toBe(false);
       if (isInputRequiredResult(result)) {
@@ -5767,13 +5621,10 @@ describe('tools', () => {
         region: 'us-east-1',
         organization_id: org.id,
       };
-      const unconfirmed = await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'create_project', arguments: args },
-        },
-        { allowInputRequired: true }
-      );
+      const unconfirmed = await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+      });
       expect(isInputRequiredResult(unconfirmed)).toBe(false);
       expect(unconfirmed).toMatchObject({ isError: true });
 
@@ -5837,16 +5688,10 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_edge_function_secret',
-            arguments: { project_id: project.id, name: 'MY_SECRET' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(result)).toBe(true);
     });

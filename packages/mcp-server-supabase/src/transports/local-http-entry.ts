@@ -18,6 +18,7 @@ import { z } from 'zod/v4';
 
 import { createSupabaseApiPlatform } from '../platform/api-platform.js';
 import { createSupabaseMcpServer } from '../server.js';
+import { assertValidConnectUrlTemplate } from '../tools/secret-tools.js';
 import { CURRENT_ELICITATION_TOOLS } from '../types.js';
 import { parseFeatureGroups } from '../util.js';
 import { parseList } from './util.js';
@@ -67,7 +68,13 @@ export function describeRequest(body: unknown): string {
       protocolVersion ??= message.params.protocolVersion;
       elicitation ??=
         JSON.stringify(message.params.capabilities.elicitation) ?? 'absent';
-    } else if (isSpecType.CallToolRequest(message)) {
+    } else if (
+      isSpecType.CallToolRequest(message) &&
+      (message.params.name === 'create_edge_function_secret' ||
+        (CURRENT_ELICITATION_TOOLS as readonly string[]).includes(
+          message.params.name
+        ))
+    ) {
       const capabilities = meta?.[CLIENT_CAPABILITIES_META_KEY] as
         | { elicitation?: unknown }
         | undefined;
@@ -111,6 +118,7 @@ export async function startLocalHttpEntry({
         );
     }
   }
+  assertValidConnectUrlTemplate(secretUrlTemplate);
   const secretCollection = { connectUrlTemplate: secretUrlTemplate };
   const requestStateKey = randomBytes(32);
   const allowedHostnames = localhostAllowedHostnames();

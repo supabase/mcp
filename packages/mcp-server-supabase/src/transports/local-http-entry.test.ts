@@ -1,3 +1,5 @@
+import { once } from 'node:events';
+import { createServer } from 'node:net';
 import {
   Client,
   isInputRequiredResult,
@@ -27,6 +29,7 @@ import {
   mockBranches,
   setupMockApis,
 } from '../../test/mocks.js';
+import { CURRENT_ELICITATION_TOOLS } from '../types.js';
 import {
   describeRequest,
   type LocalHttpEntry,
@@ -37,6 +40,20 @@ import {
 // https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/
 const MODERN_PROTOCOL_VERSION = '2026-07-28';
 const AUTH_HEADERS = { Authorization: `Bearer ${ACCESS_TOKEN}` };
+
+/** Reserves an ephemeral port or proves a known port is free, then releases it. */
+async function bindAndReleasePort(port = 0): Promise<number> {
+  const probe = createServer();
+  probe.listen(port, '127.0.0.1');
+  await once(probe, 'listening');
+  const address = probe.address();
+  probe.close();
+  await once(probe, 'close');
+  if (!address || typeof address === 'string') {
+    throw new Error('expected a TCP address');
+  }
+  return address.port;
+}
 
 let mockServer!: SetupServer;
 let entry!: LocalHttpEntry;
@@ -215,6 +232,48 @@ describe('startLocalHttpEntry', () => {
     expect(legacyCall).toContain('(legacy)  elicitation=absent');
   });
 
+  test.each([
+    ...CURRENT_ELICITATION_TOOLS,
+    'create_edge_function_secret',
+  ] as const)(
+    'keeps the diagnostic elicitation suffix for %s tool calls',
+    (name) => {
+      const line = describeRequest({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: {
+          name,
+          arguments: {},
+          _meta: {
+            [CLIENT_CAPABILITIES_META_KEY]: { elicitation: { url: {} } },
+          },
+        },
+      });
+      expect(line).toContain('elicitation=');
+    }
+  );
+
+  test.each(['list_projects', 'get_cost', 'constructor'])(
+    'omits the diagnostic elicitation suffix for unrelated %s tool calls',
+    (name) => {
+      const line = describeRequest({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: {
+          name,
+          arguments: {},
+          _meta: {
+            [CLIENT_CAPABILITIES_META_KEY]: { elicitation: { url: {} } },
+          },
+        },
+      });
+      expect(line).toContain(`tools/call ${name}`);
+      expect(line).not.toContain('elicitation=');
+    }
+  );
+
   test('rejects a request without a bearer token', async () => {
     const response = await fetch(entry.url, {
       method: 'POST',
@@ -309,16 +368,39 @@ describe('startLocalHttpEntry', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
-  test('does not replace an explicitly empty template with a default', async () => {
-    await entry.close();
-    entry = await startEntry({ secretUrlTemplate: '' });
-    const response = await fetch(entry.url, {
-      method: 'POST',
-      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
-    });
-    expect(response.status).toBe(500);
-  });
+  test.each([
+    { label: 'an explicitly empty template', value: '' },
+    {
+      label: 'a relative template with both placeholders',
+      value: '/dashboard/mcp/secrets?ref={ref}&name={name}',
+    },
+    {
+      label: 'an absolute template missing the name placeholder',
+      value: 'https://example.com/secrets?ref={ref}',
+    },
+    {
+      label: 'an absolute template missing the ref placeholder',
+      value: 'https://example.com/secrets?name={name}',
+    },
+  ])(
+    'rejects a malformed resolved secret URL template ($label) before binding a listener',
+    async ({ value }) => {
+      const port = await bindAndReleasePort();
+      let started: LocalHttpEntry | undefined;
+      let caught: unknown;
+      try {
+        started = await startLocalHttpEntry({ port, secretUrlTemplate: value });
+      } catch (error) {
+        caught = error;
+      } finally {
+        // Close an unexpectedly successful startup so a failing assertion
+        // cannot leave a listener behind.
+        if (started) await started.close();
+      }
+      expect(caught).toBeInstanceOf(Error);
+      await bindAndReleasePort(port);
+    }
+  );
 
   test.each<{
     label: string;

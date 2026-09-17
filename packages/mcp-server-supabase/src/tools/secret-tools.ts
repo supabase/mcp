@@ -22,6 +22,30 @@ export function buildConnectUrl(
     .replaceAll('{name}', encodeURIComponent(name));
 }
 
+/**
+ * Validates a secret-collection connect URL template. Throws unless it is an
+ * absolute URL containing the `{ref}` and `{name}` placeholders `buildConnectUrl` fills.
+ */
+export function assertValidConnectUrlTemplate(
+  connectUrlTemplate: string
+): void {
+  let absolute = true;
+  try {
+    new URL(connectUrlTemplate);
+  } catch {
+    absolute = false;
+  }
+  if (
+    !absolute ||
+    !connectUrlTemplate.includes('{ref}') ||
+    !connectUrlTemplate.includes('{name}')
+  ) {
+    throw new Error(
+      'elicitation.secretCollection.connectUrlTemplate must be an absolute URL containing the {ref} and {name} placeholders.'
+    );
+  }
+}
+
 type SecretToolsOptions = {
   secrets: SecretOperations;
   projectId?: string;
