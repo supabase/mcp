@@ -18,6 +18,7 @@ import { z } from 'zod/v4';
 
 import { createSupabaseApiPlatform } from '../platform/api-platform.js';
 import { createSupabaseMcpServer } from '../server.js';
+import { CURRENT_ELICITATION_TOOLS } from '../types.js';
 import { parseFeatureGroups } from '../util.js';
 import { parseList } from './util.js';
 
@@ -37,6 +38,11 @@ const querySchema = z.object({
     .string()
     .transform((value) => parseList(value))
     .optional(),
+  skip_elicitations: z
+    .string()
+    .transform((value) => parseList(value))
+    .optional()
+    .pipe(z.array(z.enum(CURRENT_ELICITATION_TOOLS)).optional()),
 });
 
 /** e.g. `tools/call create_branch  claude-code/2.1.260  (2026-07-28)` */
@@ -130,6 +136,18 @@ export async function startLocalHttpEntry({
           }
 
           const url = new URL(request.url);
+          // Hosted query parsing turns repeated or bracketed skips into
+          // non-string values. Reject those before flattening query parameters.
+          let skipCount = 0;
+          for (const key of url.searchParams.keys()) {
+            if (key === 'skip_elicitations') skipCount++;
+            if (skipCount > 1 || /^skip_elicitations\[[^[\]]*\]/.test(key)) {
+              return Response.json(
+                { error: 'skip_elicitations must be a single CSV string' },
+                { status: 400 }
+              );
+            }
+          }
           const query = querySchema.safeParse(
             Object.fromEntries(url.searchParams)
           );
@@ -143,6 +161,7 @@ export async function startLocalHttpEntry({
             project_ref: projectId,
             read_only: readOnly,
             features,
+            skip_elicitations: skipElicitations,
           } = query.data;
 
           log(
@@ -173,8 +192,10 @@ export async function startLocalHttpEntry({
                       .update(accessToken)
                       .digest('hex'),
                   },
-                  costConfirmation: {
-                    enabledTools: ['create_project', 'create_branch'],
+                  confirmation: {
+                    enabledTools: CURRENT_ELICITATION_TOOLS.filter(
+                      (tool) => !skipElicitations?.includes(tool)
+                    ),
                   },
                   secretCollection,
                 },

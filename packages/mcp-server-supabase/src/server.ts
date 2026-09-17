@@ -10,10 +10,10 @@ import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
 import { getBranchingTools } from './tools/branching-tools.js';
 import {
-  type CostConfirmationState,
+  type ElicitationState,
   isFormCapable,
   isUrlCapable,
-} from './tools/cost-confirmation.js';
+} from './tools/confirmation.js';
 import { getDatabaseTools } from './tools/database-operation-tools.js';
 import { getDebuggingTools } from './tools/debugging-tools.js';
 import { getDevelopmentTools } from './tools/development-tools.js';
@@ -22,7 +22,7 @@ import { getEdgeFunctionTools } from './tools/edge-function-tools.js';
 import { getSecretTools } from './tools/secret-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
 import { writeToolSet } from './tools/tool-schemas.js';
-import type { FeatureGroup } from './types.js';
+import type { ElicitationToolName, FeatureGroup } from './types.js';
 import { parseFeatureGroups } from './util.js';
 import { z } from 'zod/v4';
 
@@ -78,14 +78,13 @@ export type SupabaseMcpServerOptions = {
       ttlSeconds?: number;
     };
     /**
-     * Cost confirmation via form elicitation for the listed tools. Clients
-     * without form capability keep using `get_cost` -> `confirm_cost` -> the
-     * relevant project or branch `confirm_cost_id` flow (`create_project` or
-     * `create_branch`).
+     * Form confirmation for the listed cost and destructive SQL tools. Clients
+     * without form capability keep the existing SQL behavior and legacy
+     * `get_cost` -> `confirm_cost` -> `confirm_cost_id` flow.
      */
-    costConfirmation?: {
-      /** Tools that accept a cost-confirmation elicitation. */
-      enabledTools: readonly ('create_project' | 'create_branch')[];
+    confirmation?: {
+      /** Tools that accept a confirmation elicitation. Empty disables all forms. */
+      enabledTools: readonly ElicitationToolName[];
     };
     /**
      * URL-mode secret collection for `create_edge_function_secret`. Requires
@@ -122,6 +121,7 @@ Here are guidelines for using Supabase tools effectively:
 - Before making schema changes, inspect the existing tables so you understand the current structure
 - When debugging issues, start by reading the project's logs and its security and performance advisories before making changes
 - Look up the project's API URL and its publishable API keys when helping users configure client-side integrations
+- SQL runs on the project's database server. Never read server-side files or run OS commands via SQL.
 
 If you have access to a local development environment with a filesystem and shell:
 - Install the Supabase agent skill for critical development and security guidance: \`npx skills add supabase/agent-skills\` (https://supabase.com/docs/guides/getting-started/ai-skills.md)
@@ -182,10 +182,12 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     features ?? availableDefaultFeatures
   );
 
-  const enabledCostTools = elicitation?.costConfirmation?.enabledTools ?? [];
-  const costConfirmationCodec =
-    elicitation && (enabledCostTools.length > 0 || elicitation.secretCollection)
-      ? createRequestStateCodec<CostConfirmationState>({
+  const enabledConfirmationTools =
+    elicitation?.confirmation?.enabledTools ?? [];
+  const elicitationCodec =
+    elicitation &&
+    (enabledConfirmationTools.length > 0 || elicitation.secretCollection)
+      ? createRequestStateCodec<ElicitationState>({
           key: elicitation.requestState.key,
           ttlSeconds: elicitation.requestState.ttlSeconds,
           bind: (ctx) =>
@@ -212,8 +214,8 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       ]);
     },
     onToolCall,
-    requestState: costConfirmationCodec && {
-      verify: costConfirmationCodec.verify,
+    requestState: elicitationCodec && {
+      verify: elicitationCodec.verify,
     },
     tools: async (ctx) => {
       const contentApiClient = await contentApiClientPromise;
@@ -239,10 +241,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
           getAccountTools({
             account,
             readOnly,
-            costConfirmation:
-              costConfirmationCodec &&
-              enabledCostTools.includes('create_project')
-                ? { codec: costConfirmationCodec }
+            confirmation:
+              elicitationCodec &&
+              enabledConfirmationTools.includes('create_project')
+                ? { codec: elicitationCodec }
                 : undefined,
           })
         );
@@ -255,6 +257,18 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             database,
             projectId,
             readOnly,
+            confirmation:
+              elicitationCodec &&
+              (enabledConfirmationTools.includes('execute_sql') ||
+                enabledConfirmationTools.includes('apply_migration'))
+                ? {
+                    codec: elicitationCodec,
+                    enabledTools: enabledConfirmationTools.filter(
+                      (tool): tool is 'execute_sql' | 'apply_migration' =>
+                        tool === 'execute_sql' || tool === 'apply_migration'
+                    ),
+                  }
+                : undefined,
           })
         );
       }
@@ -281,10 +295,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             branching,
             projectId,
             readOnly,
-            costConfirmation:
-              costConfirmationCodec &&
-              enabledCostTools.includes('create_branch')
-                ? { codec: costConfirmationCodec }
+            confirmation:
+              elicitationCodec &&
+              enabledConfirmationTools.includes('create_branch')
+                ? { codec: elicitationCodec }
                 : undefined,
           })
         );
@@ -297,14 +311,14 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       if (
         elicitation?.secretCollection &&
         secrets &&
-        costConfirmationCodec &&
+        elicitationCodec &&
         enabledFeatures.has('functions')
       ) {
         const secretTools = getSecretTools({
           secrets,
           projectId,
           readOnly,
-          codec: costConfirmationCodec,
+          codec: elicitationCodec,
           connectUrlTemplate: elicitation.secretCollection.connectUrlTemplate,
         });
         secretTools.create_edge_function_secret.hidden =
@@ -325,8 +339,8 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       // that still need them. With nothing left to quote they are hidden
       // entirely.
       if (
-        costConfirmationCodec &&
-        elicitation?.costConfirmation &&
+        elicitationCodec &&
+        elicitation?.confirmation &&
         ctx &&
         isFormCapable(ctx)
       ) {
@@ -334,7 +348,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         for (const type of ['project', 'branch'] as const) {
           const name = `create_${type}` as const;
           const tool = tools[name];
-          if (!enabledCostTools.includes(name)) {
+          if (!enabledConfirmationTools.includes(name)) {
             legacyCostTypes.push(type);
           } else if (tool) {
             tools[name] = {

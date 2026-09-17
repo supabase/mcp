@@ -6,10 +6,7 @@ import {
 } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 import type { SecretOperations } from '../platform/types.js';
-import {
-  isUrlCapable,
-  type CostConfirmationState,
-} from './cost-confirmation.js';
+import { isUrlCapable, type ElicitationState } from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
 
 const RESUME_WINDOW_SECONDS = 600;
@@ -29,7 +26,7 @@ type SecretToolsOptions = {
   secrets: SecretOperations;
   projectId?: string;
   readOnly?: boolean;
-  codec: RequestStateCodec<CostConfirmationState>;
+  codec: RequestStateCodec<ElicitationState>;
   connectUrlTemplate: string;
 };
 
@@ -121,7 +118,7 @@ export function getSecretTools({
             ),
           });
 
-        const state = ctx.mcpReq.requestState<CostConfirmationState>();
+        const state = ctx.mcpReq.requestState<ElicitationState>();
         if (!state) {
           if (!isUrlCapable(ctx)) {
             return {

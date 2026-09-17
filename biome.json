@@ -12,7 +12,8 @@
       ".release-please-manifest.json",
       "**/package.json",
       "**/server.json",
-      "packages/mcp-server-supabase/src/management-api/types.ts"
+      "packages/mcp-server-supabase/src/management-api/types.ts",
+      "packages/mcp-server-supabase/src/management-api-v2/types.ts"
     ]
   },
   "formatter": {
