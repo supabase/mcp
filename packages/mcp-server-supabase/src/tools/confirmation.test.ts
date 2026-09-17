@@ -5,7 +5,11 @@ import {
 } from '@modelcontextprotocol/server';
 import { describe, expect, test } from 'vitest';
 
-import { isFormCapable } from './cost-confirmation.js';
+import {
+  checkConfirmationState,
+  executeSqlStateSchema,
+  isFormCapable,
+} from './confirmation.js';
 
 // Minimal ServerContext stub: only the envelope slice isFormCapable reads.
 function makeCtx(envelope: Record<string, unknown>): ServerContext {
@@ -66,5 +70,45 @@ describe('isFormCapable', () => {
     },
   ])('$label -> $expected', ({ envelope, expected }) => {
     expect(isFormCapable(makeCtx(envelope))).toBe(expected);
+  });
+});
+
+describe('checkConfirmationState', () => {
+  test('returns a terminal error when decoded state fails the tool schema', async () => {
+    const ctx = {
+      mcpReq: {
+        requestState: () => ({
+          tool: 'execute_sql',
+          project_id: 'project-1',
+        }),
+      },
+    } as unknown as ServerContext;
+
+    const result = await checkConfirmationState({
+      ctx,
+      tool: 'execute_sql',
+      schema: executeSqlStateSchema,
+      requestKey: 'confirm_destructive',
+      askForConfirmation: async () => {
+        throw new Error('must not ask for confirmation');
+      },
+      argsMatch: () => true,
+      declinedText: 'SQL execution was declined.',
+      cancelledText: 'SQL execution was cancelled.',
+    });
+
+    expect(result).toEqual({
+      kind: 'terminal',
+      result: {
+        content: [
+          {
+            type: 'text',
+            text: 'Request state was not issued for execute_sql.',
+          },
+        ],
+        structuredContent: { status: 'error' },
+        isError: true,
+      },
+    });
   });
 });

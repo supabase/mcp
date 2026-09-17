@@ -17,6 +17,7 @@ import { z } from 'zod/v4';
 
 import { createSupabaseApiPlatform } from '../platform/api-platform.js';
 import { createSupabaseMcpServer } from '../server.js';
+import { CURRENT_ELICITATION_TOOLS } from '../types.js';
 import { parseFeatureGroups } from '../util.js';
 import { parseList } from './util.js';
 
@@ -26,8 +27,6 @@ export type LocalHttpEntryOptions = {
   contentApiUrl?: string;
   log?: (line: string) => void;
 };
-
-const supportedElicitationTools = ['create_project', 'create_branch'] as const;
 
 // https://supabase.com/docs/guides/ai-tools/mcp#configuration-options
 const querySchema = z.object({
@@ -41,7 +40,7 @@ const querySchema = z.object({
     .string()
     .transform((value) => parseList(value))
     .optional()
-    .pipe(z.array(z.enum(supportedElicitationTools)).optional()),
+    .pipe(z.array(z.enum(CURRENT_ELICITATION_TOOLS)).optional()),
 });
 
 /** e.g. `tools/call create_branch  claude-code/2.1.260  (2026-07-28)` */
@@ -153,13 +152,13 @@ export async function startLocalHttpEntry({
                 readOnly,
                 features,
                 contentApiUrl,
-                costConfirmation: {
+                confirmation: {
                   requestStateKey,
                   // One process can serve several PATs, so the principal is the token's hash.
                   principal: createHash('sha256')
                     .update(accessToken)
                     .digest('hex'),
-                  enabledTools: supportedElicitationTools.filter(
+                  enabledTools: CURRENT_ELICITATION_TOOLS.filter(
                     (tool) => !skipElicitations?.includes(tool)
                   ),
                 },
