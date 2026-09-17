@@ -14,7 +14,7 @@ import {
   branchCostStateSchema,
   checkConfirmationState,
   isFormCapable,
-  type ConfirmationState,
+  type ElicitationState,
 } from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
 
@@ -29,7 +29,7 @@ type BranchingToolsOptions = {
    * unchanged.
    */
   confirmation?: {
-    codec: RequestStateCodec<ConfirmationState>;
+    codec: RequestStateCodec<ElicitationState>;
   };
 };
 

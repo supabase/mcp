@@ -21,7 +21,7 @@ import {
   actionOnlyElicitationSchema,
   applyMigrationStateSchema,
   inspectConfirmationState,
-  type ConfirmationState,
+  type ElicitationState,
   executeSqlStateSchema,
   isFormCapable,
 } from './confirmation.js';
@@ -37,7 +37,7 @@ type DatabaseOperationToolsOptions = {
   projectId?: string;
   readOnly?: boolean;
   confirmation?: {
-    codec: RequestStateCodec<ConfirmationState>;
+    codec: RequestStateCodec<ElicitationState>;
     enabledTools: readonly ('execute_sql' | 'apply_migration')[];
   };
 };

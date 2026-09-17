@@ -41,9 +41,21 @@ Example client config:
 }
 ```
 
-The dev server supports the same [query params as the hosted endpoint](https://supabase.com/docs/guides/ai-tools/mcp#configuration-options). The access token comes from the client's `Authorization` header on each request. Restart the server in your MCP client after each change.
+The dev server supports the same [query params as the hosted endpoint](https://supabase.com/docs/guides/ai-tools/mcp#configuration-options). Set `project_ref`, `read_only`, and `features` in the HTTP URL, not through stdio CLI flags. The access token comes from the client's `Authorization` header on each request.
 
-Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--version`.
+Secret creation is configured by default over HTTP, subject to the `functions` feature, read-only mode, and client and platform support. The production API remains the default and uses `https://supabase.com/dashboard/mcp/secrets?ref={ref}&name={name}`. Selecting `--api-url https://api.supabase.green` uses `https://supabase.green/dashboard/mcp/secrets?ref={ref}&name={name}` without an override.
+
+The optional HTTP-only `--secret-url-template` overrides this URL. Custom API origins require an explicit template; no dashboard host is derived from them. The template must be an absolute URL containing both `{ref}` and `{name}`. An explicitly empty value is invalid, not a fallback to the default.
+
+For a custom local API, replace the placeholders:
+
+```bash
+pnpm dev:http --api-url 'http://127.0.0.1:<port>' --secret-url-template '<absolute URL containing {ref} and {name}>'
+```
+
+In this package's local HTTP server, signed `requestState` used by secret collection, cost confirmation, and destructive SQL confirmation expires after 120 seconds. The secret tool retains a separate 600-second timestamp-based recovery window for fresh calls; this does not extend URL or token validity. Watch restarts invalidate pending state. Restart the server in your MCP client after each change.
+
+Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--secret-url-template`, `--version`.
 
 For this package's local HTTP server, the optional `skip_elicitations` query parameter accepts comma-separated values (`create_project`, `create_branch`, `execute_sql`, `apply_migration`). Skipping `create_project` or `create_branch` uses legacy cost confirmation instead of elicitation; it does not bypass cost confirmation. Skipping `execute_sql` or `apply_migration` disables destructive SQL elicitation, so SQL may execute without a prompt or legacy confirmation fallback. Omitting the parameter or leaving it blank preserves the configured or default eligible tools.
 

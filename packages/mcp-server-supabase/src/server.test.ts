@@ -29,6 +29,7 @@ import {
   mockBranches,
   mockContentApiSchemaLoadCount,
   mockProjects,
+  mockSecrets,
   setupMockApis,
 } from '../test/mocks.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
@@ -68,7 +69,7 @@ type SetupOptions = {
   platform?: SupabasePlatform;
   readOnly?: boolean;
   features?: string[];
-  confirmation?: SupabaseMcpServerOptions['confirmation'];
+  elicitation?: SupabaseMcpServerOptions['elicitation'];
   clientCapabilities?: ClientCapabilities;
 };
 
@@ -81,7 +82,7 @@ async function setup(options: SetupOptions = {}) {
     projectId,
     readOnly,
     features,
-    confirmation,
+    elicitation,
     clientCapabilities = {},
   } = options;
   const clientTransport = new StreamTransport();
@@ -112,7 +113,7 @@ async function setup(options: SetupOptions = {}) {
     projectId,
     readOnly,
     features,
-    confirmation,
+    elicitation,
   });
 
   await server.connect(serverTransport);
@@ -153,10 +154,13 @@ async function setup(options: SetupOptions = {}) {
 }
 
 type ModernSetupOptions = {
-  confirmation?: SupabaseMcpServerOptions['confirmation'];
+  elicitation?: SupabaseMcpServerOptions['elicitation'];
   clientCapabilities?: ClientCapabilities;
   readOnly?: boolean;
   projectId?: string;
+  secretCollection?: NonNullable<
+    NonNullable<SupabaseMcpServerOptions['elicitation']>['secretCollection']
+  >;
   /**
    * Registers an auto-fulfilling `elicitation/create` handler that always
    * answers with this action, driven via `client.callTool`. Omit for manual
@@ -165,19 +169,34 @@ type ModernSetupOptions = {
   elicitationAction?: 'accept' | 'decline' | 'cancel';
 };
 
-const COST_CONFIRMATION: NonNullable<SupabaseMcpServerOptions['confirmation']> =
-  {
-    requestStateKey: 'a'.repeat(32),
-    principal: 'test-user',
-    enabledTools: [
-      'create_project',
-      'create_branch',
-      'execute_sql',
-      'apply_migration',
-    ],
-  };
+const ELICITATION_REQUEST_STATE: NonNullable<
+  SupabaseMcpServerOptions['elicitation']
+>['requestState'] = {
+  key: 'a'.repeat(32),
+  principal: 'test-user',
+};
+
+const COST_CONFIRMATION: NonNullable<
+  NonNullable<SupabaseMcpServerOptions['elicitation']>['confirmation']
+> = {
+  enabledTools: [
+    'create_project',
+    'create_branch',
+    'execute_sql',
+    'apply_migration',
+  ],
+};
 
 const FORM_CAPABLE: ClientCapabilities = { elicitation: { form: {} } };
+
+const URL_CAPABLE: ClientCapabilities = { elicitation: { url: {} } };
+
+const SECRET_COLLECTION: NonNullable<
+  NonNullable<SupabaseMcpServerOptions['elicitation']>['secretCollection']
+> = {
+  connectUrlTemplate:
+    'https://supabase.com/dashboard/mcp/secrets?ref={ref}&name={name}',
+};
 
 // https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/
 const MODERN_PROTOCOL_VERSION = '2026-07-28';
@@ -194,13 +213,16 @@ const MCP_ENDPOINT = new URL('https://mcp.test');
  */
 async function setupModern(options: ModernSetupOptions = {}) {
   const {
+    elicitation = {
+      requestState: ELICITATION_REQUEST_STATE,
+      confirmation: COST_CONFIRMATION,
+    },
+    clientCapabilities = {},
+    secretCollection,
+    elicitationAction,
     readOnly,
     projectId,
-    elicitationAction,
-    confirmation = COST_CONFIRMATION,
-    clientCapabilities = {},
   } = options;
-
   const platform = createSupabaseApiPlatform({
     accessToken: ACCESS_TOKEN,
     apiUrl: API_URL,
@@ -219,7 +241,9 @@ async function setupModern(options: ModernSetupOptions = {}) {
     platform,
     projectId,
     readOnly,
-    confirmation,
+    elicitation: secretCollection
+      ? { ...elicitation, secretCollection }
+      : elicitation,
   });
 
   const transport = new StreamableHTTPClientTransport(MCP_ENDPOINT, {
@@ -249,6 +273,30 @@ async function setupModern(options: ModernSetupOptions = {}) {
 
   return { client, platform };
 }
+
+function callModernTool(
+  client: Client,
+  params: CallToolRequestParams & {
+    inputResponses?: Record<string, unknown>;
+    requestState?: string;
+  }
+) {
+  return client.request(
+    { method: 'tools/call', params },
+    { allowInputRequired: true }
+  ) as Promise<CallToolResult | InputRequiredResult>;
+}
+
+/**
+ * Sets up an MCP client with URL elicitation capability for the
+ * `create_edge_function_secret` secret-collection elicitation lane.
+ */
+const setupUrlCapable = (options: ModernSetupOptions = {}) =>
+  setupModern({
+    ...options,
+    clientCapabilities: URL_CAPABLE,
+    secretCollection: SECRET_COLLECTION,
+  });
 
 describe('init', () => {
   test('server returns instructions', async () => {
@@ -660,7 +708,10 @@ describe('tools', () => {
 
     test('create_project advertises confirm_cost_id as optional when cost confirmation is configured', async () => {
       const { client } = await setup({
-        confirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
       });
 
       const { tools } = await client.listTools();
@@ -676,9 +727,7 @@ describe('tools', () => {
     test('hides cost tools from a form-capable client', async () => {
       const { client } = await setupModern({
         clientCapabilities: FORM_CAPABLE,
-        confirmation: COST_CONFIRMATION,
       });
-
       const { tools } = await client.listTools();
       const names = tools.map((tool) => tool.name);
 
@@ -720,9 +769,12 @@ describe('tools', () => {
     test('narrows cost tools to branch while create_branch still needs confirm_cost_id', async () => {
       const { client } = await setupModern({
         clientCapabilities: FORM_CAPABLE,
-        confirmation: {
-          ...COST_CONFIRMATION,
-          enabledTools: ['create_project'],
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: {
+            ...COST_CONFIRMATION,
+            enabledTools: ['create_project'],
+          },
         },
       });
 
@@ -739,7 +791,10 @@ describe('tools', () => {
 
     test('lists cost tools for a 2025-era client that declares elicitation', async () => {
       const { client } = await setup({
-        confirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
         clientCapabilities: { elicitation: { form: {} } },
       });
 
@@ -751,9 +806,7 @@ describe('tools', () => {
     });
 
     test('lists cost tools for a modern client without elicitation', async () => {
-      const { client } = await setupModern({
-        confirmation: COST_CONFIRMATION,
-      });
+      const { client } = await setupModern({});
 
       const { tools } = await client.listTools();
       const names = tools.map((tool) => tool.name);
@@ -764,7 +817,10 @@ describe('tools', () => {
 
     test('lists cost tools for a capability-free client', async () => {
       const { client } = await setup({
-        confirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
       });
 
       const { tools } = await client.listTools();
@@ -776,7 +832,10 @@ describe('tools', () => {
 
     test('capability-free client still succeeds via get_cost -> confirm_cost -> create_project', async () => {
       const { callTool } = await setup({
-        confirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
       });
 
       const freeOrg = await createOrganization({
@@ -819,20 +878,14 @@ describe('tools', () => {
         allowed_release_channels: ['ga'],
       });
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              name: 'New Project',
-              region: 'us-east-1',
-              organization_id: freeOrg.id,
-            },
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: freeOrg.id,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(result)).toBe(false);
       if (isInputRequiredResult(result)) {
@@ -925,43 +978,31 @@ describe('tools', () => {
         allowed_release_channels: ['ga'],
       });
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              name: 'New Project',
-              region: 'us-east-1',
-              organization_id: org.id,
-            },
-          },
+      const first = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: org.id,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              name: 'New Project',
-              region: 'us-east-1',
-              organization_id: otherOrg.id,
-            },
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: otherOrg.id,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -985,13 +1026,10 @@ describe('tools', () => {
         organization_id: org.id,
       };
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'create_project', arguments: args },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
@@ -999,20 +1037,14 @@ describe('tools', () => {
 
       existingProject.status = 'INACTIVE';
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: args,
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(second)).toBe(false);
       if (isInputRequiredResult(second)) {
@@ -1035,13 +1067,10 @@ describe('tools', () => {
         organization_id: org.id,
       };
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'create_project', arguments: args },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
@@ -1049,20 +1078,14 @@ describe('tools', () => {
 
       existingProject.status = 'INACTIVE';
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: args,
-            inputResponses: {
-              confirm_cost: { action: 'decline' },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+        inputResponses: {
+          confirm_cost: { action: 'decline' },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -3890,7 +3913,10 @@ describe('tools', () => {
     test('create_branch advertises confirm_cost_id as optional when cost confirmation is configured', async () => {
       const { client } = await setup({
         features: ['branching'],
-        confirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
       });
 
       const { tools } = await client.listTools();
@@ -3906,7 +3932,10 @@ describe('tools', () => {
     test('capability-free client still succeeds via get_cost -> confirm_cost -> create_branch', async () => {
       const { callTool } = await setup({
         features: ['account', 'branching'],
-        confirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
       });
 
       const org = await createOrganization({
@@ -4072,32 +4101,23 @@ describe('tools', () => {
       project.status = 'ACTIVE_HEALTHY';
 
       const args = { project_id: project.id, name: 'test-branch' };
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'create_branch', arguments: args },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: args,
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: args,
-            inputResponses: {
-              confirm_cost: { roots: [] },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: args,
+        inputResponses: {
+          confirm_cost: { roots: [] },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(second)).toBe(true);
       expect(mockBranches.size).toBe(0);
@@ -4134,13 +4154,10 @@ describe('tools', () => {
         project.status = 'ACTIVE_HEALTHY';
 
         const args = { project_id: project.id, name: 'test-branch' };
-        const first = (await client.request(
-          {
-            method: 'tools/call',
-            params: { name: 'create_branch', arguments: args },
-          },
-          { allowInputRequired: true }
-        )) as CallToolResult | InputRequiredResult;
+        const first = (await callModernTool(client, {
+          name: 'create_branch',
+          arguments: args,
+        })) as CallToolResult | InputRequiredResult;
 
         if (!isInputRequiredResult(first)) {
           throw new Error('expected an input_required result');
@@ -4171,20 +4188,14 @@ describe('tools', () => {
           },
         });
 
-        const second = (await client.request(
-          {
-            method: 'tools/call',
-            params: {
-              name: 'create_branch',
-              arguments: args,
-              inputResponses: {
-                confirm_cost: { action: 'decline' },
-              },
-              requestState: first.requestState,
-            },
+        const second = (await callModernTool(client, {
+          name: 'create_branch',
+          arguments: args,
+          inputResponses: {
+            confirm_cost: { action: 'decline' },
           },
-          { allowInputRequired: true }
-        )) as CallToolResult | InputRequiredResult;
+          requestState: first.requestState,
+        })) as CallToolResult | InputRequiredResult;
 
         if (isInputRequiredResult(second)) {
           throw new Error('expected a CallToolResult');
@@ -4218,20 +4229,14 @@ describe('tools', () => {
       // schema, so even a valid confirmation ID must not reach creation.
       const legacyConfirmCostId = await hashObject(getBranchCost());
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: {
-              project_id: project.id,
-              name: 'test-branch',
-              confirm_cost_id: legacyConfirmCostId,
-            },
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: {
+          project_id: project.id,
+          name: 'test-branch',
+          confirm_cost_id: legacyConfirmCostId,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(result)) {
         throw new Error('expected a tool error, not an input_required result');
@@ -4258,35 +4263,23 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: project.id, name: 'test-branch' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: project.id, name: 'test-branch' },
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: project.id, name: 'renamed-branch' },
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: project.id, name: 'renamed-branch' },
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -4366,20 +4359,14 @@ describe('tools', () => {
       });
       existingProject.status = 'ACTIVE_HEALTHY';
 
-      const projectFirst = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              organization_id: org.id,
-              name: 'My Project',
-              region: 'us-east-1',
-            },
-          },
+      const projectFirst = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          organization_id: org.id,
+          name: 'My Project',
+          region: 'us-east-1',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(projectFirst)) {
         throw new Error(
@@ -4387,20 +4374,14 @@ describe('tools', () => {
         );
       }
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: existingProject.id, name: 'test-branch' },
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: projectFirst.requestState,
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: existingProject.id, name: 'test-branch' },
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: projectFirst.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(result)) {
         throw new Error('expected a CallToolResult');
@@ -4435,16 +4416,10 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: project.id, name: 'test-branch' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: project.id, name: 'test-branch' },
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
@@ -4458,20 +4433,14 @@ describe('tools', () => {
       const tamperedState = [...parts, mac.toString('base64url')].join('.');
 
       await expect(
-        client.request(
-          {
-            method: 'tools/call',
-            params: {
-              name: 'create_branch',
-              arguments: { project_id: project.id, name: 'test-branch' },
-              inputResponses: {
-                confirm_cost: { action: 'accept', content: {} },
-              },
-              requestState: tamperedState,
-            },
+        callModernTool(client, {
+          name: 'create_branch',
+          arguments: { project_id: project.id, name: 'test-branch' },
+          inputResponses: {
+            confirm_cost: { action: 'accept', content: {} },
           },
-          { allowInputRequired: true }
-        )
+          requestState: tamperedState,
+        })
       ).rejects.toMatchObject({
         code: -32602,
         message: 'Invalid or expired requestState',
@@ -4519,20 +4488,20 @@ describe('tools', () => {
           classify.mockImplementation(() => {
             throw new Error('classification unavailable');
           });
-          const initialFailure = await client.request(
-            { method: 'tools/call', params: { name: tool, arguments: args } },
-            { allowInputRequired: true }
-          );
+          const initialFailure = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+          });
           expect(initialFailure).toMatchObject({ isError: true });
           expect(isInputRequiredResult(initialFailure)).toBe(false);
           expect(executeSql).not.toHaveBeenCalled();
           expect(applyMigration).not.toHaveBeenCalled();
           classify.mockImplementation(originalClassify);
 
-          const first = await client.request(
-            { method: 'tools/call', params: { name: tool, arguments: args } },
-            { allowInputRequired: true }
-          );
+          const first = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+          });
           if (!isInputRequiredResult(first)) {
             throw new Error('expected an issued SQL confirmation');
           }
@@ -4542,42 +4511,30 @@ describe('tools', () => {
             throw new Error('classification unavailable');
           });
           for (const action of [undefined, 'decline', 'cancel'] as const) {
-            const unaccepted = await client.request(
-              {
-                method: 'tools/call',
-                params: {
-                  name: tool,
-                  arguments: args,
-                  requestState: first.requestState,
-                  ...(action && {
-                    inputResponses: {
-                      confirm_destructive: { action },
-                    },
-                  }),
+            const unaccepted = await callModernTool(client, {
+              name: tool,
+              arguments: args,
+              requestState: first.requestState,
+              ...(action && {
+                inputResponses: {
+                  confirm_destructive: { action },
                 },
-              },
-              { allowInputRequired: true }
-            );
+              }),
+            });
             // Non-acceptance retains classification failure precedence.
             expect(unaccepted).toMatchObject({ isError: true });
             expect(executeSql).not.toHaveBeenCalled();
             expect(applyMigration).not.toHaveBeenCalled();
           }
 
-          const accepted = await client.request(
-            {
-              method: 'tools/call',
-              params: {
-                name: tool,
-                arguments: args,
-                requestState: first.requestState,
-                inputResponses: {
-                  confirm_destructive: { action: 'accept', content: {} },
-                },
-              },
+          const accepted = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+            requestState: first.requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'accept', content: {} },
             },
-            { allowInputRequired: true }
-          );
+          });
           expect(isInputRequiredResult(accepted)).toBe(false);
           expect((accepted as CallToolResult).isError).not.toBe(true);
           if (tool === 'execute_sql') {
@@ -4627,9 +4584,12 @@ describe('tools', () => {
       async (enabledTool, disabledTool) => {
         const { client, platform } = await setupModern({
           clientCapabilities: FORM_CAPABLE,
-          confirmation: {
-            ...COST_CONFIRMATION,
-            enabledTools: [enabledTool],
+          elicitation: {
+            requestState: ELICITATION_REQUEST_STATE,
+            confirmation: {
+              ...COST_CONFIRMATION,
+              enabledTools: [enabledTool],
+            },
           },
           elicitationAction: 'decline',
         });
@@ -4747,40 +4707,28 @@ describe('tools', () => {
       const project = await createActiveProject();
       const executeSql = vi.spyOn(platform.database!, 'executeSql');
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'execute_sql',
-            arguments: {
-              project_id: project.id,
-              query: 'drop table films;',
-            },
-          },
+      const first = (await callModernTool(client, {
+        name: 'execute_sql',
+        arguments: {
+          project_id: project.id,
+          query: 'drop table films;',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'execute_sql',
-            arguments: {
-              project_id: project.id,
-              query: 'drop table actors;',
-            },
-            inputResponses: {
-              confirm_destructive: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'execute_sql',
+        arguments: {
+          project_id: project.id,
+          query: 'drop table actors;',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        inputResponses: {
+          confirm_destructive: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -4802,7 +4750,10 @@ describe('tools', () => {
       const executeSql = vi.spyOn(platform.database!, 'executeSql');
       const { client } = await setup({
         platform,
-        confirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
       });
       const project = await createActiveProject();
 
@@ -4889,42 +4840,30 @@ describe('tools', () => {
       const project = await createActiveProject();
       const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'apply_migration',
-            arguments: {
-              project_id: project.id,
-              name: 'drop_films',
-              query: 'drop table films;',
-            },
-          },
+      const first = (await callModernTool(client, {
+        name: 'apply_migration',
+        arguments: {
+          project_id: project.id,
+          name: 'drop_films',
+          query: 'drop table films;',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'apply_migration',
-            arguments: {
-              project_id: project.id,
-              name: 'drop_actors',
-              query: 'drop table films;',
-            },
-            inputResponses: {
-              confirm_destructive: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'apply_migration',
+        arguments: {
+          project_id: project.id,
+          name: 'drop_actors',
+          query: 'drop table films;',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        inputResponses: {
+          confirm_destructive: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -4955,6 +4894,806 @@ describe('tools', () => {
       });
 
       expect(applyMigration).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('create_edge_function_secret via URL elicitation', () => {
+    test('url-capable client receives InputRequiredResult with url mode', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: ' MY KEY&x ' },
+      })) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(result)).toBe(true);
+      if (isInputRequiredResult(result)) {
+        expect(result.inputRequests?.store_secret).toMatchObject({
+          method: 'elicitation/create',
+          params: {
+            mode: 'url',
+            url: `https://supabase.com/dashboard/mcp/secrets?ref=${encodeURIComponent(project.id)}&name=${encodeURIComponent(' MY KEY&x ')}`,
+          },
+        });
+      }
+    });
+
+    test('form-only and empty-capability clients receive isError with no URL', async () => {
+      for (const capabilities of [
+        { elicitation: { form: {} } },
+        { elicitation: {} },
+      ]) {
+        const platform = createSupabaseApiPlatform({
+          accessToken: ACCESS_TOKEN,
+          apiUrl: API_URL,
+        });
+
+        await platform.init?.({
+          clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+          clientCapabilities: capabilities as any,
+        });
+
+        const handler = createSupabaseMcpHandler({
+          platform,
+          elicitation: {
+            requestState: ELICITATION_REQUEST_STATE,
+            confirmation: COST_CONFIRMATION,
+            secretCollection: {
+              connectUrlTemplate:
+                'https://supabase.com/dashboard/mcp/secrets?ref={ref}&name={name}',
+            },
+          },
+        });
+
+        const transport = new StreamableHTTPClientTransport(MCP_ENDPOINT, {
+          fetch: (url, init) => handler.fetch(new Request(url, init)),
+        });
+        const client = new Client(
+          { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+          {
+            capabilities: capabilities as any,
+            versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
+            inputRequired: { autoFulfill: false },
+          }
+        );
+
+        await client.connect(transport);
+
+        const org = await createOrganization({
+          name: 'My Org',
+          plan: 'free',
+          allowed_release_channels: ['ga'],
+        });
+        const project = await createProject({
+          name: 'Project 1',
+          region: 'us-east-1',
+          organization_id: org.id,
+        });
+        project.status = 'ACTIVE_HEALTHY';
+
+        const result = await client.callTool({
+          name: 'create_edge_function_secret',
+          arguments: { project_id: project.id, name: 'MY_SECRET' },
+        });
+
+        expect(result.isError).toBe(true);
+        const textContent = result.content.find((c: any) => c.type === 'text');
+        expect((textContent as any)?.text).toContain(
+          'This client cannot open a browser page'
+        );
+        expect(JSON.stringify(result)).not.toContain('http');
+      }
+    });
+
+    test('tool input schema exposes project_id, name and replace, never value', async () => {
+      const { client } = await setupUrlCapable();
+
+      const { tools } = await client.listTools();
+      const secretTool = tools.find(
+        (tool) => tool.name === 'create_edge_function_secret'
+      );
+
+      expect(
+        Object.keys(secretTool?.inputSchema.properties ?? {}).sort()
+      ).toEqual(['name', 'project_id', 'replace']);
+    });
+
+    test('name starting with SUPABASE_ is rejected', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const result = await client.callTool({
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'SUPABASE_URL' },
+      });
+
+      expect(result.isError).toBe(true);
+    });
+
+    test('accept with recent secret returns stored true', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const first = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+      })) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(first)).toBe(true);
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected InputRequiredResult');
+      }
+
+      // Simulate the secret being stored
+      mockSecrets.set(project.id, [
+        {
+          name: 'MY_SECRET',
+          value: 'secret-value',
+          updated_at: new Date().toISOString(),
+        },
+      ]);
+
+      const second = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+        inputResponses: {
+          store_secret: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult;
+
+      const textContent = second.content.find((c: any) => c.type === 'text');
+      expect((textContent as any)?.text).toContain(
+        'The dashboard reports an update to MY_SECRET since this request'
+      );
+      expect((second as any).structuredContent?.stored).toBe(true);
+    });
+
+    test.each(['project_id', 'name'] as const)(
+      'rejects a signed secret continuation when only %s changes',
+      async (changedField) => {
+        const { client } = await setupUrlCapable();
+        const clock = vi
+          .spyOn(Date, 'now')
+          .mockReturnValue(Date.parse('2030-01-01T00:00:00Z'));
+        try {
+          const project = await createActiveProject();
+          const args = { project_id: project.id, name: 'MY_SECRET' };
+          const first = await callModernTool(client, {
+            name: 'create_edge_function_secret',
+            arguments: args,
+          });
+          if (!isInputRequiredResult(first)) {
+            throw new Error('expected InputRequiredResult');
+          }
+
+          const changedArgs = {
+            ...args,
+            ...(changedField === 'project_id'
+              ? { project_id: (await createActiveProject()).id }
+              : { name: 'OTHER_SECRET' }),
+          };
+          // The alternate target qualifies as stored if its signed binding
+          // is not checked before accepting the continuation.
+          mockSecrets.set(changedArgs.project_id, [
+            {
+              name: changedArgs.name,
+              value: 'secret-value',
+              updated_at: '2030-01-01T00:00:00Z',
+            },
+          ]);
+
+          const second = await callModernTool(client, {
+            name: 'create_edge_function_secret',
+            arguments: changedArgs,
+            inputResponses: {
+              store_secret: { action: 'accept', content: {} },
+            },
+            requestState: first.requestState,
+          });
+          expect(isInputRequiredResult(second)).toBe(false);
+          if (isInputRequiredResult(second)) {
+            throw new Error('expected CallToolResult, not InputRequiredResult');
+          }
+          expect(second.isError).toBe(true);
+          expect(second.structuredContent ?? {}).not.toHaveProperty(
+            'stored',
+            true
+          );
+        } finally {
+          clock.mockRestore();
+          await client.close();
+        }
+      }
+    );
+
+    test('accept with old or missing secret reissues elicitation with same issued_at', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const first = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+      })) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(first)).toBe(true);
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected InputRequiredResult');
+      }
+
+      // Simulate an old secret
+      const oldDate = new Date(Date.now() - 700_000);
+      mockSecrets.set(project.id, [
+        {
+          name: 'MY_SECRET',
+          value: 'secret-value',
+          updated_at: oldDate.toISOString(),
+        },
+      ]);
+
+      const second = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+        inputResponses: {
+          store_secret: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(second)).toBe(true);
+      if (isInputRequiredResult(second)) {
+        expect(second.inputRequests?.store_secret).toMatchObject({
+          method: 'elicitation/create',
+          params: {
+            url: `https://supabase.com/dashboard/mcp/secrets?ref=${encodeURIComponent(project.id)}&name=MY_SECRET`,
+          },
+        });
+
+        const firstState = JSON.parse(
+          Buffer.from(first.requestState!.split('.')[1]!, 'base64').toString()
+        );
+        const secondState = JSON.parse(
+          Buffer.from(second.requestState!.split('.')[1]!, 'base64').toString()
+        );
+        expect(typeof firstState.p.issued_at).toBe('number');
+        expect(secondState.p.issued_at).toBe(firstState.p.issued_at);
+      }
+    });
+
+    test('accept with secret updated at exact issue time (second boundary)', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const first = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+      })) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(first)).toBe(true);
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected InputRequiredResult');
+      }
+
+      // Decode issued_at and set mock secret's updated_at to the same value truncated to seconds
+      const firstState = JSON.parse(
+        Buffer.from(first.requestState!.split('.')[1]!, 'base64').toString()
+      );
+      expect(firstState.p.issued_at % 1000).toBe(0);
+      const issuedAtTruncated = new Date(
+        Math.floor(firstState.p.issued_at / 1000) * 1000
+      );
+      mockSecrets.set(project.id, [
+        {
+          name: 'MY_SECRET',
+          value: 'secret-value',
+          updated_at: issuedAtTruncated.toISOString(),
+        },
+      ]);
+
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+        inputResponses: {
+          store_secret: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult;
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toMatchObject([
+        {
+          type: 'text',
+          text: `The dashboard reports an update to MY_SECRET since this request.`,
+        },
+      ]);
+      expect((result as any).structuredContent).toMatchObject({
+        name: 'MY_SECRET',
+        stored: true,
+      });
+    });
+
+    test('decline and cancel return status without stored', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      for (const action of ['decline', 'cancel'] as const) {
+        const first = (await callModernTool(client, {
+          name: 'create_edge_function_secret',
+          arguments: { project_id: project.id, name: 'MY_SECRET' },
+        })) as CallToolResult | InputRequiredResult;
+
+        expect(isInputRequiredResult(first)).toBe(true);
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected InputRequiredResult');
+        }
+
+        const second = (await callModernTool(client, {
+          name: 'create_edge_function_secret',
+          arguments: { project_id: project.id, name: 'MY_SECRET' },
+          inputResponses: {
+            store_secret: { action, content: {} },
+          },
+          requestState: first.requestState,
+        })) as CallToolResult;
+
+        expect((second as any).structuredContent).toEqual({
+          status: action === 'decline' ? 'declined' : 'cancelled',
+        });
+      }
+    });
+
+    test('fresh call with recent secret returns stored true without elicitation', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      // Set up a recent secret
+      const now = Date.now();
+      mockSecrets.set(project.id, [
+        {
+          name: 'MY_SECRET',
+          value: 'secret-value',
+          updated_at: new Date(now - 500_000).toISOString(),
+        },
+      ]);
+
+      const result = await client.callTool({
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+      });
+
+      expect((result as any).structuredContent?.stored).toBe(true);
+      expect(
+        (result as any).structuredContent?.updated_seconds_ago
+      ).toBeGreaterThan(0);
+      expect(
+        (result as any).structuredContent?.updated_seconds_ago
+      ).toBeLessThan(600);
+    });
+
+    test('replace true skips resume shortcut and issues elicitation', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      // Secret updated 10 s ago
+      mockSecrets.set(project.id, [
+        {
+          name: 'MY_SECRET',
+          value: 'secret-value',
+          updated_at: new Date(Date.now() - 10_000).toISOString(),
+        },
+      ]);
+
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: {
+          project_id: project.id,
+          name: 'MY_SECRET',
+          replace: true,
+        },
+      })) as CallToolResult | InputRequiredResult;
+
+      if (!isInputRequiredResult(result)) {
+        throw new Error('expected InputRequiredResult');
+      }
+      expect(result.inputRequests).toHaveProperty('store_secret');
+    });
+
+    test('rejects requestState minted by create_project', async () => {
+      // Need form+url capabilities: form for create_project, url for create_edge_function_secret
+      const platform = createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      });
+
+      await platform.init?.({
+        clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+        clientCapabilities: { elicitation: { form: {}, url: {} } },
+      });
+
+      const handler = createSupabaseMcpHandler({
+        platform,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+          secretCollection: {
+            connectUrlTemplate:
+              'https://supabase.com/dashboard/mcp/secrets?ref={ref}&name={name}',
+          },
+        },
+      });
+
+      const transport = new StreamableHTTPClientTransport(MCP_ENDPOINT, {
+        fetch: (url, init) => handler.fetch(new Request(url, init)),
+      });
+
+      const client = new Client(
+        { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+        {
+          capabilities: { elicitation: { form: {}, url: {} } } as any,
+          versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
+          inputRequired: { autoFulfill: false },
+        }
+      );
+      await client.connect(transport);
+
+      const org = await createOrganization({
+        name: 'Paid Org',
+        plan: 'pro',
+        allowed_release_channels: ['ga'],
+      });
+      const existingProject = await createProject({
+        name: 'Existing Project',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      existingProject.status = 'ACTIVE_HEALTHY';
+
+      // Get a requestState from create_project (requires a pro org with existing project)
+      const projectFirst = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          organization_id: org.id,
+          name: 'My Project',
+          region: 'us-east-1',
+        },
+      })) as CallToolResult | InputRequiredResult;
+
+      if (!isInputRequiredResult(projectFirst)) {
+        throw new Error(
+          'expected an input_required result from create_project'
+        );
+      }
+
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: existingProject.id, name: 'MY_SECRET' },
+        inputResponses: {
+          store_secret: { action: 'accept', content: {} },
+        },
+        requestState: projectFirst.requestState,
+      })) as CallToolResult;
+
+      expect(result.isError).toBe(true);
+    });
+
+    test.each([
+      { desc: 'empty', name: '' },
+      { desc: 'whitespace-only', name: '  \t\n  ' },
+    ])('rejects $desc secret name', async ({ name }) => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const result = await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name },
+      });
+
+      expect(isInputRequiredResult(result)).toBe(false);
+      if (isInputRequiredResult(result)) {
+        throw new Error('expected CallToolResult, not InputRequiredResult');
+      }
+      expect(result.isError).toBe(true);
+    });
+
+    test('replace true with insufficient permissions returns isError without URL', async () => {
+      const { client } = await setupUrlCapable();
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      // Mock a 403 response from the GET secrets endpoint
+      mockServer?.use(
+        http.get(`${API_URL}/v1/projects/${project.id}/secrets`, () => {
+          return HttpResponse.json({ message: 'Forbidden' }, { status: 403 });
+        })
+      );
+
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: {
+          project_id: project.id,
+          name: 'MY_SECRET',
+          replace: true,
+        },
+      })) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(result)).toBe(false);
+      if (isInputRequiredResult(result)) {
+        throw new Error('expected CallToolResult, not InputRequiredResult');
+      }
+      expect(result.isError).toBe(true);
+    });
+
+    test('tool absent when secretCollection not configured', async () => {
+      const platform = createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      });
+
+      await platform.init?.({
+        clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+        clientCapabilities: { elicitation: { url: {} } },
+      });
+
+      const handler = createSupabaseMcpHandler({
+        platform,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
+        // secretCollection NOT set
+      });
+
+      const transport = new StreamableHTTPClientTransport(MCP_ENDPOINT, {
+        fetch: (url, init) => handler.fetch(new Request(url, init)),
+      });
+
+      const client = new Client(
+        { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+        {
+          capabilities: { elicitation: { url: {} } },
+          versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
+        }
+      );
+
+      await client.connect(transport);
+
+      const { tools } = await client.listTools();
+      const secretTool = tools.find(
+        (tool) => tool.name === 'create_edge_function_secret'
+      );
+
+      expect(secretTool).toBeUndefined();
+    });
+
+    test('constructing server with template missing {name} placeholder throws', async () => {
+      const platform = createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      });
+
+      expect(() =>
+        createSupabaseMcpServer({
+          platform,
+          elicitation: {
+            requestState: ELICITATION_REQUEST_STATE,
+            confirmation: COST_CONFIRMATION,
+            secretCollection: {
+              connectUrlTemplate:
+                'https://supabase.com/dashboard/mcp/secrets?ref={ref}',
+            },
+          },
+        })
+      ).toThrow();
+    });
+
+    test('URL-only client keeps the legacy cost-confirmation lane for create_project', async () => {
+      // A client that only declares `elicitation: { url: {} }` (no `form`
+      // mode) is URL-capable but not form-capable. Its create_project stays
+      // on the legacy get_cost -> confirm_cost -> confirm_cost_id flow even
+      // though create_edge_function_secret elicits over the URL lane, and
+      // both lanes must be exposed side by side from the same server.
+      const { client } = await setupUrlCapable();
+
+      const { tools } = await client.listTools();
+      const names = tools.map((tool) => tool.name);
+
+      expect(names).toContain('get_cost');
+      expect(names).toContain('confirm_cost');
+      expect(names).toContain('create_edge_function_secret');
+
+      const org = await createOrganization({
+        name: 'URL-only client organization',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const args = {
+        name: 'Legacy-confirmed project',
+        region: 'us-east-1',
+        organization_id: org.id,
+      };
+      const unconfirmed = await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+      });
+      expect(isInputRequiredResult(unconfirmed)).toBe(false);
+      expect(unconfirmed).toMatchObject({ isError: true });
+
+      const confirmation = await client.callTool({
+        name: 'confirm_cost',
+        arguments: { type: 'project', recurrence: 'monthly', amount: 0 },
+      });
+      expect(confirmation.isError).not.toBe(true);
+      const [confirmationContent] = confirmation.content;
+      if (confirmationContent?.type !== 'text') {
+        throw new Error('expected text content');
+      }
+      const { confirmation_id } = JSON.parse(confirmationContent.text);
+      const created = await client.callTool({
+        name: 'create_project',
+        arguments: {
+          ...args,
+          confirm_cost_id: confirmation_id,
+        },
+      });
+      expect(created.isError).not.toBe(true);
+      const [projectContent] = created.content;
+      if (projectContent?.type !== 'text') {
+        throw new Error('expected text content');
+      }
+      expect(JSON.parse(projectContent.text)).toMatchObject(args);
+    });
+
+    test('URL-only configuration with no confirmation tools still elicits for the secret tool', async () => {
+      // `elicitation.confirmation` is entirely absent here: create_project,
+      // create_branch, execute_sql and apply_migration never touch the
+      // confirmation lane, yet secretCollection alone must still stand up
+      // the codec so create_edge_function_secret can elicit over URL.
+      const { client } = await setupUrlCapable({
+        elicitation: { requestState: ELICITATION_REQUEST_STATE },
+      });
+
+      const { tools } = await client.listTools();
+      const names = tools.map((tool) => tool.name);
+
+      expect(names).toContain('create_edge_function_secret');
+      expect(names).toContain('get_cost');
+      expect(names).toContain('confirm_cost');
+
+      const createProjectTool = tools.find(
+        (tool) => tool.name === 'create_project'
+      );
+      expect(createProjectTool?.inputSchema.required).toContain(
+        'confirm_cost_id'
+      );
+
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      const result = (await callModernTool(client, {
+        name: 'create_edge_function_secret',
+        arguments: { project_id: project.id, name: 'MY_SECRET' },
+      })) as CallToolResult | InputRequiredResult;
+
+      expect(isInputRequiredResult(result)).toBe(true);
     });
   });
 
@@ -5618,8 +6357,10 @@ describe('tools', () => {
     // query_logs).
     const registryToolNames = Object.keys(supabaseMcpToolSchemas);
     const serverToolNames = tools.map((t) => t.name);
+    // Registered only when secretCollection is configured; get_cost/confirm_cost hidden from form-capable clients
     const conditionallyHiddenToolNames = new Set([
       'get_logs',
+      'create_edge_function_secret',
       'get_cost',
       'confirm_cost',
     ]);

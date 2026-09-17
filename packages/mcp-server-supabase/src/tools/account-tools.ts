@@ -11,7 +11,7 @@ import {
   checkConfirmationState,
   isFormCapable,
   projectCostStateSchema,
-  type ConfirmationState,
+  type ElicitationState,
 } from './confirmation.js';
 import type { AccountOperations } from '../platform/types.js';
 import { organizationSchema, projectSchema } from '../platform/types.js';
@@ -29,7 +29,7 @@ type AccountToolsOptions = {
    * unchanged.
    */
   confirmation?: {
-    codec: RequestStateCodec<ConfirmationState>;
+    codec: RequestStateCodec<ElicitationState>;
   };
 };
 

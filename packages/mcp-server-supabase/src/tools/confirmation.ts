@@ -89,6 +89,21 @@ export type CostConfirmationState = ProjectCostState | BranchCostState;
  */
 export type ConfirmationState = CostConfirmationState | DestructiveSqlState;
 
+/**
+ * Signed state for URL-mode secret collection, bound to the project and name.
+ * The original `issued_at` timestamp is preserved across reissues.
+ */
+export type SecretCollectionState = {
+  tool: 'create_edge_function_secret';
+  project_id: string;
+  name: string;
+  /** Epoch ms, floored to the second; the platform reports updated_at at second precision. */
+  issued_at: number;
+};
+
+/** Shared codec payload; each flow validates its own narrower state. */
+export type ElicitationState = ConfirmationState | SecretCollectionState;
+
 export const executeSqlStateSchema = z.object({
   tool: z.literal('execute_sql'),
   project_id: z.string(),
@@ -257,4 +272,26 @@ export function isFormCapable(ctx: ServerContext): boolean {
 
   const modes = Object.keys(elicitation);
   return modes.length === 0 || modes.includes('form');
+}
+
+/**
+ * Whether the current request declares per-request url-elicitation
+ * capability (protocol revision 2026-07-28): an `elicitation` declaration
+ * with a `url` mode.
+ */
+export function isUrlCapable(ctx: ServerContext): boolean {
+  const envelope = ctx.mcpReq.envelope as Record<string, unknown> | undefined;
+  if (typeof envelope?.[PROTOCOL_VERSION_META_KEY] !== 'string') {
+    return false;
+  }
+
+  const capabilities = envelope[CLIENT_CAPABILITIES_META_KEY] as
+    | { elicitation?: Record<string, unknown> }
+    | undefined;
+  const elicitation = capabilities?.elicitation;
+  if (elicitation === undefined) {
+    return false;
+  }
+
+  return 'url' in elicitation;
 }
