@@ -2913,6 +2913,46 @@ describe('tools', () => {
     ).rejects.toThrow(/too_small|at least 1 character/);
   });
 
+  test('legacy platforms advertise and run only supported advisor types', async () => {
+    const platform: SupabasePlatform = {
+      debugging: {
+        async getLogs() {
+          return [];
+        },
+        async getSecurityAdvisors() {
+          return { lints: [] };
+        },
+        async getPerformanceAdvisors() {
+          return { lints: [] };
+        },
+      },
+    };
+    const { client, callTool } = await setup({
+      platform,
+      features: ['debugging'],
+    });
+    const { tools } = await client.listTools();
+    const advisors = tools.find((tool) => tool.name === 'get_advisors');
+
+    expect(advisors?.inputSchema.properties?.type).toMatchObject({
+      enum: ['security', 'performance'],
+    });
+    for (const type of ['security', 'performance']) {
+      await expect(
+        callTool({
+          name: 'get_advisors',
+          arguments: { project_id: 'test-project', type },
+        })
+      ).resolves.toEqual({ result: { lints: [] } });
+    }
+    await expect(
+      callTool({
+        name: 'get_advisors',
+        arguments: { project_id: 'test-project', type: 'health' },
+      })
+    ).rejects.toThrow();
+  });
+
   test('get security advisors', async () => {
     const { callTool } = await setup();
 
@@ -2985,6 +3025,9 @@ describe('tools', () => {
               { name: 'unused_index', level: 'INFO', detail: 'index b' },
             ],
           };
+        },
+        async getHealthAdvisors() {
+          return { lints: [] };
         },
       },
     };
@@ -3078,6 +3121,51 @@ describe('tools', () => {
     });
 
     expect(result).toEqual({ lints: [] });
+  });
+
+  test('get health advisors returns error-rate findings and hides unavailable statuses', async () => {
+    const { callTool } = await setup();
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    const { result } = await callTool({
+      name: 'get_advisors',
+      arguments: {
+        project_id: project.id,
+        type: 'health',
+      },
+    });
+
+    expect(result).toEqual({
+      lints: [
+        {
+          name: 'log_data_api_error_rate_high',
+          title: 'Data API error rate is high',
+          level: 'ERROR',
+          facing: 'EXTERNAL',
+          categories: ['HEALTH'],
+          description: 'The Data API is returning elevated errors.',
+          remediation: 'https://supabase.com/docs/guides/platform/health',
+          count: 1,
+          findings: [
+            {
+              detail: 'The Data API error rate exceeded the threshold.',
+            },
+          ],
+        },
+      ],
+    });
   });
 
   test('get logs for invalid service type', async () => {
@@ -6550,6 +6638,9 @@ describe('feature groups', () => {
         getPerformanceAdvisors() {
           throw new Error('Not implemented');
         },
+        getHealthAdvisors() {
+          throw new Error('Not implemented');
+        },
       },
     };
 
@@ -6588,6 +6679,9 @@ describe('feature groups', () => {
         getPerformanceAdvisors() {
           throw new Error('Not implemented');
         },
+        getHealthAdvisors() {
+          throw new Error('Not implemented');
+        },
       },
     };
 
@@ -6621,6 +6715,9 @@ describe('feature groups', () => {
           throw new Error('Not implemented');
         },
         getPerformanceAdvisors() {
+          throw new Error('Not implemented');
+        },
+        getHealthAdvisors() {
           throw new Error('Not implemented');
         },
       },
