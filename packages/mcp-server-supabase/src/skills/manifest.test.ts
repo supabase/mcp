@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { MAX_SKILL_TOTAL_BYTES } from '@modelcontextprotocol/core/ext/skills';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchSkillsManifest } from './manifest.js';
 import { buildTarball, createFakeFetch, sha256 } from './test-helpers.js';
 
@@ -134,5 +135,71 @@ describe('fetchSkillsManifest', () => {
     await expect(fetchSkillsManifest({ fetchImpl })).rejects.toThrow(
       /failed to fetch/
     );
+  });
+
+  describe('a skill exceeding the practical per-skill size limit', () => {
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+        // silence expected warning output during this test
+      });
+    });
+
+    afterEach(() => {
+      consoleErrorSpy.mockRestore();
+    });
+
+    // SEP-2640 says servers SHOULD NOT exceed this size, but explicitly does
+    // not forbid it: hosts MUST support skills up to the limit and MAY
+    // support larger ones. So an oversized skill must be skipped with a
+    // warning, never thrown as a hard error, and must not prevent other,
+    // properly-sized skills from being served.
+    it('is skipped with a logged warning, without rejecting the whole manifest', async () => {
+      const oversizedTarball = await buildTarball({
+        'SKILL.md': '---\nname: huge\n---\n\nHi',
+        'references/big.bin': 'x'.repeat(MAX_SKILL_TOTAL_BYTES + 1),
+      });
+      const oversizedDigest = sha256(oversizedTarball);
+
+      const okTarball = await buildTarball({
+        'SKILL.md': '---\nname: alpha\n---\n\nHello',
+      });
+      const okDigest = sha256(okTarball);
+
+      const fetchImpl = createFakeFetch({
+        [INDEX_URL]: () =>
+          jsonResponse({
+            skills: [
+              {
+                name: 'huge',
+                type: 'archive',
+                description: 'The huge skill.',
+                url: 'https://example.com/huge.tar.gz',
+                digest: oversizedDigest,
+              },
+              {
+                name: 'alpha',
+                type: 'archive',
+                description: 'The alpha skill.',
+                url: 'https://example.com/alpha.tar.gz',
+                digest: okDigest,
+              },
+            ],
+          }),
+        'https://example.com/huge.tar.gz': () =>
+          binaryResponse(oversizedTarball),
+        'https://example.com/alpha.tar.gz': () => binaryResponse(okTarball),
+      });
+
+      const manifest = await fetchSkillsManifest({ fetchImpl });
+
+      expect(manifest.skills.map((skill) => skill.frontmatter.name)).toEqual([
+        'alpha',
+      ]);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('skipping skill "huge"')
+      );
+    });
   });
 });

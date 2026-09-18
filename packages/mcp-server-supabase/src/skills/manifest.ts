@@ -177,7 +177,7 @@ function unpackTarball(buffer: Buffer): Promise<Map<string, Uint8Array>> {
 function buildSkill(
   entry: SkillIndexEntry,
   unpacked: Map<string, Uint8Array>
-): SupabaseSkill {
+): SupabaseSkill | undefined {
   const files: SkillFile[] = [];
   let totalBytes = 0;
 
@@ -193,10 +193,19 @@ function buildSkill(
     });
   }
 
+  // SEP-2640 says servers SHOULD NOT exceed 512 files or 16 MiB per skill,
+  // but does not forbid larger ones: hosts MUST support skills up to these
+  // limits and MAY support larger ones. So this isn't a wire-protocol error —
+  // nothing in the spec says a host must reject an oversized skill. Skipping
+  // (rather than serving) one this large is a local, practical safeguard
+  // against unbounded memory use from unpacking a whole tarball in memory,
+  // not a spec-mandated rejection. A future revision could stream/paginate
+  // large skills instead of skipping them outright.
   if (totalBytes > MAX_SKILL_TOTAL_BYTES) {
-    throw new Error(
-      `skill "${entry.name}" is ${totalBytes} bytes, exceeding the SEP-2640 limit of ${MAX_SKILL_TOTAL_BYTES}`
+    console.error(
+      `[skills] skipping skill "${entry.name}": ${totalBytes} bytes exceeds the ${MAX_SKILL_TOTAL_BYTES}-byte practical limit this server enforces (SEP-2640 permits larger skills; hosts are not required to reject them)`
     );
+    return undefined;
   }
 
   const manifestUri = `${SKILL_URI_SCHEME}//${entry.name}/${SKILL_MANIFEST_FILENAME}`;
@@ -238,12 +247,18 @@ export async function fetchSkillsManifest(
     await fetchJson(indexUrl, fetchImpl, userAgent)
   );
 
-  const skills = await Promise.all(
+  const built = await Promise.all(
     index.skills.map(async (entry) => {
       const tarball = await downloadTarball(entry, fetchImpl, userAgent);
       const unpacked = await unpackTarball(tarball);
       return buildSkill(entry, unpacked);
     })
+  );
+
+  // buildSkill() returns undefined for a skill it skips (see the comment
+  // there); filter those out rather than serving a hole in the manifest.
+  const skills = built.filter(
+    (skill): skill is SupabaseSkill => skill !== undefined
   );
 
   return { skills, fetchedAt: Date.now() };
