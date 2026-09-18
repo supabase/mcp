@@ -24,6 +24,12 @@ import {
   getSecretTools,
 } from './tools/secret-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
+import {
+  createSkillsProvider,
+  getSkillsResources,
+  installSupabaseSkills,
+  type SkillsProviderOptions,
+} from './skills/index.js';
 import { writeToolSet } from './tools/tool-schemas.js';
 import type { ElicitationToolName, FeatureGroup } from './types.js';
 import { parseFeatureGroups } from './util.js';
@@ -104,6 +110,19 @@ export type SupabaseMcpServerOptions = {
       connectUrlTemplate: string;
     };
   };
+
+  /**
+   * Serves Supabase's published agent skills
+   * (`supabase.com/.well-known/agent-skills`) over the MCP Skills extension
+   * (SEP-2640): `skills/list`, `skills/get`, and their files via
+   * `resources/read`. Off by default — pass `{}` to enable with defaults, or
+   * override `indexUrl` / `ttlMs` / `fetchImpl` for testing.
+   *
+   * This currently depends on a preview build of the typescript-sdk Skills
+   * extension (modelcontextprotocol/typescript-sdk#2818) ahead of its stable
+   * release; leave disabled for production deployments until that ships.
+   */
+  skills?: SkillsProviderOptions;
 };
 
 const DEFAULT_FEATURES: FeatureGroup[] = [
@@ -148,6 +167,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
     onToolCall,
     elicitation,
+    skills,
   } = options;
 
   if (elicitation?.secretCollection) {
@@ -158,6 +178,13 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
   const contentApiClientPromise = createContentApiClient(contentApiUrl, {
     'User-Agent': `supabase-mcp/${version}`,
   });
+
+  const skillsProvider = skills
+    ? createSkillsProvider({
+        userAgent: `supabase-mcp/${version}`,
+        ...skills,
+      })
+    : undefined;
 
   // Filter the default features based on the platform's capabilities
   const availableDefaultFeatures = DEFAULT_FEATURES.filter(
@@ -190,6 +217,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     title: 'Supabase',
     version,
     instructions,
+    resources: skillsProvider && getSkillsResources(skillsProvider),
     async onInitialize(info) {
       // Note: in stateless HTTP mode, `onInitialize` will not always be called
       // so we cannot rely on it for initialization. It's still useful for telemetry.
@@ -367,6 +395,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       return tools;
     },
   });
+
+  if (skillsProvider) {
+    installSupabaseSkills(server, skillsProvider);
+  }
 
   return server;
 }
