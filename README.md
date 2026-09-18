@@ -160,6 +160,8 @@ The PostgREST MCP server allows you to connect your own users to your app via RE
 
 See [CONTRIBUTING](./CONTRIBUTING.md) for details on how to contribute to this project.
 
+See [Observability](docs/observability.md) for the observer API.
+
 ## License
 
 This project is licensed under Apache 2.0. See the [LICENSE](./LICENSE) file for details.
