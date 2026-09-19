@@ -3226,6 +3226,103 @@ describe('tools', () => {
     });
   });
 
+  test('list edge functions with non-URL paths', async () => {
+    const { callTool } = await setup();
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    const edgeFunction = await project.deployEdgeFunction(
+      {
+        name: 'hello-world',
+        entrypoint_path: 'index.ts',
+        import_map_path: 'deno.json',
+      },
+      [
+        new File(['Deno.serve(() => new Response("ok"))'], 'index.ts', {
+          type: 'application/typescript',
+        }),
+        new File(['{}'], 'deno.json', { type: 'application/json' }),
+      ]
+    );
+    edgeFunction.entrypoint_path = 'source/index.ts';
+    edgeFunction.import_map_path = 'deno.json';
+
+    const result = await callTool({
+      name: 'list_edge_functions',
+      arguments: {
+        project_id: project.id,
+      },
+    });
+
+    expect(result.functions).toEqual([
+      expect.objectContaining({
+        slug: edgeFunction.slug,
+        entrypoint_path: 'index.ts',
+        import_map_path: 'deno.json',
+      }),
+    ]);
+  });
+
+  test('get edge function with non-URL paths', async () => {
+    const { callTool } = await setup();
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    const edgeFunction = await project.deployEdgeFunction(
+      {
+        name: 'hello-world',
+        entrypoint_path: 'index.ts',
+        import_map_path: 'deno.json',
+      },
+      [
+        new File(['Deno.serve(() => new Response("ok"))'], 'index.ts', {
+          type: 'application/typescript',
+        }),
+        new File(['{}'], 'deno.json', { type: 'application/json' }),
+      ]
+    );
+    edgeFunction.entrypoint_path = 'supabase/functions/hello-world/index.ts';
+    edgeFunction.import_map_path = 'source/deno.json';
+
+    const result = await callTool({
+      name: 'get_edge_function',
+      arguments: {
+        project_id: project.id,
+        function_slug: edgeFunction.slug,
+      },
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        slug: edgeFunction.slug,
+        entrypoint_path: 'supabase/functions/hello-world/index.ts',
+        import_map_path: 'deno.json',
+      })
+    );
+  });
+
   test('deploy new edge function', async () => {
     const { callTool } = await setup();
 
