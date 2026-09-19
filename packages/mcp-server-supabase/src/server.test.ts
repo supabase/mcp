@@ -9,6 +9,7 @@ import type {
   ClientCapabilities,
   InputRequiredResult,
 } from '@modelcontextprotocol/client';
+import type { JSONRPCMessage } from '@modelcontextprotocol/server';
 import { StreamTransport } from '@supabase/mcp-utils';
 import { codeBlock, stripIndent } from 'common-tags';
 import gqlmin from 'gqlmin';
@@ -32,6 +33,7 @@ import {
   mockSecrets,
   setupMockApis,
 } from '../test/mocks.js';
+import { invalidateContentApiSchemaCache } from './content-api/index.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabasePlatform } from './platform/types.js';
 import * as pricing from './pricing.js';
@@ -57,6 +59,8 @@ let mockServer: SetupServer | undefined;
 
 beforeEach(() => {
   mockServer = setupMockApis();
+  // The schema cache is process-wide, so it would otherwise leak across tests.
+  invalidateContentApiSchemaCache();
 });
 
 afterEach(() => {
@@ -7003,9 +7007,63 @@ describe('docs tools', () => {
     });
     expect(mockContentApiSchemaLoadCount.value).toBe(1);
 
-    // Additional "tools/list" requests fetch the schema again
+    // Additional "tools/list" requests within the TTL are served from the cache
     await client.listTools();
-    expect(mockContentApiSchemaLoadCount.value).toBe(2);
+    expect(mockContentApiSchemaLoadCount.value).toBe(1);
+  });
+
+  test('schema is fetched once across independently created servers', async () => {
+    expect(mockContentApiSchemaLoadCount.value).toBe(0);
+
+    for (let i = 0; i < 3; i++) {
+      const { client } = await setup();
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name)).toContain('search_docs');
+    }
+
+    expect(mockContentApiSchemaLoadCount.value).toBe(1);
+  });
+
+  test('2025-11-25 tools/list responses carry no cache hints', async () => {
+    const clientTransport = new StreamTransport();
+    const serverTransport = new StreamTransport();
+    const sent: JSONRPCMessage[] = [];
+
+    clientTransport.readable.pipeTo(serverTransport.writable);
+    serverTransport.readable
+      .pipeThrough(
+        new TransformStream<JSONRPCMessage, JSONRPCMessage>({
+          transform(message, controller) {
+            sent.push(message);
+            controller.enqueue(message);
+          },
+        })
+      )
+      .pipeTo(clientTransport.writable);
+
+    const client = new Client(
+      { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      { capabilities: {}, versionNegotiation: { mode: 'legacy' } }
+    );
+    const server = createSupabaseMcpServer({
+      platform: createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      }),
+    });
+
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    await client.listTools();
+
+    const response = sent.find(
+      (message) => 'result' in message && 'tools' in (message.result ?? {})
+    );
+    if (!response || !('result' in response)) {
+      throw new Error('tools/list response not found');
+    }
+    expect(response.result).not.toHaveProperty('ttlMs');
+    expect(response.result).not.toHaveProperty('cacheScope');
   });
 });
 
