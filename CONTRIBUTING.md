@@ -50,10 +50,74 @@ Optionally, configure `--api-url` to point at a different Supabase instance (def
 
 ## Testing
 
+Run the commands below from the repository root. Outside CI, the Supabase package's `vitest.setup.ts` calls `statSync` on `packages/mcp-server-supabase/.env.local` before loading it. Create that file if it is missing; an empty file is sufficient for mocked unit tests. Do not set `CI=1` to bypass this prerequisite.
+
 ```bash
 pnpm test              # unit and integration suites for all three packages
 pnpm test:coverage     # mcp-server-supabase, with coverage
 ```
+
+For the Supabase package's unit tests:
+
+```bash
+pnpm --filter @supabase/mcp-server-supabase test:unit --run
+pnpm --filter @supabase/mcp-server-supabase test:unit --run src/server.database.test.ts
+pnpm --filter @supabase/mcp-server-supabase test:unit --run src/server.database.test.ts -t "composite FK"
+pnpm --filter @supabase/mcp-server-supabase test:unit --run src/server
+```
+
+These select all unit tests, the database suite, its composite-FK cases, and all six server suites, respectively. Full test and coverage runs also include integration/e2e tests: the stdio integration test needs a fresh package build, and e2e tests make real Anthropic requests using `ANTHROPIC_API_KEY`. An empty `.env.local` does not satisfy those requirements. Use existing authorized credentials, never commit them, and report missing prerequisites as blocked rather than a passing check.
+
+### Where tests belong
+
+Start in the existing test file closest to the behavior. Keep pure-helper tests colocated with their implementation; do not automatically add a file for each tool or case. For MCP behavior, use these suites under `packages/mcp-server-supabase/`:
+
+| File | Responsibility |
+| --- | --- |
+| `src/server.test.ts` | Initialization, tool surface/schema contracts, feature groups, project scoping, docs and registry regressions |
+| `src/server.account.test.ts` | Organizations, pricing, ordinary project creation/lifecycle, URLs and API keys |
+| `src/server.database.test.ts` | SQL, migrations, tables/FKs/extensions and database permissions |
+| `src/server.branching.test.ts` | Ordinary branch creation/lifecycle, listing, merge, reset and rebase |
+| `src/server.project-services.test.ts` | Edge functions, storage, logs and advisors |
+| `src/server.cost-confirmation.test.ts` | Project and branch cost confirmation, legacy fallback, modern elicitation, approval, token, retry and tamper flows |
+
+Ordinary creation belongs with its domain; approval behavior belongs in cost confirmation. HTTP transport behavior belongs in `src/transports/http.test.ts`. Keep integration/e2e tests in their existing locations and projects.
+
+Share repeated stream setup through `test/server-harness.ts`, but keep requests, SQL and assertions explicit. Each suite resets the harness once in `beforeEach` and awaits `close` in `afterEach`, including when setup fails. `setup` connects a client without resetting state, so fixtures created before setup survive and multiple connections within one test share state. Do not use `test.concurrent` with the shared mock maps and MSW server.
+
+For ordinary healthy projects, `createProjectFixture` returns a free organization and its healthy project. Use the original factories for tests of pricing, creation/status transitions or approval behavior rather than hiding those inputs in a fixture.
+
+This self-contained example uses the imports for a server suite under `src/`; when adding a case to an existing suite, reuse its harness and hooks:
+
+```ts
+import { afterEach, beforeEach, expect, test } from 'vitest';
+import { createProjectFixture } from '../test/mocks.js';
+import { createServerHarness } from '../test/server-harness.js';
+
+const harness = createServerHarness();
+
+beforeEach(() => {
+  harness.reset();
+});
+
+afterEach(async () => {
+  await harness.close();
+});
+
+test('returns the project URL', async () => {
+  const { project } = await createProjectFixture();
+  const { callTool } = await harness.setup();
+
+  const result = await callTool({
+    name: 'get_project_url',
+    arguments: { project_id: project.id },
+  });
+
+  expect(result).toEqual({ url: `https://${project.id}.supabase.co` });
+});
+```
+
+`callTool` accepts registered tool names and parses the first text result. `setup` also returns the raw `client`: use `client.callTool` for unknown or malformed calls and other raw protocol assertions. Let the harness own connection cleanup; do not close that client separately.
 
 ### Packaging gates
 
