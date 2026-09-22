@@ -105,7 +105,7 @@ pnpm --filter @supabase/mcp-server-supabase test:unit --run src/server.database.
 pnpm --filter @supabase/mcp-server-supabase test:unit --run src/server
 ```
 
-These select all unit tests, the database suite, its composite-FK cases, and all six server suites, respectively. Full test and coverage runs also include integration/e2e tests: the stdio integration test needs a fresh package build, and e2e tests make real Anthropic requests using `ANTHROPIC_API_KEY`. An empty `.env.local` does not satisfy those requirements. Use existing authorized credentials, never commit them, and report missing prerequisites as blocked rather than a passing check.
+These select all unit tests, the database suite, its composite-FK cases, and all eight server suites, respectively. Full test and coverage runs also include integration/e2e tests: the stdio integration test needs a fresh package build, and e2e tests make real Anthropic requests using `ANTHROPIC_API_KEY`. An empty `.env.local` does not satisfy those requirements. Use existing authorized credentials, never commit them, and report missing prerequisites as blocked rather than a passing check.
 
 ### Where tests belong
 
@@ -114,13 +114,15 @@ Start in the existing test file closest to the behavior. Keep pure-helper tests 
 | File | Responsibility |
 | --- | --- |
 | `src/server.test.ts` | Initialization, tool surface/schema contracts, feature groups, project scoping, docs and registry regressions |
-| `src/server.account.test.ts` | Organizations, pricing, ordinary project creation/lifecycle, URLs and API keys |
+| `src/server.account.test.ts` | Organizations, pricing, project creation/lifecycle and project cost confirmation |
 | `src/server.database.test.ts` | SQL, migrations, tables/FKs/extensions, database permissions and destructive SQL confirmation for `execute_sql`/`apply_migration` |
-| `src/server.branching.test.ts` | Ordinary branch creation/lifecycle, listing, merge, reset and rebase |
-| `src/server.project-services.test.ts` | Edge functions, URL-mode secret collection, storage, logs and advisors |
-| `src/server.cost-confirmation.test.ts` | Project and branch cost confirmation, legacy fallback, modern elicitation, approval, token, retry and tamper flows |
+| `src/server.debugging.test.ts` | Logs, query windows and advisors |
+| `src/server.development.test.ts` | Project URLs and API keys |
+| `src/server.functions.test.ts` | Edge functions and URL-mode secret collection |
+| `src/server.branching.test.ts` | Branch creation/lifecycle, listing, merge, reset, rebase and branch cost confirmation |
+| `src/server.storage.test.ts` | Storage buckets and configuration |
 
-Ordinary creation belongs with its domain; project/branch cost approval belongs in cost confirmation. HTTP transport behavior belongs in `src/transports/http.test.ts`. Keep integration/e2e tests in their existing locations and projects.
+Keep project and branch cost-confirmation flows with their respective feature groups, including legacy fallback, modern elicitation, approval, token, retry and tamper cases. General server contracts, feature-surface checks and docs stay in core. HTTP transport behavior belongs in `src/transports/http.test.ts`. Keep integration/e2e tests in their existing locations and projects.
 
 Share repeated stream setup through `test/server-harness.ts`, but keep requests, SQL and assertions explicit. Each suite resets the harness once in `beforeEach` and awaits `close` in `afterEach`, including when setup fails. `setup` connects a client without resetting state, so fixtures created before setup survive and multiple connections within one test share state. Do not use `test.concurrent` with the shared mock maps and MSW server.
 
