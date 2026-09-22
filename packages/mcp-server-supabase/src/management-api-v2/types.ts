@@ -99,6 +99,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/projects/{ref}/notebooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List notebooks of a project
+         * @description Returns a cursor-paginated list of the project notebooks. Notebook bodies are omitted — read a single notebook to get its cells.
+         */
+        get: operations["v2-list-notebooks"];
+        put?: never;
+        /**
+         * Create a notebook
+         * @description Creates a notebook shared with everyone who has access to the project. Cell ids are assigned by the server and returned in the response.
+         */
+        post: operations["v2-create-notebook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/notebooks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a notebook */
+        get: operations["v2-get-notebook"];
+        put?: never;
+        post?: never;
+        /** Delete a notebook */
+        delete: operations["v2-delete-notebook"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a notebook
+         * @description Updates the attributes provided and leaves the rest untouched. Sending `content` replaces the whole notebook body.
+         */
+        patch: operations["v2-update-notebook"];
+        trace?: never;
+    };
     "/v2/projects/{ref}/transfers/previews": {
         parameters: {
             query?: never;
@@ -1338,6 +1384,370 @@ export interface components {
                 };
             };
         };
+        V2ListNotebooksResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "notebook";
+                id: string;
+                attributes: {
+                    name: string;
+                    description: string | null;
+                    favorite: boolean;
+                    inserted_at: string;
+                    updated_at: string;
+                    /** @description User who created the notebook. */
+                    owner: {
+                        id: number;
+                        username: string;
+                    } | null;
+                    /** @description User who last wrote to the notebook. */
+                    updated_by: {
+                        id: number;
+                        username: string;
+                    } | null;
+                };
+            }[];
+            links: {
+                /**
+                 * @description URL path to the first page if available.
+                 * @example /v2/projects/{ref}/notebooks?page[size]=10
+                 */
+                first?: string | null;
+                /**
+                 * @description URL path to the previous page.
+                 * @example /v2/projects/{ref}/notebooks?page[size]=10&page[before]=019adf7d-4513-74c5-bb9a-f1bc0f7a95d7
+                 */
+                prev: string | null;
+                /**
+                 * @description URL path to the next page.
+                 * @example /v2/projects/{ref}/notebooks?page[size]=10&page[after]=019adf7d-4513-7062-b292-78b86cc470a4
+                 */
+                next: string | null;
+                /**
+                 * @description URL path to the last page if available.
+                 * @example /v2/projects/{ref}/notebooks?page[size]=10&page[after]=019adf7d-4513-71ba-b264-21900edb4295
+                 */
+                last?: string | null;
+            };
+        };
+        V2NotebookResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "notebook";
+                id: string;
+                attributes: {
+                    name: string;
+                    description: string | null;
+                    favorite: boolean;
+                    inserted_at: string;
+                    updated_at: string;
+                    /** @description User who created the notebook. */
+                    owner: {
+                        id: number;
+                        username: string;
+                    } | null;
+                    /** @description User who last wrote to the notebook. */
+                    updated_by: {
+                        id: number;
+                        username: string;
+                    } | null;
+                    content: {
+                        schema_version: number;
+                        cells: ({
+                            id: string;
+                            /** @enum {string} */
+                            type: "markdown";
+                            text: string;
+                        } | {
+                            id: string;
+                            /** @enum {string} */
+                            type: "database";
+                            /** @description SQL run against the project database. */
+                            sql: string;
+                            /** @default 100 */
+                            row_limit: number;
+                            /** @description Read replica to run against. Omit to use the primary database. */
+                            database_identifier?: string;
+                            title?: string;
+                            /** @enum {string} */
+                            view?: "table" | "chart";
+                            /** @description Chart configuration, retained even while `view` is `table`. */
+                            chart?: {
+                                /** @enum {string} */
+                                type: "bar" | "line";
+                                /** @description Result column used for the x axis. */
+                                x_column: string;
+                                y_series: {
+                                    /** @description Result column plotted as a series. */
+                                    column: string;
+                                }[];
+                                /** @enum {string} */
+                                scale: "linear" | "log";
+                                cumulative: boolean;
+                                show_labels: boolean;
+                            };
+                        } | {
+                            id: string;
+                            /** @enum {string} */
+                            type: "log";
+                            /** @description SQL run against the project logs. */
+                            sql: string;
+                            time_range: {
+                                /** @enum {string} */
+                                type: "absolute";
+                                /** @description ISO 8601 start of the range. */
+                                start: string;
+                                /** @description ISO 8601 end of the range. */
+                                end: string;
+                            } | {
+                                /** @enum {string} */
+                                type: "relative";
+                                /** @enum {string} */
+                                unit: "minute" | "hour" | "day" | "week" | "month" | "year";
+                                amount: number;
+                            };
+                            title?: string;
+                            /** @enum {string} */
+                            view?: "table" | "chart";
+                            /** @description Chart configuration, retained even while `view` is `table`. */
+                            chart?: {
+                                /** @enum {string} */
+                                type: "bar" | "line";
+                                /** @description Result column used for the x axis. */
+                                x_column: string;
+                                y_series: {
+                                    /** @description Result column plotted as a series. */
+                                    column: string;
+                                }[];
+                                /** @enum {string} */
+                                scale: "linear" | "log";
+                                cumulative: boolean;
+                                show_labels: boolean;
+                            };
+                        })[];
+                    };
+                };
+            };
+        };
+        V2CreateNotebookRequest: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "notebook";
+                attributes: {
+                    name: string;
+                    description?: string;
+                    favorite?: boolean;
+                    content: {
+                        cells: (({
+                            id?: string;
+                            /** @enum {string} */
+                            type: "markdown";
+                            text: string;
+                        } & {
+                            [key: string]: unknown;
+                        }) | ({
+                            id?: string;
+                            /** @enum {string} */
+                            type: "database";
+                            /** @description SQL run against the project database. */
+                            sql: string;
+                            /** @default 100 */
+                            row_limit: number;
+                            /** @description Read replica to run against. Omit to use the primary database. */
+                            database_identifier?: string;
+                            title?: string;
+                            /** @enum {string} */
+                            view?: "table" | "chart";
+                            /** @description Chart configuration, retained even while `view` is `table`. */
+                            chart?: {
+                                /** @enum {string} */
+                                type: "bar" | "line";
+                                /** @description Result column used for the x axis. */
+                                x_column: string;
+                                y_series: ({
+                                    /** @description Result column plotted as a series. */
+                                    column: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                                /** @enum {string} */
+                                scale: "linear" | "log";
+                                cumulative: boolean;
+                                show_labels: boolean;
+                            } & {
+                                [key: string]: unknown;
+                            };
+                        } & {
+                            [key: string]: unknown;
+                        }) | ({
+                            id?: string;
+                            /** @enum {string} */
+                            type: "log";
+                            /** @description SQL run against the project logs. */
+                            sql: string;
+                            time_range: ({
+                                /** @enum {string} */
+                                type: "absolute";
+                                /** @description ISO 8601 start of the range. */
+                                start: string;
+                                /** @description ISO 8601 end of the range. */
+                                end: string;
+                            } & {
+                                [key: string]: unknown;
+                            }) | ({
+                                /** @enum {string} */
+                                type: "relative";
+                                /** @enum {string} */
+                                unit: "minute" | "hour" | "day" | "week" | "month" | "year";
+                                amount: number;
+                            } & {
+                                [key: string]: unknown;
+                            });
+                            title?: string;
+                            /** @enum {string} */
+                            view?: "table" | "chart";
+                            /** @description Chart configuration, retained even while `view` is `table`. */
+                            chart?: {
+                                /** @enum {string} */
+                                type: "bar" | "line";
+                                /** @description Result column used for the x axis. */
+                                x_column: string;
+                                y_series: ({
+                                    /** @description Result column plotted as a series. */
+                                    column: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                                /** @enum {string} */
+                                scale: "linear" | "log";
+                                cumulative: boolean;
+                                show_labels: boolean;
+                            } & {
+                                [key: string]: unknown;
+                            };
+                        } & {
+                            [key: string]: unknown;
+                        }))[];
+                    };
+                };
+            };
+        };
+        V2UpdateNotebookRequest: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "notebook";
+                attributes: {
+                    name?: string;
+                    description?: string;
+                    favorite?: boolean;
+                    /** @description Replaces the notebook body. A cell keeps its identity by echoing back its `id`; a cell sent without an `id` is added as a new one. */
+                    content?: {
+                        cells: (({
+                            id?: string;
+                            /** @enum {string} */
+                            type: "markdown";
+                            text: string;
+                        } & {
+                            [key: string]: unknown;
+                        }) | ({
+                            id?: string;
+                            /** @enum {string} */
+                            type: "database";
+                            /** @description SQL run against the project database. */
+                            sql: string;
+                            /** @default 100 */
+                            row_limit: number;
+                            /** @description Read replica to run against. Omit to use the primary database. */
+                            database_identifier?: string;
+                            title?: string;
+                            /** @enum {string} */
+                            view?: "table" | "chart";
+                            /** @description Chart configuration, retained even while `view` is `table`. */
+                            chart?: {
+                                /** @enum {string} */
+                                type: "bar" | "line";
+                                /** @description Result column used for the x axis. */
+                                x_column: string;
+                                y_series: ({
+                                    /** @description Result column plotted as a series. */
+                                    column: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                                /** @enum {string} */
+                                scale: "linear" | "log";
+                                cumulative: boolean;
+                                show_labels: boolean;
+                            } & {
+                                [key: string]: unknown;
+                            };
+                        } & {
+                            [key: string]: unknown;
+                        }) | ({
+                            id?: string;
+                            /** @enum {string} */
+                            type: "log";
+                            /** @description SQL run against the project logs. */
+                            sql: string;
+                            time_range: ({
+                                /** @enum {string} */
+                                type: "absolute";
+                                /** @description ISO 8601 start of the range. */
+                                start: string;
+                                /** @description ISO 8601 end of the range. */
+                                end: string;
+                            } & {
+                                [key: string]: unknown;
+                            }) | ({
+                                /** @enum {string} */
+                                type: "relative";
+                                /** @enum {string} */
+                                unit: "minute" | "hour" | "day" | "week" | "month" | "year";
+                                amount: number;
+                            } & {
+                                [key: string]: unknown;
+                            });
+                            title?: string;
+                            /** @enum {string} */
+                            view?: "table" | "chart";
+                            /** @description Chart configuration, retained even while `view` is `table`. */
+                            chart?: {
+                                /** @enum {string} */
+                                type: "bar" | "line";
+                                /** @description Result column used for the x axis. */
+                                x_column: string;
+                                y_series: ({
+                                    /** @description Result column plotted as a series. */
+                                    column: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                                /** @enum {string} */
+                                scale: "linear" | "log";
+                                cumulative: boolean;
+                                show_labels: boolean;
+                            } & {
+                                [key: string]: unknown;
+                            };
+                        } & {
+                            [key: string]: unknown;
+                        }))[];
+                    };
+                };
+            };
+        };
         V2TransferProjectBody: {
             data: {
                 /**
@@ -2467,6 +2877,360 @@ export interface operations {
             };
             /** @description Rate limit exceeded */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-list-notebooks": {
+        parameters: {
+            query?: {
+                page?: {
+                    size?: number;
+                    after?: string;
+                    before?: string;
+                };
+                filter?: {
+                    name?: string;
+                };
+                sort?: "name" | "-name" | "inserted_at" | "-inserted_at";
+            };
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ListNotebooksResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to retrieve project's notebooks */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-create-notebook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2CreateNotebookRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2NotebookResponse_Output"];
+                };
+            };
+            /** @description The request repeats a cell id */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to create notebook */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-get-notebook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2NotebookResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Notebook not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to retrieve notebook */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-delete-notebook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Notebook not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to delete notebook */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-update-notebook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2UpdateNotebookRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2NotebookResponse_Output"];
+                };
+            };
+            /** @description The request references a cell that does not exist on this notebook, or repeats a cell id */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Notebook not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to update notebook */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
