@@ -15,6 +15,7 @@ import {
 } from '../src/content-api/graphql.js';
 import { getDeploymentId, getPathPrefix } from '../src/edge-function.js';
 import type { components } from '../src/management-api/types.js';
+import type { NotebookCell } from '../src/platform/types.js';
 
 const { version } = packageJson;
 
@@ -949,6 +950,65 @@ export const mockManagementApi = [
       }
     }
   ),
+
+  /**
+   * List notebooks
+   */
+  http.get<{ ref: string }>(
+    `${API_URL}/v2/projects/:ref/notebooks`,
+    ({ params }) => {
+      const project = mockProjects.get(params.ref);
+      if (!project) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Project not found' } },
+          { status: 404 }
+        );
+      }
+
+      const data = Array.from(project.notebooks.values()).map((notebook) => ({
+        type: 'notebook' as const,
+        id: notebook.id,
+        attributes: notebook.attributes,
+      }));
+
+      return HttpResponse.json({
+        data,
+        links: { prev: null, next: null },
+      });
+    }
+  ),
+
+  /**
+   * Get notebook
+   */
+  http.get<{ ref: string; id: string }>(
+    `${API_URL}/v2/projects/:ref/notebooks/:id`,
+    ({ params }) => {
+      const project = mockProjects.get(params.ref);
+      if (!project) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Project not found' } },
+          { status: 404 }
+        );
+      }
+
+      const notebook = project.notebooks.get(params.id);
+      if (!notebook) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Notebook not found' } },
+          { status: 404 }
+        );
+      }
+
+      return HttpResponse.json({
+        data: {
+          type: 'notebook' as const,
+          id: notebook.id,
+          attributes: { ...notebook.attributes, content: notebook.content },
+        },
+      });
+    }
+  ),
 ];
 
 export function setupMockApis({
@@ -1188,6 +1248,50 @@ export class MockStorageBucket {
   }
 }
 
+export type MockNotebookOptions = {
+  name: string;
+  description?: string;
+  favorite?: boolean;
+  content?: {
+    schema_version: number;
+    cells: NotebookCell[];
+  };
+};
+
+export class MockNotebook {
+  id: string;
+  name: string;
+  description: string | null;
+  favorite: boolean;
+  inserted_at: Date;
+  updated_at: Date;
+  owner: { id: number; username: string } | null = null;
+  updated_by: { id: number; username: string } | null = null;
+  content: { schema_version: number; cells: NotebookCell[] };
+
+  constructor({ name, description, favorite, content }: MockNotebookOptions) {
+    this.id = crypto.randomUUID();
+    this.name = name;
+    this.description = description ?? null;
+    this.favorite = favorite ?? false;
+    this.inserted_at = new Date();
+    this.updated_at = new Date();
+    this.content = content ?? { schema_version: 1, cells: [] };
+  }
+
+  get attributes() {
+    return {
+      name: this.name,
+      description: this.description,
+      favorite: this.favorite,
+      inserted_at: this.inserted_at.toISOString(),
+      updated_at: this.updated_at.toISOString(),
+      owner: this.owner,
+      updated_by: this.updated_by,
+    };
+  }
+}
+
 export type MockProjectOptions = {
   name: string;
   region: string;
@@ -1213,6 +1317,7 @@ export class MockProject {
   migrations: Migration[] = [];
   edge_functions = new Map<string, MockEdgeFunction>();
   storage_buckets = new Map<string, MockStorageBucket>();
+  notebooks = new Map<string, MockNotebook>();
 
   #db?: PGliteInterface;
 
@@ -1320,6 +1425,12 @@ export class MockProject {
 
     this.storage_buckets.set(id, bucket);
     return bucket;
+  }
+
+  createNotebook(options: MockNotebookOptions): MockNotebook {
+    const notebook = new MockNotebook(options);
+    this.notebooks.set(notebook.id, notebook);
+    return notebook;
   }
 }
 
