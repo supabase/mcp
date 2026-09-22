@@ -20,7 +20,7 @@ jobs:
         run: pnpm --filter @supabase/mcp-server-supabase generate:management-api-types
       - name: Check for diff
         run: |
-          if ! git diff --exit-code packages/mcp-server-supabase/src/management-api/types.ts; then
+          if ! git diff --exit-code packages/mcp-server-supabase/src/management-api/types.ts packages/mcp-server-supabase/src/management-api-v2/types.ts; then
             echo "Management API types are out of date. Run 'pnpm generate:management-api-types' to update."
             exit 1
           fi

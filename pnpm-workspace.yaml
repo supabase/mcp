@@ -13,6 +13,7 @@ catalog:
   '@ai-sdk/anthropic': ^3.0.47
   '@ai-sdk/mcp': ^1.0.21
   '@modelcontextprotocol/client': ^2.0.0
+  '@modelcontextprotocol/node': ^2.0.0
   '@modelcontextprotocol/server': ^2.0.0
   ai: ^6.0.100
   zod: ^3.25.0 || ^4.0.0

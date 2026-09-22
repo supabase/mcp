@@ -5,7 +5,8 @@
     "test:coverage": "pnpm --filter @supabase/mcp-server-supabase test:coverage",
     "test:packed-platform-consumer": "node scripts/test-packed-platform-consumer.mjs",
     "format": "biome check --write .",
-    "format:check": "biome check ."
+    "format:check": "biome check .",
+    "dev:http": "node scripts/dev-http.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

@@ -1,6 +1,10 @@
 import {
   Client,
   type CallToolRequestParams,
+  type CallToolResult,
+  type ClientCapabilities,
+  type InputRequiredResult,
+  StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client';
 import type { Server } from '@modelcontextprotocol/server';
 import { StreamTransport } from '@supabase/mcp-utils';
@@ -12,6 +16,7 @@ import {
   type SupabaseMcpServerOptions,
 } from '../src/server.js';
 import type { supabaseMcpToolSchemas } from '../src/tools/tool-schemas.js';
+import { createSupabaseMcpHandler } from '../src/transports/http.js';
 import {
   ACCESS_TOKEN,
   API_URL,
@@ -27,8 +32,33 @@ type SetupOptions = {
   platform?: SupabasePlatform;
   readOnly?: boolean;
   features?: string[];
-  costConfirmation?: SupabaseMcpServerOptions['costConfirmation'];
+  elicitation?: SupabaseMcpServerOptions['elicitation'];
+  clientCapabilities?: ClientCapabilities;
 };
+
+type ModernSetupOptions = {
+  elicitation?: SupabaseMcpServerOptions['elicitation'];
+  clientCapabilities?: ClientCapabilities;
+  readOnly?: boolean;
+  projectId?: string;
+  secretCollection?: NonNullable<
+    NonNullable<SupabaseMcpServerOptions['elicitation']>['secretCollection']
+  >;
+  elicitationAction?: 'accept' | 'decline' | 'cancel';
+};
+
+export function callModernTool(
+  client: Client,
+  params: CallToolRequestParams & {
+    inputResponses?: Record<string, unknown>;
+    requestState?: string;
+  }
+): Promise<CallToolResult | InputRequiredResult> {
+  return client.request(
+    { method: 'tools/call', params },
+    { allowInputRequired: true }
+  ) as Promise<CallToolResult | InputRequiredResult>;
+}
 
 type ToolCall = Omit<CallToolRequestParams, 'name'> & {
   name: keyof typeof supabaseMcpToolSchemas;
@@ -47,11 +77,12 @@ type Connection = {
 export function createServerHarness() {
   let mockServer: SetupServer | undefined;
   const connections: Connection[] = [];
+  const modernCleanups: Array<() => Promise<void>> = [];
   const pipeErrors: unknown[] = [];
   const shutdownReason = new Error('Test harness stream shutdown');
 
   function reset() {
-    if (mockServer || connections.length) {
+    if (mockServer || connections.length || modernCleanups.length) {
       throw new Error('Close the server harness before resetting it');
     }
     mockServer = setupMockApis();
@@ -63,7 +94,8 @@ export function createServerHarness() {
       projectId,
       readOnly,
       features,
-      costConfirmation,
+      elicitation,
+      clientCapabilities = {},
     } = options;
     const connection: Connection = {
       shutdown: new AbortController(),
@@ -98,7 +130,7 @@ export function createServerHarness() {
 
     const client = (connection.client = new Client(
       { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
-      { capabilities: {} }
+      { capabilities: clientCapabilities }
     ));
     const platform =
       options.platform ??
@@ -108,7 +140,7 @@ export function createServerHarness() {
       projectId,
       readOnly,
       features,
-      costConfirmation,
+      elicitation,
     }));
 
     await server.connect(serverTransport);
@@ -136,9 +168,82 @@ export function createServerHarness() {
     return { client, callTool };
   }
 
+  async function setupModern(options: ModernSetupOptions = {}) {
+    const {
+      elicitation = {
+        requestState: { key: 'a'.repeat(32), principal: 'test-user' },
+        confirmation: {
+          enabledTools: [
+            'create_project',
+            'create_branch',
+            'execute_sql',
+            'apply_migration',
+          ],
+        },
+      },
+      clientCapabilities = {},
+      secretCollection,
+      elicitationAction,
+      readOnly,
+      projectId,
+    } = options;
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    // Modern requests do not perform an initialize handshake. Keep the
+    // management API User-Agent initialization separate from client capabilities.
+    await platform.init?.({
+      clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      clientCapabilities: { elicitation: { form: {} } },
+    });
+
+    const handler = createSupabaseMcpHandler({
+      platform,
+      projectId,
+      readOnly,
+      elicitation: secretCollection
+        ? { ...elicitation, secretCollection }
+        : elicitation,
+    });
+    modernCleanups.push(() => handler.close());
+    const transport = new StreamableHTTPClientTransport(
+      new URL('https://mcp.test'),
+      { fetch: (url, init) => handler.fetch(new Request(url, init)) }
+    );
+    modernCleanups.push(() => transport.close());
+    const client = new Client(
+      { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      {
+        capabilities: clientCapabilities,
+        versionNegotiation: { mode: { pin: '2026-07-28' } },
+        ...(elicitationAction === undefined && {
+          inputRequired: { autoFulfill: false },
+        }),
+      }
+    );
+    modernCleanups.push(() => client.close());
+    if (elicitationAction !== undefined) {
+      client.setRequestHandler('elicitation/create', async () =>
+        elicitationAction === 'accept'
+          ? { action: 'accept' as const, content: {} }
+          : { action: elicitationAction }
+      );
+    }
+    await client.connect(transport);
+    return { client, platform };
+  }
+
   async function close() {
     const errors: unknown[] = [];
     try {
+      for (const cleanup of modernCleanups.splice(0).reverse()) {
+        try {
+          await cleanup();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
       const ownedConnections = connections.splice(0);
       // Detach pipes before StreamTransport.close errors its controllers. Only
       // these aborts use our private reason; other pipe failures remain visible.
@@ -185,6 +290,7 @@ export function createServerHarness() {
 
   return {
     setup,
+    setupModern,
     reset,
     close,
     get mockServer() {

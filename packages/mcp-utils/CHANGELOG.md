@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/supabase/mcp/compare/mcp-utils-v0.7.0...mcp-utils-v0.8.0) (2026-09-04)
+
+
+### Features
+
+* **mcp:** add project cost confirmation elicitation ([#391](https://github.com/supabase/mcp/issues/391)) ([fb50882](https://github.com/supabase/mcp/commit/fb5088279b6fdc4f3049400b1f1da393fd83e2fb))
+* **mcp:** hide legacy cost tools from form-capable clients ([#411](https://github.com/supabase/mcp/issues/411)) ([2f04461](https://github.com/supabase/mcp/commit/2f04461fda022d1bde326310e641be87fccbb90c))
+
 ## [0.7.0](https://github.com/supabase/mcp/compare/mcp-utils-v0.6.0...mcp-utils-v0.7.0) (2026-08-20)
 
 

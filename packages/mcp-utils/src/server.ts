@@ -272,7 +272,11 @@ export type McpServerOptions = {
    * asks for the list of tools or invokes a tool. This allows for dynamic tools
    * that can change after the server has started.
    */
-  tools?: Prop<Record<string, Tool>>;
+  tools?:
+    | Record<string, Tool>
+    | ((
+        ctx?: ServerContext
+      ) => Record<string, Tool> | Promise<Record<string, Tool>>);
 
   /**
    * Multi-round-trip `requestState` integrity hook (protocol revision
@@ -327,13 +331,13 @@ export function createMcpServer(options: McpServerOptions) {
       : options.resources;
   }
 
-  async function getTools() {
+  async function getTools(ctx?: ServerContext) {
     if (!options.tools) {
       throw new Error('tools not available');
     }
 
     return typeof options.tools === 'function'
-      ? await options.tools()
+      ? await options.tools(ctx)
       : options.tools;
   }
 
@@ -469,8 +473,8 @@ export function createMcpServer(options: McpServerOptions) {
   if (options.tools) {
     server.setRequestHandler(
       'tools/list',
-      async (): Promise<ListToolsResult> => {
-        const tools = await getTools();
+      async (_request, ctx): Promise<ListToolsResult> => {
+        const tools = await getTools(ctx);
 
         return {
           tools: await Promise.all(
@@ -500,7 +504,7 @@ export function createMcpServer(options: McpServerOptions) {
 
     server.setRequestHandler('tools/call', async (request, ctx) => {
       try {
-        const tools = await getTools();
+        const tools = await getTools(ctx);
         const toolName = request.params.name;
 
         if (!(toolName in tools)) {

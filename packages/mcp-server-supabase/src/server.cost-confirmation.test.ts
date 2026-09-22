@@ -1,151 +1,52 @@
 import {
-  Client,
-  isInputRequiredResult,
-  StreamableHTTPClientTransport,
-} from '@modelcontextprotocol/client';
+  createOrganization,
+  createProject,
+  mockBranches,
+  mockProjects,
+} from '../test/mocks.js';
+import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import * as pricing from './pricing.js';
+import { BRANCH_COST_HOURLY, getBranchCost } from './pricing.js';
+import type { SupabaseMcpServerOptions } from './server.js';
+import { hashObject } from './util.js';
+import { isInputRequiredResult } from '@modelcontextprotocol/client';
 import type {
   CallToolResult,
+  ClientCapabilities,
   InputRequiredResult,
 } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import {
-  ACCESS_TOKEN,
-  API_URL,
-  createOrganization,
-  createProject,
-  MCP_CLIENT_NAME,
-  MCP_CLIENT_VERSION,
-  mockBranches,
-  mockProjects,
-} from '../test/mocks.js';
-import { createServerHarness } from '../test/server-harness.js';
-import { createSupabaseApiPlatform } from './platform/api-platform.js';
-import * as pricing from './pricing.js';
-import { BRANCH_COST_HOURLY, getBranchCost } from './pricing.js';
-import { type SupabaseMcpServerOptions } from './server.js';
-import { createSupabaseMcpHandler } from './transports/http.js';
-import { hashObject } from './util.js';
-
 const harness = createServerHarness();
 const setup = harness.setup;
-const httpCleanups: Array<() => Promise<void>> = [];
 
 beforeEach(() => harness.reset());
 afterEach(async () => {
-  const errors: unknown[] = [];
-
-  for (const cleanup of httpCleanups.splice(0).reverse()) {
-    try {
-      await cleanup();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-
-  try {
-    await harness.close();
-  } catch (error) {
-    errors.push(error);
-  }
-
-  if (errors.length > 0) {
-    throw new AggregateError(
-      errors,
-      'Failed to close cost-confirmation resources'
-    );
-  }
+  await harness.close();
 });
 
-type FormCapableSetupOptions = {
-  readOnly?: boolean;
-  projectId?: string;
-  /**
-   * Registers an auto-fulfilling `elicitation/create` handler that always
-   * answers with this action, driven via `client.callTool`. Omit for manual
-   * multi-round-trip control via `client.request`.
-   */
-  elicitationAction?: 'accept' | 'decline' | 'cancel';
+const setupModern = harness.setupModern;
+
+const ELICITATION_REQUEST_STATE: NonNullable<
+  SupabaseMcpServerOptions['elicitation']
+>['requestState'] = {
+  key: 'a'.repeat(32),
+  principal: 'test-user',
 };
 
 const COST_CONFIRMATION: NonNullable<
-  SupabaseMcpServerOptions['costConfirmation']
+  NonNullable<SupabaseMcpServerOptions['elicitation']>['confirmation']
 > = {
-  requestStateKey: 'a'.repeat(32),
-  principal: 'test-user',
-  enabledTools: ['create_project', 'create_branch'],
+  enabledTools: [
+    'create_project',
+    'create_branch',
+    'execute_sql',
+    'apply_migration',
+  ],
 };
 
-// https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/
-const MODERN_PROTOCOL_VERSION = '2026-07-28';
-const MCP_ENDPOINT = new URL('https://mcp.test');
+const FORM_CAPABLE: ClientCapabilities = { elicitation: { form: {} } };
 
-/**
- * Sets up an MCP client against the hosted HTTP handler (in-process, via a
- * custom `fetch`) for the `create_project`/`create_branch` cost-confirmation
- * elicitation lanes: a client pinned to the 2026-07-28 protocol, declaring
- * per-request form capability. Raw `StreamTransport` only speaks the 2025
- * era, so the form-capable lane - which depends on the per-request `_meta`
- * envelope - needs the same in-process HTTP transport the hosted runtime
- * uses.
- */
-async function setupFormCapable(options: FormCapableSetupOptions = {}) {
-  const { readOnly, projectId, elicitationAction } = options;
-
-  const platform = createSupabaseApiPlatform({
-    accessToken: ACCESS_TOKEN,
-    apiUrl: API_URL,
-  });
-
-  // Modern per-request serving never calls `onInitialize` (no `initialize`
-  // handshake on the 2026-07-28 wire), so the platform's management API
-  // client would otherwise keep its default User-Agent. Initialize it
-  // explicitly with the same clientInfo the test client below declares.
-  await platform.init?.({
-    clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
-    clientCapabilities: { elicitation: { form: {} } },
-  });
-
-  const handler = createSupabaseMcpHandler({
-    platform,
-    projectId,
-    readOnly,
-    costConfirmation: COST_CONFIRMATION,
-  });
-
-  httpCleanups.push(() => handler.close());
-
-  const transport = new StreamableHTTPClientTransport(MCP_ENDPOINT, {
-    fetch: (url, init) => handler.fetch(new Request(url, init)),
-  });
-
-  httpCleanups.push(() => transport.close());
-
-  const client = new Client(
-    { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
-    {
-      capabilities: { elicitation: { form: {} } },
-      versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
-      ...(elicitationAction === undefined && {
-        inputRequired: { autoFulfill: false },
-      }),
-    }
-  );
-
-  httpCleanups.push(() => client.close());
-
-  if (elicitationAction !== undefined) {
-    client.setRequestHandler('elicitation/create', async () =>
-      elicitationAction === 'accept'
-        ? { action: 'accept' as const, content: {} }
-        : { action: elicitationAction }
-    );
-  }
-
-  await client.connect(transport);
-
-  return { client };
-}
 describe('tools', () => {
   test('create project without cost confirmation fails', async () => {
     const { callTool } = await setup();
@@ -204,7 +105,10 @@ describe('tools', () => {
 
     test('create_project advertises confirm_cost_id as optional when cost confirmation is configured', async () => {
       const { client } = await setup({
-        costConfirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
       });
 
       const { tools } = await client.listTools();
@@ -217,9 +121,118 @@ describe('tools', () => {
       );
     });
 
+    test('hides cost tools from a form-capable client', async () => {
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const { tools } = await client.listTools();
+      const names = tools.map((tool) => tool.name);
+
+      expect(names).not.toContain('get_cost');
+      expect(names).not.toContain('confirm_cost');
+      expect(names).toContain('create_project');
+    });
+
+    test('omits confirm_cost_id from create_project for a form-capable client', async () => {
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+
+      const { tools } = await client.listTools();
+      const createProjectTool = tools.find(
+        (tool) => tool.name === 'create_project'
+      );
+
+      expect(createProjectTool?.inputSchema.properties).not.toHaveProperty(
+        'confirm_cost_id'
+      );
+    });
+
+    test('omits confirm_cost_id from create_branch for a form-capable client', async () => {
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+
+      const { tools } = await client.listTools();
+      const createBranchTool = tools.find(
+        (tool) => tool.name === 'create_branch'
+      );
+
+      expect(createBranchTool?.inputSchema.properties).not.toHaveProperty(
+        'confirm_cost_id'
+      );
+    });
+
+    test('narrows cost tools to branch while create_branch still needs confirm_cost_id', async () => {
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: {
+            ...COST_CONFIRMATION,
+            enabledTools: ['create_project'],
+          },
+        },
+      });
+
+      const { tools } = await client.listTools();
+
+      for (const name of ['get_cost', 'confirm_cost']) {
+        const tool = tools.find((tool) => tool.name === name);
+        expect(tool?.inputSchema.properties?.type).toStrictEqual({
+          type: 'string',
+          enum: ['branch'],
+        });
+      }
+    });
+
+    test('lists cost tools for a 2025-era client that declares elicitation', async () => {
+      const { client } = await setup({
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
+        clientCapabilities: { elicitation: { form: {} } },
+      });
+
+      const { tools } = await client.listTools();
+      const names = tools.map((tool) => tool.name);
+
+      expect(names).toContain('get_cost');
+      expect(names).toContain('confirm_cost');
+    });
+
+    test('lists cost tools for a modern client without elicitation', async () => {
+      const { client } = await setupModern({});
+
+      const { tools } = await client.listTools();
+      const names = tools.map((tool) => tool.name);
+
+      expect(names).toContain('get_cost');
+      expect(names).toContain('confirm_cost');
+    });
+
+    test('lists cost tools for a capability-free client', async () => {
+      const { client } = await setup({
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
+      });
+
+      const { tools } = await client.listTools();
+      const names = tools.map((tool) => tool.name);
+
+      expect(names).toContain('get_cost');
+      expect(names).toContain('confirm_cost');
+    });
+
     test('capability-free client still succeeds via get_cost -> confirm_cost -> create_project', async () => {
       const { callTool } = await setup({
-        costConfirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
       });
 
       const freeOrg = await createOrganization({
@@ -252,7 +265,9 @@ describe('tools', () => {
     });
 
     test('form-capable client: $0 creates without elicitation', async () => {
-      const { client } = await setupFormCapable();
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
 
       const freeOrg = await createOrganization({
         name: 'Free Org',
@@ -260,20 +275,14 @@ describe('tools', () => {
         allowed_release_channels: ['ga'],
       });
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              name: 'New Project',
-              region: 'us-east-1',
-              organization_id: freeOrg.id,
-            },
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: freeOrg.id,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(result)).toBe(false);
       if (isInputRequiredResult(result)) {
@@ -284,7 +293,8 @@ describe('tools', () => {
     });
 
     test('form-capable client: accept creates the project exactly once', async () => {
-      const { client } = await setupFormCapable({
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
         elicitationAction: 'accept',
       });
       const { org } = await createOrganizationWithBillableNextProject();
@@ -313,7 +323,8 @@ describe('tools', () => {
     });
 
     test('form-capable client: decline does not create a project', async () => {
-      const { client } = await setupFormCapable({
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
         elicitationAction: 'decline',
       });
       const { org } = await createOrganizationWithBillableNextProject();
@@ -333,7 +344,8 @@ describe('tools', () => {
     });
 
     test('form-capable client: cancel does not create a project', async () => {
-      const { client } = await setupFormCapable({
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
         elicitationAction: 'cancel',
       });
       const { org } = await createOrganizationWithBillableNextProject();
@@ -353,7 +365,9 @@ describe('tools', () => {
     });
 
     test('rejects a retry whose arguments changed since the state was minted', async () => {
-      const { client } = await setupFormCapable();
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
       const { org } = await createOrganizationWithBillableNextProject();
       const otherOrg = await createOrganization({
         name: 'Other Org',
@@ -361,43 +375,31 @@ describe('tools', () => {
         allowed_release_channels: ['ga'],
       });
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              name: 'New Project',
-              region: 'us-east-1',
-              organization_id: org.id,
-            },
-          },
+      const first = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: org.id,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              name: 'New Project',
-              region: 'us-east-1',
-              organization_id: otherOrg.id,
-            },
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: otherOrg.id,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -409,7 +411,9 @@ describe('tools', () => {
     });
 
     test('creates without re-prompting when the quoted cost drops to zero before confirmation', async () => {
-      const { client } = await setupFormCapable();
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
       const { org, existingProject } =
         await createOrganizationWithBillableNextProject();
 
@@ -419,13 +423,10 @@ describe('tools', () => {
         organization_id: org.id,
       };
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'create_project', arguments: args },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
@@ -433,20 +434,14 @@ describe('tools', () => {
 
       existingProject.status = 'INACTIVE';
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: args,
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(second)).toBe(false);
       if (isInputRequiredResult(second)) {
@@ -457,7 +452,9 @@ describe('tools', () => {
     });
 
     test('a decline is honored even when the quoted cost changed since the state was minted', async () => {
-      const { client } = await setupFormCapable();
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
       const { org, existingProject } =
         await createOrganizationWithBillableNextProject();
 
@@ -467,13 +464,10 @@ describe('tools', () => {
         organization_id: org.id,
       };
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'create_project', arguments: args },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
@@ -481,20 +475,14 @@ describe('tools', () => {
 
       existingProject.status = 'INACTIVE';
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: args,
-            inputResponses: {
-              confirm_cost: { action: 'decline' },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: args,
+        inputResponses: {
+          confirm_cost: { action: 'decline' },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -552,7 +540,10 @@ describe('tools', () => {
     test('create_branch advertises confirm_cost_id as optional when cost confirmation is configured', async () => {
       const { client } = await setup({
         features: ['branching'],
-        costConfirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
       });
 
       const { tools } = await client.listTools();
@@ -568,7 +559,10 @@ describe('tools', () => {
     test('capability-free client still succeeds via get_cost -> confirm_cost -> create_branch', async () => {
       const { callTool } = await setup({
         features: ['account', 'branching'],
-        costConfirmation: COST_CONFIRMATION,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
       });
 
       const org = await createOrganization({
@@ -618,7 +612,8 @@ describe('tools', () => {
     });
 
     test('form-capable client: accept creates the branch exactly once', async () => {
-      const { client } = await setupFormCapable({
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
         elicitationAction: 'accept',
       });
 
@@ -658,7 +653,8 @@ describe('tools', () => {
     });
 
     test('form-capable client: decline does not create a branch', async () => {
-      const { client } = await setupFormCapable({
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
         elicitationAction: 'decline',
       });
 
@@ -686,7 +682,8 @@ describe('tools', () => {
     });
 
     test('form-capable client: cancel does not create a branch', async () => {
-      const { client } = await setupFormCapable({
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
         elicitationAction: 'cancel',
       });
 
@@ -714,7 +711,9 @@ describe('tools', () => {
     });
 
     test('form-capable client: a non-elicitation response re-prompts without creating a branch', async () => {
-      const { client } = await setupFormCapable();
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
 
       const org = await createOrganization({
         name: 'My Org',
@@ -729,32 +728,23 @@ describe('tools', () => {
       project.status = 'ACTIVE_HEALTHY';
 
       const args = { project_id: project.id, name: 'test-branch' };
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'create_branch', arguments: args },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: args,
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: args,
-            inputResponses: {
-              confirm_cost: { roots: [] },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: args,
+        inputResponses: {
+          confirm_cost: { roots: [] },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       expect(isInputRequiredResult(second)).toBe(true);
       expect(mockBranches.size).toBe(0);
@@ -774,7 +764,9 @@ describe('tools', () => {
           amount: BRANCH_COST_HOURLY + 1,
         });
       try {
-        const { client } = await setupFormCapable();
+        const { client } = await setupModern({
+          clientCapabilities: FORM_CAPABLE,
+        });
 
         const org = await createOrganization({
           name: 'My Org',
@@ -789,13 +781,10 @@ describe('tools', () => {
         project.status = 'ACTIVE_HEALTHY';
 
         const args = { project_id: project.id, name: 'test-branch' };
-        const first = (await client.request(
-          {
-            method: 'tools/call',
-            params: { name: 'create_branch', arguments: args },
-          },
-          { allowInputRequired: true }
-        )) as CallToolResult | InputRequiredResult;
+        const first = (await callModernTool(client, {
+          name: 'create_branch',
+          arguments: args,
+        })) as CallToolResult | InputRequiredResult;
 
         if (!isInputRequiredResult(first)) {
           throw new Error('expected an input_required result');
@@ -826,20 +815,14 @@ describe('tools', () => {
           },
         });
 
-        const second = (await client.request(
-          {
-            method: 'tools/call',
-            params: {
-              name: 'create_branch',
-              arguments: args,
-              inputResponses: {
-                confirm_cost: { action: 'decline' },
-              },
-              requestState: first.requestState,
-            },
+        const second = (await callModernTool(client, {
+          name: 'create_branch',
+          arguments: args,
+          inputResponses: {
+            confirm_cost: { action: 'decline' },
           },
-          { allowInputRequired: true }
-        )) as CallToolResult | InputRequiredResult;
+          requestState: first.requestState,
+        })) as CallToolResult | InputRequiredResult;
 
         if (isInputRequiredResult(second)) {
           throw new Error('expected a CallToolResult');
@@ -851,8 +834,10 @@ describe('tools', () => {
       }
     });
 
-    test('form-capable client: a supplied confirm_cost_id cannot bypass the form', async () => {
-      const { client } = await setupFormCapable();
+    test('form-capable client: a supplied confirm_cost_id is rejected', async () => {
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
 
       const org = await createOrganization({
         name: 'My Org',
@@ -867,33 +852,30 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      // The correct legacy hash - even a valid confirmation ID must not
-      // let a form-capable client skip straight to creation.
+      // The correct legacy hash. The field is not part of this client's
+      // schema, so even a valid confirmation ID must not reach creation.
       const legacyConfirmCostId = await hashObject(getBranchCost());
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: {
-              project_id: project.id,
-              name: 'test-branch',
-              confirm_cost_id: legacyConfirmCostId,
-            },
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: {
+          project_id: project.id,
+          name: 'test-branch',
+          confirm_cost_id: legacyConfirmCostId,
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
-      if (!isInputRequiredResult(result)) {
-        throw new Error('expected an input_required result');
+      if (isInputRequiredResult(result)) {
+        throw new Error('expected a tool error, not an input_required result');
       }
+      expect(result.isError).toBe(true);
       expect(mockBranches.size).toBe(0);
     });
 
     test('rejects a retry whose arguments changed since the state was minted', async () => {
-      const { client } = await setupFormCapable();
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
 
       const org = await createOrganization({
         name: 'My Org',
@@ -908,35 +890,23 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: project.id, name: 'test-branch' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: project.id, name: 'test-branch' },
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
 
-      const second = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: project.id, name: 'renamed-branch' },
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: first.requestState,
-          },
+      const second = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: project.id, name: 'renamed-branch' },
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
@@ -961,7 +931,8 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const { client } = await setupFormCapable({
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
         projectId: project.id,
         elicitationAction: 'accept',
       });
@@ -997,7 +968,9 @@ describe('tools', () => {
     });
 
     test('rejects a requestState minted by create_project', async () => {
-      const { client } = await setupFormCapable();
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
 
       // create_project only triggers cost confirmation for a paid org's
       // additional projects, so set up a pro org with one existing project.
@@ -1013,20 +986,14 @@ describe('tools', () => {
       });
       existingProject.status = 'ACTIVE_HEALTHY';
 
-      const projectFirst = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_project',
-            arguments: {
-              organization_id: org.id,
-              name: 'My Project',
-              region: 'us-east-1',
-            },
-          },
+      const projectFirst = (await callModernTool(client, {
+        name: 'create_project',
+        arguments: {
+          organization_id: org.id,
+          name: 'My Project',
+          region: 'us-east-1',
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(projectFirst)) {
         throw new Error(
@@ -1034,20 +1001,14 @@ describe('tools', () => {
         );
       }
 
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: existingProject.id, name: 'test-branch' },
-            inputResponses: {
-              confirm_cost: { action: 'accept', content: {} },
-            },
-            requestState: projectFirst.requestState,
-          },
+      const result = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: existingProject.id, name: 'test-branch' },
+        inputResponses: {
+          confirm_cost: { action: 'accept', content: {} },
         },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+        requestState: projectFirst.requestState,
+      })) as CallToolResult | InputRequiredResult;
 
       if (isInputRequiredResult(result)) {
         throw new Error('expected a CallToolResult');
@@ -1066,7 +1027,9 @@ describe('tools', () => {
     });
 
     test('rejects a tampered requestState before the handler runs', async () => {
-      const { client } = await setupFormCapable();
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
 
       const org = await createOrganization({
         name: 'My Org',
@@ -1080,16 +1043,10 @@ describe('tools', () => {
       });
       project.status = 'ACTIVE_HEALTHY';
 
-      const first = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'create_branch',
-            arguments: { project_id: project.id, name: 'test-branch' },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
+      const first = (await callModernTool(client, {
+        name: 'create_branch',
+        arguments: { project_id: project.id, name: 'test-branch' },
+      })) as CallToolResult | InputRequiredResult;
 
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
@@ -1103,20 +1060,14 @@ describe('tools', () => {
         originalState.slice(0, -1) + (lastChar === 'A' ? 'E' : 'A');
 
       await expect(
-        client.request(
-          {
-            method: 'tools/call',
-            params: {
-              name: 'create_branch',
-              arguments: { project_id: project.id, name: 'test-branch' },
-              inputResponses: {
-                confirm_cost: { action: 'accept', content: {} },
-              },
-              requestState: tamperedState,
-            },
+        callModernTool(client, {
+          name: 'create_branch',
+          arguments: { project_id: project.id, name: 'test-branch' },
+          inputResponses: {
+            confirm_cost: { action: 'accept', content: {} },
           },
-          { allowInputRequired: true }
-        )
+          requestState: tamperedState,
+        })
       ).rejects.toMatchObject({
         code: -32602,
         message: 'Invalid or expired requestState',

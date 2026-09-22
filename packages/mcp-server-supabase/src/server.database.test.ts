@@ -1,14 +1,45 @@
-import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
-import { API_URL, createProjectFixture } from '../test/mocks.js';
-import { createServerHarness } from '../test/server-harness.js';
+import { ACCESS_TOKEN, API_URL, createProjectFixture } from '../test/mocks.js';
+import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import { createSupabaseApiPlatform } from './platform/api-platform.js';
+import type { SupabaseMcpServerOptions } from './server.js';
+import * as destructiveSql from './tools/destructive-sql.js';
+import { isInputRequiredResult } from '@modelcontextprotocol/client';
+import type {
+  CallToolRequestParams,
+  CallToolResult,
+  ClientCapabilities,
+  InputRequiredResult,
+} from '@modelcontextprotocol/client';
+import { HttpResponse, http } from 'msw';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const harness = createServerHarness();
 const setup = harness.setup;
 
 beforeEach(() => harness.reset());
 afterEach(() => harness.close());
+
+const setupModern = harness.setupModern;
+
+const ELICITATION_REQUEST_STATE: NonNullable<
+  SupabaseMcpServerOptions['elicitation']
+>['requestState'] = {
+  key: 'a'.repeat(32),
+  principal: 'test-user',
+};
+
+const COST_CONFIRMATION: NonNullable<
+  NonNullable<SupabaseMcpServerOptions['elicitation']>['confirmation']
+> = {
+  enabledTools: [
+    'create_project',
+    'create_branch',
+    'execute_sql',
+    'apply_migration',
+  ],
+};
+
+const FORM_CAPABLE: ClientCapabilities = { elicitation: { form: {} } };
 
 describe('tools', () => {
   test('execute sql', async () => {
@@ -193,7 +224,8 @@ describe('tools', () => {
         level: 'critical',
         title: 'Row Level Security is disabled',
         message: expect.stringContaining('public.test'),
-        remediation_sql: 'ALTER TABLE public.test ENABLE ROW LEVEL SECURITY;',
+        remediation_sql:
+          'ALTER TABLE "public"."test" ENABLE ROW LEVEL SECURITY;',
         doc_url: expect.stringContaining('row-level-security'),
       },
     });
@@ -950,5 +982,446 @@ describe('tools', () => {
     await expect(executeSqlPromise).rejects.toThrow(
       'syntax error at or near "invalid"'
     );
+  });
+  async function createActiveProject() {
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+    return project;
+  }
+
+  describe('execute_sql destructive confirmation via elicitation', () => {
+    test.each(['execute_sql', 'apply_migration'] as const)(
+      '%s accepted retry executes original SQL when classification is unavailable',
+      async (tool) => {
+        const { client, platform } = await setupModern({
+          clientCapabilities: FORM_CAPABLE,
+        });
+        const query = '-- preserve this comment\nDROP TABLE films;';
+        const args = {
+          project_id: 'test-project',
+          query,
+          ...(tool === 'apply_migration' && { name: 'drop_films' }),
+        };
+        const executeSql = vi
+          .spyOn(platform.database!, 'executeSql')
+          .mockResolvedValue([]);
+        const applyMigration = vi
+          .spyOn(platform.database!, 'applyMigration')
+          .mockResolvedValue(undefined);
+        const originalClassify = destructiveSql.isDestructiveSql;
+        const classify = vi.spyOn(destructiveSql, 'isDestructiveSql');
+        try {
+          classify.mockImplementation(() => {
+            throw new Error('classification unavailable');
+          });
+          const initialFailure = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+          });
+          expect(initialFailure).toMatchObject({ isError: true });
+          expect(isInputRequiredResult(initialFailure)).toBe(false);
+          expect(executeSql).not.toHaveBeenCalled();
+          expect(applyMigration).not.toHaveBeenCalled();
+          classify.mockImplementation(originalClassify);
+
+          const first = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+          });
+          if (!isInputRequiredResult(first)) {
+            throw new Error('expected an issued SQL confirmation');
+          }
+          expect(executeSql).not.toHaveBeenCalled();
+          expect(applyMigration).not.toHaveBeenCalled();
+          classify.mockImplementation(() => {
+            throw new Error('classification unavailable');
+          });
+          for (const action of [undefined, 'decline', 'cancel'] as const) {
+            const unaccepted = await callModernTool(client, {
+              name: tool,
+              arguments: args,
+              requestState: first.requestState,
+              ...(action && {
+                inputResponses: {
+                  confirm_destructive: { action },
+                },
+              }),
+            });
+            // Non-acceptance retains classification failure precedence.
+            expect(unaccepted).toMatchObject({ isError: true });
+            expect(executeSql).not.toHaveBeenCalled();
+            expect(applyMigration).not.toHaveBeenCalled();
+          }
+
+          const accepted = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+            requestState: first.requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'accept', content: {} },
+            },
+          });
+          expect(isInputRequiredResult(accepted)).toBe(false);
+          expect((accepted as CallToolResult).isError).not.toBe(true);
+          if (tool === 'execute_sql') {
+            expect(executeSql).toHaveBeenCalledWith(
+              'test-project',
+              expect.objectContaining({ query })
+            );
+            expect(applyMigration).not.toHaveBeenCalled();
+          } else {
+            expect(applyMigration).toHaveBeenCalledWith('test-project', {
+              name: 'drop_films',
+              query,
+            });
+            expect((accepted as CallToolResult).content).toContainEqual({
+              type: 'text',
+              text: JSON.stringify({ success: true }),
+            });
+            expect(executeSql).not.toHaveBeenCalled();
+          }
+        } finally {
+          classify.mockRestore();
+          await client.close();
+        }
+      }
+    );
+
+    test('form-capable client: non-destructive SQL runs without elicitation', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const project = await createActiveProject();
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+
+      await client.callTool({
+        name: 'execute_sql',
+        arguments: { project_id: project.id, query: 'select 1' },
+      });
+
+      expect(executeSql).toHaveBeenCalledOnce();
+    });
+
+    test.each([
+      ['execute_sql', 'apply_migration'],
+      ['apply_migration', 'execute_sql'],
+    ] as const)(
+      'form-capable client: only $enabledTool elicits when the other SQL tool is disabled',
+      async (enabledTool, disabledTool) => {
+        const { client, platform } = await setupModern({
+          clientCapabilities: FORM_CAPABLE,
+          elicitation: {
+            requestState: ELICITATION_REQUEST_STATE,
+            confirmation: {
+              ...COST_CONFIRMATION,
+              enabledTools: [enabledTool],
+            },
+          },
+          elicitationAction: 'decline',
+        });
+        const project = await createActiveProject();
+        await project.db.exec('create table films (id int)');
+        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+        const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+        const toolCalls = {
+          execute_sql: {
+            name: 'execute_sql',
+            arguments: {
+              project_id: project.id,
+              query: 'drop table films;',
+            },
+          },
+          apply_migration: {
+            name: 'apply_migration',
+            arguments: {
+              project_id: project.id,
+              name: 'drop_films',
+              query: 'drop table films;',
+            },
+          },
+        } satisfies Record<
+          'execute_sql' | 'apply_migration',
+          CallToolRequestParams
+        >;
+        const operations = {
+          execute_sql: executeSql,
+          apply_migration: applyMigration,
+        };
+
+        const enabledResult = await client.callTool(toolCalls[enabledTool]);
+
+        expect(enabledResult.structuredContent).toEqual({
+          status: 'declined',
+        });
+        expect(operations[enabledTool]).not.toHaveBeenCalled();
+
+        await client.callTool(toolCalls[disabledTool]);
+
+        expect(operations[disabledTool]).toHaveBeenCalledOnce();
+      }
+    );
+
+    test('form-capable client: accept runs destructive SQL exactly once', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitationAction: 'accept',
+      });
+      const project = await createActiveProject();
+      await project.db.exec('create table films (id int)');
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+
+      const result = await client.callTool({
+        name: 'execute_sql',
+        arguments: { project_id: project.id, query: 'drop table films;' },
+      });
+
+      expect(executeSql).toHaveBeenCalledOnce();
+      expect(result.isError).toBeFalsy();
+    });
+
+    test('form-capable client: decline does not run the SQL', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitationAction: 'decline',
+      });
+      const project = await createActiveProject();
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+
+      const result = await client.callTool({
+        name: 'execute_sql',
+        arguments: { project_id: project.id, query: 'drop table films;' },
+      });
+
+      expect(result.structuredContent).toEqual({ status: 'declined' });
+      expect(executeSql).not.toHaveBeenCalled();
+    });
+
+    test('form-capable client: declining bare-column DROP preserves the column and its data', async () => {
+      const { client } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitationAction: 'decline',
+      });
+      const project = await createActiveProject();
+      try {
+        await project.db.exec(
+          "create table films (id int, title text); insert into films values (1, 'Alien');"
+        );
+
+        const result = await client.callTool({
+          name: 'execute_sql',
+          arguments: {
+            project_id: project.id,
+            query: 'ALTER TABLE films DROP title;',
+          },
+        });
+
+        const { rows } = await project.db.query(
+          'select to_jsonb(films) as film from films'
+        );
+        expect(rows).toEqual([{ film: { id: 1, title: 'Alien' } }]);
+        expect(result.structuredContent).toEqual({ status: 'declined' });
+      } finally {
+        await client.close();
+        await project.destroy();
+      }
+    });
+
+    test('rejects a retry whose query changed since the state was minted', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const project = await createActiveProject();
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+
+      const first = (await callModernTool(client, {
+        name: 'execute_sql',
+        arguments: {
+          project_id: project.id,
+          query: 'drop table films;',
+        },
+      })) as CallToolResult | InputRequiredResult;
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an input_required result');
+      }
+
+      const second = (await callModernTool(client, {
+        name: 'execute_sql',
+        arguments: {
+          project_id: project.id,
+          query: 'drop table actors;',
+        },
+        inputResponses: {
+          confirm_destructive: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
+
+      if (isInputRequiredResult(second)) {
+        throw new Error('expected a CallToolResult');
+      }
+      expect(second.content).toContainEqual({
+        type: 'text',
+        text: 'Request state arguments do not match the current arguments.',
+      });
+      expect(second.structuredContent).toEqual({ status: 'error' });
+      expect(second.isError).toBe(true);
+      expect(executeSql).not.toHaveBeenCalled();
+    });
+
+    test('capability-free client runs destructive SQL without elicitation when confirmation is configured', async () => {
+      const platform = createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      });
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const { client } = await setup({
+        platform,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
+      });
+      const project = await createActiveProject();
+
+      await client.callTool({
+        name: 'execute_sql',
+        arguments: { project_id: project.id, query: 'drop table films;' },
+      });
+
+      expect(executeSql).toHaveBeenCalledOnce();
+    });
+
+    test('read-only server does not elicit for destructive SQL', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        readOnly: true,
+      });
+      const project = await createActiveProject();
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+
+      await client.callTool({
+        name: 'execute_sql',
+        arguments: { project_id: project.id, query: 'drop table films;' },
+      });
+
+      expect(executeSql).toHaveBeenCalledWith(project.id, {
+        query: 'drop table films;',
+        read_only: true,
+      });
+    });
+  });
+
+  describe('apply_migration destructive confirmation via elicitation', () => {
+    test('form-capable client: accept applies the migration exactly once from the signed state', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitationAction: 'accept',
+      });
+      const project = await createActiveProject();
+      await project.db.exec('create table films (id int)');
+      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+
+      const result = await client.callTool({
+        name: 'apply_migration',
+        arguments: {
+          project_id: project.id,
+          name: 'drop_films',
+          query: 'drop table films;',
+        },
+      });
+
+      expect(applyMigration).toHaveBeenCalledOnce();
+      expect(applyMigration).toHaveBeenCalledWith(project.id, {
+        name: 'drop_films',
+        query: 'drop table films;',
+      });
+      expect(result.isError).toBeFalsy();
+    });
+
+    test('form-capable client: decline does not apply the migration', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitationAction: 'decline',
+      });
+      const project = await createActiveProject();
+      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+
+      const result = await client.callTool({
+        name: 'apply_migration',
+        arguments: {
+          project_id: project.id,
+          name: 'drop_films',
+          query: 'drop table films;',
+        },
+      });
+
+      expect(result.structuredContent).toEqual({ status: 'declined' });
+      expect(applyMigration).not.toHaveBeenCalled();
+    });
+
+    test('rejects a retry whose migration name changed since the state was minted', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const project = await createActiveProject();
+      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+
+      const first = (await callModernTool(client, {
+        name: 'apply_migration',
+        arguments: {
+          project_id: project.id,
+          name: 'drop_films',
+          query: 'drop table films;',
+        },
+      })) as CallToolResult | InputRequiredResult;
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an input_required result');
+      }
+
+      const second = (await callModernTool(client, {
+        name: 'apply_migration',
+        arguments: {
+          project_id: project.id,
+          name: 'drop_actors',
+          query: 'drop table films;',
+        },
+        inputResponses: {
+          confirm_destructive: { action: 'accept', content: {} },
+        },
+        requestState: first.requestState,
+      })) as CallToolResult | InputRequiredResult;
+
+      if (isInputRequiredResult(second)) {
+        throw new Error('expected a CallToolResult');
+      }
+      expect(second.content).toContainEqual({
+        type: 'text',
+        text: 'Request state arguments do not match the current arguments.',
+      });
+      expect(second.structuredContent).toEqual({ status: 'error' });
+      expect(second.isError).toBe(true);
+      expect(applyMigration).not.toHaveBeenCalled();
+    });
+
+    test('form-capable client: non-destructive migration applies without elicitation', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const project = await createActiveProject();
+      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+
+      await client.callTool({
+        name: 'apply_migration',
+        arguments: {
+          project_id: project.id,
+          name: 'create_films',
+          query: 'create table films (id bigint);',
+        },
+      });
+
+      expect(applyMigration).toHaveBeenCalledOnce();
+    });
   });
 });

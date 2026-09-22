@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.13.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.12.0...mcp-server-supabase-v0.13.0) (2026-09-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** confirm destructive SQL via elicitation and rename costConfirmation option ([#408](https://github.com/supabase/mcp/issues/408))
+
+### Features
+
+* add --http local HTTP entry to mcp-server-supabase ([#401](https://github.com/supabase/mcp/issues/401)) ([ff063b4](https://github.com/supabase/mcp/commit/ff063b44a934c3b9d0b7bc54370aaa8ff168c1de))
+* **management:** add v2 api client ([#419](https://github.com/supabase/mcp/issues/419)) ([02ca542](https://github.com/supabase/mcp/commit/02ca54273202ac8de5a7d7b6b5d1a2c8800b1374))
+* **mcp:** confirm destructive SQL via elicitation and rename costConfirmation option ([#408](https://github.com/supabase/mcp/issues/408)) ([c9c4e3f](https://github.com/supabase/mcp/commit/c9c4e3f95fe86ec42ac7a3280194d78338b84918))
+* support skip_elicitations in the local HTTP server ([#434](https://github.com/supabase/mcp/issues/434)) ([9442e82](https://github.com/supabase/mcp/commit/9442e8283acc3a5701552fc0766d30d069bb71b4))
+* URL-mode secret collection for create_edge_function_secret ([#412](https://github.com/supabase/mcp/issues/412)) ([fb88629](https://github.com/supabase/mcp/commit/fb886295f11c99c7c91584f49214edaa9f2feb72))
+
+
+### Bug Fixes
+
+* discourage host-filesystem access in raw-SQL tool descriptions ([#410](https://github.com/supabase/mcp/issues/410)) ([641ed1e](https://github.com/supabase/mcp/commit/641ed1ef09dbd0597dd53e763ab80c7a1209e0c3))
+
+## [0.12.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.11.0...mcp-server-supabase-v0.12.0) (2026-09-04)
+
+
+### Features
+
+* group lints in `get_advisors` response ([#390](https://github.com/supabase/mcp/issues/390)) ([48d593a](https://github.com/supabase/mcp/commit/48d593adeb0401e547caee4cdca5258cd7410ab1))
+* **mcp:** add branch cost confirmation elicitation ([#394](https://github.com/supabase/mcp/issues/394)) ([867a160](https://github.com/supabase/mcp/commit/867a1609d7dd215faf0cf7fcc44737d6304b8307))
+* **mcp:** add project cost confirmation elicitation ([#391](https://github.com/supabase/mcp/issues/391)) ([fb50882](https://github.com/supabase/mcp/commit/fb5088279b6fdc4f3049400b1f1da393fd83e2fb))
+* **mcp:** hide legacy cost tools from form-capable clients ([#411](https://github.com/supabase/mcp/issues/411)) ([2f04461](https://github.com/supabase/mcp/commit/2f04461fda022d1bde326310e641be87fccbb90c))
+
+
+### Bug Fixes
+
+* ensure correct escaping in advisor ([#407](https://github.com/supabase/mcp/issues/407)) ([a6cf4a0](https://github.com/supabase/mcp/commit/a6cf4a02c5b6427a2afdc1f031ed85498d51c336))
+* make server instructions intent-based instead of naming tools ([#372](https://github.com/supabase/mcp/issues/372)) ([fc54ea2](https://github.com/supabase/mcp/commit/fc54ea291e7c43e4501d8198d756d2c86a14538a))
+
 ## [0.11.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.10.0...mcp-server-supabase-v0.11.0) (2026-08-20)
 
 

@@ -1,8 +1,3 @@
-import { stripIndent } from 'common-tags';
-import gqlmin from 'gqlmin';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { globalRegistry } from 'zod/v4';
-
 import {
   contentApiMockSchema,
   createOrganization,
@@ -14,6 +9,10 @@ import { createServerHarness } from '../test/server-harness.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { instructions } from './server.js';
 import { supabaseMcpToolSchemas } from './tools/tool-schemas.js';
+import { stripIndent } from 'common-tags';
+import gqlmin from 'gqlmin';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { globalRegistry } from 'zod/v4';
 
 const harness = createServerHarness();
 const setup = harness.setup;
@@ -119,7 +118,13 @@ describe('tools', () => {
     // query_logs).
     const registryToolNames = Object.keys(supabaseMcpToolSchemas);
     const serverToolNames = tools.map((t) => t.name);
-    const conditionallyHiddenToolNames = new Set(['get_logs']);
+    // Registered only when secretCollection is configured; get_cost/confirm_cost hidden from form-capable clients
+    const conditionallyHiddenToolNames = new Set([
+      'get_logs',
+      'create_edge_function_secret',
+      'get_cost',
+      'confirm_cost',
+    ]);
 
     const extraToolsInRegistry = registryToolNames.filter(
       (name) => !serverToolNames.includes(name)

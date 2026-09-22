@@ -4,7 +4,7 @@ export default defineConfig([
   {
     entry: [
       'src/index.ts',
-      'src/transports/stdio.ts',
+      'src/cli.ts',
       'src/platform/index.ts',
       'src/platform/api-platform.ts',
     ],

@@ -30,6 +30,9 @@ export const ACCESS_TOKEN = 'dummy-token';
 export const COUNTRY_CODE = 'US';
 export const CLOSEST_REGION = 'us-east-2';
 
+const DEFAULT_USER_AGENT = `${MCP_SERVER_NAME}/${MCP_SERVER_VERSION} (${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION})`;
+let expectedManagementApiUserAgent: string | null = DEFAULT_USER_AGENT;
+
 export const contentApiMockSchema = source`
   schema {
     query: RootQueryType
@@ -84,6 +87,10 @@ export type Migration = {
 export const mockOrgs = new Map<string, MockOrganization>();
 export const mockProjects = new Map<string, MockProject>();
 export const mockBranches = new Map<string, MockBranch>();
+export const mockSecrets = new Map<
+  string,
+  Array<{ name: string; value: string; updated_at: string }>
+>();
 
 export const mockContentApiSchemaLoadCount = { value: 0 };
 
@@ -152,9 +159,7 @@ export const mockManagementApi = [
    */
   http.all(`${API_URL}/*`, ({ request }) => {
     const userAgent = request.headers.get('user-agent');
-    expect(userAgent).toBe(
-      `${MCP_SERVER_NAME}/${MCP_SERVER_VERSION} (${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION})`
-    );
+    expect(userAgent).toBe(expectedManagementApiUserAgent);
   }),
 
   /**
@@ -856,6 +861,17 @@ export const mockManagementApi = [
   ),
 
   /**
+   * List secrets
+   */
+  http.get<{ projectId: string }>(
+    `${API_URL}/v1/projects/:projectId/secrets`,
+    ({ params }) => {
+      const secrets = mockSecrets.get(params.projectId) ?? [];
+      return HttpResponse.json(secrets);
+    }
+  ),
+
+  /**
    * List storage buckets
    */
   http.get<{ ref: string }>(
@@ -935,10 +951,16 @@ export const mockManagementApi = [
   ),
 ];
 
-export function setupMockApis(): SetupServer {
+export function setupMockApis({
+  expectedUserAgent = DEFAULT_USER_AGENT,
+}: {
+  expectedUserAgent?: string | null;
+} = {}): SetupServer {
+  expectedManagementApiUserAgent = expectedUserAgent;
   mockOrgs.clear();
   mockProjects.clear();
   mockBranches.clear();
+  mockSecrets.clear();
   mockContentApiSchemaLoadCount.value = 0;
 
   const mockServer = setupServer(...mockContentApi, ...mockManagementApi);
