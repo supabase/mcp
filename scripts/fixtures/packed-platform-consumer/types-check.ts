@@ -1,6 +1,8 @@
 import {
   createSupabaseMcpHandler,
   createSupabaseMcpServer,
+  CURRENT_ELICITATION_TOOLS,
+  type ElicitationToolName,
   type SupabaseMcpServerOptions,
 } from '@supabase/mcp-server-supabase';
 
@@ -200,3 +202,29 @@ void handler.fetch;
 void handler.close;
 void handler.notify;
 void handler.bus;
+
+// The unified `elicitation` option, and the `ElicitationToolName`/
+// `CURRENT_ELICITATION_TOOLS` catalog it's typed against, are part of the
+// packed public declaration surface: a shape drift here must fail this
+// typecheck rather than surface only in an internal test.
+const enabledTools: readonly ElicitationToolName[] = CURRENT_ELICITATION_TOOLS;
+
+const optionsWithElicitation: SupabaseMcpServerOptions = {
+  platform: { account },
+  features: ['account'],
+  elicitation: {
+    requestState: {
+      key: 'a'.repeat(32),
+      principal: 'packed-consumer-fixture',
+      ttlSeconds: 120,
+    },
+    confirmation: { enabledTools },
+    secretCollection: {
+      connectUrlTemplate:
+        'https://example.com/dashboard/mcp/secrets?ref={ref}&name={name}',
+    },
+  },
+};
+
+const handlerWithElicitation = createSupabaseMcpHandler(optionsWithElicitation);
+void handlerWithElicitation.fetch;

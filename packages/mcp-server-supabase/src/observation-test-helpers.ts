@@ -25,8 +25,8 @@ import {
 } from './server.js';
 import { createSupabaseMcpHandler } from './transports/http.js';
 
-// Fail only issuance, retaining the real SDK codec and verification path.
-const mintControl = vi.hoisted(() => ({ fail: false }));
+// Control issuance while retaining the real SDK codec and verification path.
+const mintControl = vi.hoisted(() => ({ fail: false, omitCost: false }));
 vi.mock('@modelcontextprotocol/server', async (importOriginal) => {
   const actual = await importOriginal<typeof ServerSdk>();
   return {
@@ -39,6 +39,9 @@ vi.mock('@modelcontextprotocol/server', async (importOriginal) => {
         ...codec,
         mint: (...mintArgs: Parameters<typeof codec.mint>) => {
           if (mintControl.fail) throw new Error('PRIVATE_MINT_FAILURE');
+          if (mintControl.omitCost) {
+            mintArgs[0] = { ...(mintArgs[0] as object), cost: undefined };
+          }
           return codec.mint(...mintArgs);
         },
       };
@@ -47,11 +50,13 @@ vi.mock('@modelcontextprotocol/server', async (importOriginal) => {
 });
 
 const confirmation = {
-  requestStateKey: 'a'.repeat(32),
-  principal: 'PRIVATE_PRINCIPAL',
-  ttlSeconds: 60,
-  enabledTools: ['create_project', 'create_branch'],
-} satisfies NonNullable<SupabaseMcpServerOptions['costConfirmation']>;
+  requestState: {
+    key: 'a'.repeat(32),
+    principal: 'PRIVATE_PRINCIPAL',
+    ttlSeconds: 60,
+  },
+  confirmation: { enabledTools: ['create_project', 'create_branch'] },
+} satisfies NonNullable<SupabaseMcpServerOptions['elicitation']>;
 const form: ClientCapabilities = { elicitation: { form: {} } };
 const tools = ['create_project', 'create_branch'] as const;
 type CostTool = (typeof tools)[number];
@@ -64,6 +69,7 @@ const cleanups: (() => Promise<void>)[] = [];
 
 afterEach(async () => {
   mintControl.fail = false;
+  mintControl.omitCost = false;
   vi.restoreAllMocks();
   vi.useRealTimers();
   await Promise.all(cleanups.splice(0).map((close) => close()));
@@ -153,7 +159,7 @@ async function setup(
     features: ['account', 'branching'],
     projectId: options.injected ? fake.project.id : undefined,
     readOnly: options.readOnly,
-    costConfirmation: options.configured === false ? undefined : confirmation,
+    elicitation: options.configured === false ? undefined : confirmation,
     observer,
     onToolCall: options.onToolCall,
   };

@@ -90,10 +90,12 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
     },
     // docs descriptions can fetch supabase.com; deliberately register account only.
     features: ['account'],
-    costConfirmation: {
-      requestStateKey: 'a'.repeat(32), // fixed test-only key, never a credential
-      principal: 'PRIVATE_PRINCIPAL',
-      enabledTools: ['create_project'],
+    elicitation: {
+      requestState: {
+        key: 'a'.repeat(32), // fixed test-only key, never a credential
+        principal: 'PRIVATE_PRINCIPAL',
+      },
+      confirmation: { enabledTools: ['create_project'] },
     },
   });
   const transport = new StreamableHTTPClientTransport(

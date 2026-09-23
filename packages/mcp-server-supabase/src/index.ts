@@ -18,7 +18,9 @@ export {
 } from './server.js';
 export { createSupabaseMcpHandler } from './transports/http.js';
 export {
+  CURRENT_ELICITATION_TOOLS,
   CURRENT_FEATURE_GROUPS,
+  type ElicitationToolName,
   type FeatureGroup,
 } from './types.js';
 export const version = packageJson.version;

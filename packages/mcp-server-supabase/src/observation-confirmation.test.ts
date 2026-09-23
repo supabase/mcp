@@ -184,6 +184,28 @@ describe.each(tools)('%s observation', (name) => {
     }
   );
 
+  test('rejects malformed same-tool state without a false validation classification', async () => {
+    const h = await setup();
+    mintControl.omitCost = true;
+    const first = issued(await h.call(name));
+    mintControl.omitCost = false;
+    const result = await h.call(name, {
+      requestState: first.requestState,
+      inputResponses: { confirm_cost: { action: 'accept', content: {} } },
+    });
+    expect((result as CallToolResult).isError).toBe(true);
+    expect((result as CallToolResult).structuredContent).toEqual({
+      status: 'error',
+    });
+    assertAttempt(
+      h.attempts[1],
+      name,
+      [decision('inline', 'eligible')],
+      'tool_error'
+    );
+    expect(h.operation(name)).not.toHaveBeenCalled();
+  });
+
   test.each([
     {
       legacy: true,
