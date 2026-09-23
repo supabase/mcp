@@ -98,9 +98,16 @@ describe('tools', () => {
         name: 'Notebook 1',
         content: {
           schema_version: 1,
-          cells: [{ id: 'cell-1', type: 'markdown', text: 'Hello world' }],
+          cells: expect.any(String),
         },
       })
+    );
+    expect(result.content.cells).toContain('untrusted user data');
+    expect(result.content.cells).toMatch(
+      /<untrusted-data-\w{8}-\w{4}-\w{4}-\w{4}-\w{12}>/
+    );
+    expect(result.content.cells).toContain(
+      JSON.stringify([{ id: 'cell-1', type: 'markdown', text: 'Hello world' }])
     );
   });
 
