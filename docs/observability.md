@@ -38,12 +38,12 @@ The observer factory must not return a Promise. An unsupported Promise return is
 
 Unknown tool names become `other`; raw names are not emitted. Initialize requests, notifications, unknown methods, and SDK rejections before handler entry do not create scopes.
 
-Currently, `execute_sql` and `apply_migration` are general handler buckets only. They emit no confirmation or operation facts; host `effective_config` remains `not_applicable` until the corresponding extension is adopted.
+Currently, `execute_sql` and `apply_migration` are general handler buckets only. They emit no confirmation or operation facts.
 
 For `tools/call`, observation begins before tool lookup, name validation, and Zod validation. Each scope ends in `finally`, after response shaping and before transport. End results use this precedence:
 
-1. `handler_error`: an error escapes the handler.
-2. `tool_error`: the direct result has `isError: true`.
+1. `handler_error`: an error escapes the handler, including when shaping an error response itself throws.
+2. `tool_error`: the direct result has `isError: true`, or a tool error (unknown tool, Zod validation failure, or `execute` throw) is caught and shaped into an error response.
 3. `input_required`: the response requests input.
 4. `declined` or `cancelled`: a terminal decline or cancel was consumed.
 5. `completed`: none of the above applies.
@@ -70,13 +70,12 @@ Operation durations cover actual awaited protected calls, not the whole confirma
 | `resume_validation` | `result: valid \| missing_response \| tool_mismatch \| arguments_mismatch \| changed_quote` |
 | `operation` | `disposition: started` |
 | `operation` | `disposition: returned \| threw`; `durationMs: number` |
+
 ## Failure isolation and disabled behavior
 
-With no observer, there is no scope, context, fact, clock, or Promise work. Guards and forwarding of `undefined` remain. If a configured factory returns `undefined`, the initial timestamp and context have already been created, but no subsequent facts, timing, or recorder are created for that scope.
-
-The safe wrapper catches factory failures, `record` and `end` property access or call failures, and rejection-attachment failures. It never awaits, retries, or logs sink failures. The internal helper ignores late facts and duplicate `end` calls; tools are not exposed to `end`. This is not an exactly-once delivery guarantee.
-
-Rejection handling uses a private intrinsic `Promise.prototype.then.call(Promise.resolve(value), undefined, drop)`, bypassing an individual Promise's own `catch` or `then` overrides. This is failure isolation, not a sandbox: global Promise tampering and hostile constructor or species access are outside the guarantee. A blocking synchronous sink cannot be preempted.
+- With no observer, there is no observation work: no scope, context, fact, clock, or Promise work.
+- The factory is called synchronously once per handler entry. A Promise or thenable it returns is discarded; `record` and `end` results are never awaited. Throws, throwing getters, and rejections from the factory, `record`, or `end` are swallowed without logging or retry, including when a returned Promise's own `then` or `catch` is overridden or throws. Facts after `end` and duplicate `end` calls are ignored; delivery is not exactly-once.
+- This is isolation, not a sandbox: a blocking synchronous sink still blocks, and global Promise tampering and hostile constructor or species access are outside the guarantee.
 
 ## Privacy and host responsibilities
 

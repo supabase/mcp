@@ -24,6 +24,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('safe observation scope', () => {
   test('first end closes even when the sink throws; duplicates and late facts are inert', () => {
+    vi.spyOn(performance, 'now').mockReturnValue(0);
     const record = vi.fn();
     const end = vi.fn(() => {
       throw failure;
@@ -32,8 +33,8 @@ describe('safe observation scope', () => {
     scope.record(decline);
     scope.record(decline);
     expect(scope.consumedTerminal()).toBe('declined');
-    scope.end(completed);
-    scope.end({ result: 'handler_error', durationMs: 12 });
+    scope.end('completed');
+    scope.end('handler_error');
     scope.record({ kind: 'input_response', feature: 'cost', action: 'accept' });
     expect(record.mock.calls).toEqual([[decline], [decline]]);
     expect(end.mock.calls).toEqual([[completed]]);
@@ -75,7 +76,7 @@ describe('safe observation scope', () => {
       } as unknown as RequestObservation;
       const scope = beginObservation(() => sink, context)!;
       scope.record(decline);
-      scope.end(completed);
+      scope.end('completed');
       // Let native promise adoption and its rejection handler run.
       await Promise.resolve();
       await Promise.resolve();
@@ -99,9 +100,9 @@ describe('safe observation scope', () => {
     };
     const scope = beginObservation(() => sink, context)!;
     scope.record(decline);
-    scope.end(completed);
+    scope.end('completed');
     scope.record(decline);
-    scope.end(completed);
+    scope.end('completed');
     expect(accesses).toEqual(['record', 'end']);
     expect(scope.consumedTerminal()).toBe('declined');
   });

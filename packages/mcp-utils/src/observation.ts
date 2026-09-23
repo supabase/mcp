@@ -1,6 +1,7 @@
 /**
  * Payload-free observations for MCP handler attempts and shipped cost confirmation.
  * These types do not describe transport delivery, consent, or backend commit.
+ * The Supabase server's vocabulary is intentionally hosted in mcp-utils.
  */
 
 export type ObservedMethod =
@@ -60,12 +61,12 @@ export type ObservationFact =
     }>
   | Readonly<{
       kind: 'operation';
-      feature: 'cost';
+      feature: ConfirmationFeature;
       disposition: 'started';
     }>
   | Readonly<{
       kind: 'operation';
-      feature: 'cost';
+      feature: ConfirmationFeature;
       disposition: 'returned' | 'threw';
       durationMs: number;
     }>;
@@ -81,22 +82,17 @@ export type ObservationEnd = Readonly<{
   durationMs: number;
 }>;
 
+/** Host callbacks receive payload-free facts and one terminal result; failures are isolated. */
 export type RequestObservation = Readonly<{
   record(fact: ObservationFact): void | Promise<void>;
   end(result: ObservationEnd): void | Promise<void>;
 }>;
 
+/** Synchronous factory for a handler observation; must not return a Promise or thenable. */
 export type RequestObserver = (
   context: ObservationContext
 ) => RequestObservation | undefined;
 
-/**
- * Terminal disposition implied by the most recently recorded consumed
- * action, when the handler otherwise returns without an explicit outcome
- * (no thrown/handler error, no `isError` result, no input-required round).
- * `undefined` when the last consumed action was not a decline/cancel, or no
- * action has been recorded yet.
- */
 type ConsumedTerminal = 'declined' | 'cancelled' | undefined;
 
 /**
@@ -106,7 +102,7 @@ type ConsumedTerminal = 'declined' | 'cancelled' | undefined;
  */
 export type ObservationScope = Readonly<{
   record(fact: ObservationFact): void;
-  end(result: ObservationEnd): void;
+  end(result: ObservationEnd['result']): void;
   /**
    * Reads the terminal disposition implied by the last consumed
    * decline/cancel action, for handlers that otherwise return an ordinary
@@ -125,22 +121,29 @@ export type ObservationScope = Readonly<{
  * Synchronous callbacks can still block; this is not a CPU sandbox.
  */
 export function beginObservation(
-  observer: RequestObserver,
+  observer: RequestObserver | undefined,
   context: ObservationContext
 ): ObservationScope | undefined {
+  if (!observer) {
+    return undefined;
+  }
+
+  const startedAt = performance.now();
   let observation: RequestObservation | undefined;
 
   try {
-    const created = observer(context);
+    observation = observer(context);
 
-    if (created instanceof Promise || isThenable(created)) {
+    if (observation instanceof Promise || isThenable(observation)) {
       // A synchronous factory returning a runtime Promise is unsupported.
       // Never await it; just consume any rejection and discard the scope.
-      Promise.prototype.then.call(Promise.resolve(created), undefined, drop);
+      Promise.prototype.then.call(
+        Promise.resolve(observation),
+        undefined,
+        drop
+      );
       return undefined;
     }
-
-    observation = created;
   } catch {
     // Factory failure disables this scope; it must never affect the caller.
     return undefined;
@@ -150,7 +153,6 @@ export function beginObservation(
     return undefined;
   }
 
-  const sink = observation;
   let ended = false;
   let consumedTerminal: ConsumedTerminal;
 
@@ -170,16 +172,17 @@ export function beginObservation(
               : undefined;
       }
 
-      safeCall(() => sink.record(fact));
+      safeCall(() => observation!.record(fact));
     },
-    end(result: ObservationEnd): void {
+    end(result: ObservationEnd['result']): void {
       // First end wins; duplicate end is a silent no-op, not a failure.
       if (ended) {
         return;
       }
       ended = true;
 
-      safeCall(() => sink.end(result));
+      const durationMs = performance.now() - startedAt;
+      safeCall(() => observation!.end({ result, durationMs }));
     },
     consumedTerminal(): ConsumedTerminal {
       return consumedTerminal;
