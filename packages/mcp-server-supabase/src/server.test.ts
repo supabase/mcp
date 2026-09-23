@@ -4,11 +4,20 @@ import {
   createProject,
   createProjectFixture,
   mockContentApiSchemaLoadCount,
+  mockProjects,
 } from '../test/mocks.js';
-import { createServerHarness } from '../test/server-harness.js';
+import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import type { SupabasePlatform } from './platform/types.js';
+import { BRANCH_COST_HOURLY, PROJECT_COST_MONTHLY } from './pricing.js';
 import { instructions } from './server.js';
+import type { SupabaseMcpServerOptions } from './server.js';
 import { supabaseMcpToolSchemas } from './tools/tool-schemas.js';
+import { isInputRequiredResult } from '@modelcontextprotocol/client';
+import type {
+  CallToolResult,
+  ClientCapabilities,
+  InputRequiredResult,
+} from '@modelcontextprotocol/client';
 import { stripIndent } from 'common-tags';
 import gqlmin from 'gqlmin';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -16,9 +25,30 @@ import { globalRegistry } from 'zod/v4';
 
 const harness = createServerHarness();
 const setup = harness.setup;
+const setupModern = harness.setupModern;
 
 beforeEach(() => harness.reset());
 afterEach(() => harness.close());
+
+const ELICITATION_REQUEST_STATE: NonNullable<
+  SupabaseMcpServerOptions['elicitation']
+>['requestState'] = {
+  key: 'a'.repeat(32),
+  principal: 'test-user',
+};
+
+const COST_CONFIRMATION: NonNullable<
+  NonNullable<SupabaseMcpServerOptions['elicitation']>['confirmation']
+> = {
+  enabledTools: [
+    'create_project',
+    'create_branch',
+    'execute_sql',
+    'apply_migration',
+  ],
+};
+
+const FORM_CAPABLE: ClientCapabilities = { elicitation: { form: {} } };
 
 describe('init', () => {
   test('server returns instructions', async () => {
