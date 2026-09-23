@@ -22,6 +22,7 @@ import { getDebuggingTools } from './tools/debugging-tools.js';
 import { getDevelopmentTools } from './tools/development-tools.js';
 import { getDocsTools } from './tools/docs-tools.js';
 import { getEdgeFunctionTools } from './tools/edge-function-tools.js';
+import { getNotebookTools } from './tools/notebook-tools.js';
 import {
   assertValidConnectUrlTemplate,
   getSecretTools,
@@ -60,7 +61,7 @@ export type SupabaseMcpServerOptions = {
 
   /**
    * Features to enable.
-   * Options: 'account', 'branching', 'database', 'debugging', 'development', 'docs', 'functions', 'storage'
+   * Options: 'account', 'branching', 'database', 'debugging', 'development', 'docs', 'functions', 'notebooks', 'storage'
    */
   features?: string[];
 
@@ -222,6 +223,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         storage,
         branching,
         secrets,
+        notebooks,
       } = platform;
       const tools: Record<string, Tool> = {};
 
@@ -300,6 +302,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
       if (storage && enabledFeatures.has('storage')) {
         Object.assign(tools, getStorageTools({ storage, projectId, readOnly }));
+      }
+
+      if (notebooks && enabledFeatures.has('notebooks')) {
+        Object.assign(tools, getNotebookTools({ notebooks, projectId }));
       }
 
       if (

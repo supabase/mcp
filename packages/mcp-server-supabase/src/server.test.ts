@@ -96,6 +96,7 @@ describe('tools', () => {
         'functions',
         'branching',
         'storage',
+        'notebooks',
       ],
     });
 
@@ -179,6 +180,7 @@ describe('tools', () => {
         'functions',
         'branching',
         'storage',
+        'notebooks',
       ],
     });
 
@@ -455,6 +457,17 @@ describe('feature groups', () => {
       'get_storage_config',
       'update_storage_config',
     ]);
+  });
+
+  test('notebooks tools', async () => {
+    const { client } = await setup({
+      features: ['notebooks'],
+    });
+
+    const { tools } = await client.listTools();
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toEqual(['list_notebooks', 'get_notebook']);
   });
 
   test('invalid group fails', async () => {

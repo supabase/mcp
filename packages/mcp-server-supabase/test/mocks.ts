@@ -15,6 +15,7 @@ import {
 } from '../src/content-api/graphql.js';
 import { getDeploymentId, getPathPrefix } from '../src/edge-function.js';
 import type { components } from '../src/management-api/types.js';
+import type { NotebookCell } from '../src/platform/types.js';
 
 const { version } = packageJson;
 
@@ -29,6 +30,7 @@ export const MCP_CLIENT_VERSION = '1.0.0';
 export const ACCESS_TOKEN = 'dummy-token';
 export const COUNTRY_CODE = 'US';
 export const CLOSEST_REGION = 'us-east-2';
+export const NOTEBOOKS_PAGE_SIZE = 2;
 
 const DEFAULT_USER_AGENT = `${MCP_SERVER_NAME}/${MCP_SERVER_VERSION} (${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION})`;
 let expectedManagementApiUserAgent: string | null = DEFAULT_USER_AGENT;
@@ -949,6 +951,84 @@ export const mockManagementApi = [
       }
     }
   ),
+
+  /**
+   * List notebooks
+   */
+  http.get<{ ref: string }>(
+    `${API_URL}/v2/projects/:ref/notebooks`,
+    ({ params, request }) => {
+      const project = mockProjects.get(params.ref);
+      if (!project) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Project not found' } },
+          { status: 404 }
+        );
+      }
+
+      const url = new URL(request.url);
+      // Kept small (vs. the real API's default) so tests can exercise
+      // multi-page pagination without creating huge fixtures.
+      const pageSize =
+        Number(url.searchParams.get('page[size]')) || NOTEBOOKS_PAGE_SIZE;
+      const after = url.searchParams.get('page[after]');
+
+      const allNotebooks = Array.from(project.notebooks.values());
+      const startIndex = after
+        ? allNotebooks.findIndex((notebook) => notebook.id === after) + 1
+        : 0;
+      const page = allNotebooks.slice(startIndex, startIndex + pageSize);
+      const hasNextPage = startIndex + pageSize < allNotebooks.length;
+
+      const data = page.map((notebook) => ({
+        type: 'notebook' as const,
+        id: notebook.id,
+        attributes: notebook.attributes,
+      }));
+
+      return HttpResponse.json({
+        data,
+        links: {
+          prev: null,
+          next: hasNextPage
+            ? `/v2/projects/${params.ref}/notebooks?page[size]=${pageSize}&page[after]=${page[page.length - 1]!.id}`
+            : null,
+        },
+      });
+    }
+  ),
+
+  /**
+   * Get notebook
+   */
+  http.get<{ ref: string; id: string }>(
+    `${API_URL}/v2/projects/:ref/notebooks/:id`,
+    ({ params }) => {
+      const project = mockProjects.get(params.ref);
+      if (!project) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Project not found' } },
+          { status: 404 }
+        );
+      }
+
+      const notebook = project.notebooks.get(params.id);
+      if (!notebook) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Notebook not found' } },
+          { status: 404 }
+        );
+      }
+
+      return HttpResponse.json({
+        data: {
+          type: 'notebook' as const,
+          id: notebook.id,
+          attributes: { ...notebook.attributes, content: notebook.content },
+        },
+      });
+    }
+  ),
 ];
 
 export function setupMockApis({
@@ -1219,6 +1299,50 @@ export class MockStorageBucket {
   }
 }
 
+export type MockNotebookOptions = {
+  name: string;
+  description?: string;
+  favorite?: boolean;
+  content?: {
+    schema_version: number;
+    cells: NotebookCell[];
+  };
+};
+
+export class MockNotebook {
+  id: string;
+  name: string;
+  description: string | null;
+  favorite: boolean;
+  inserted_at: Date;
+  updated_at: Date;
+  owner: { id: number; username: string } | null = null;
+  updated_by: { id: number; username: string } | null = null;
+  content: { schema_version: number; cells: NotebookCell[] };
+
+  constructor({ name, description, favorite, content }: MockNotebookOptions) {
+    this.id = crypto.randomUUID();
+    this.name = name;
+    this.description = description ?? null;
+    this.favorite = favorite ?? false;
+    this.inserted_at = new Date();
+    this.updated_at = new Date();
+    this.content = content ?? { schema_version: 1, cells: [] };
+  }
+
+  get attributes() {
+    return {
+      name: this.name,
+      description: this.description,
+      favorite: this.favorite,
+      inserted_at: this.inserted_at.toISOString(),
+      updated_at: this.updated_at.toISOString(),
+      owner: this.owner,
+      updated_by: this.updated_by,
+    };
+  }
+}
+
 export type MockProjectOptions = {
   name: string;
   region: string;
@@ -1244,6 +1368,7 @@ export class MockProject {
   migrations: Migration[] = [];
   edge_functions = new Map<string, MockEdgeFunction>();
   storage_buckets = new Map<string, MockStorageBucket>();
+  notebooks = new Map<string, MockNotebook>();
   // The existing creation timer belongs to this project, not a global task list.
   creation?: Promise<void>;
 
@@ -1390,6 +1515,12 @@ export class MockProject {
 
     this.storage_buckets.set(id, bucket);
     return bucket;
+  }
+
+  createNotebook(options: MockNotebookOptions): MockNotebook {
+    const notebook = new MockNotebook(options);
+    this.notebooks.set(notebook.id, notebook);
+    return notebook;
   }
 }
 
