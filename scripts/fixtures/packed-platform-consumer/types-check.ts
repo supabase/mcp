@@ -4,6 +4,14 @@ import {
   type ElicitationToolName,
   type SupabaseMcpServerOptions,
 } from '@supabase/mcp-server-supabase';
+import {
+  createMcpServer,
+  tool,
+  type McpServerOptions,
+  type Tool,
+} from '@supabase/mcp-utils';
+import type * as Utils from '@supabase/mcp-utils';
+import { z } from 'zod/v4';
 
 // A stubbed `account` platform, whose seven operations only ever run on a
 // tool call and so can reject here. It buys the thing that matters: asking
@@ -58,3 +66,66 @@ const optionsWithElicitation: SupabaseMcpServerOptions = {
 
 const handlerWithElicitation = createSupabaseMcpHandler(optionsWithElicitation);
 void handlerWithElicitation.fetch;
+
+// Check published exports and their relationships, not a copy of the vocabulary.
+type UtilsContract = [
+  Utils.ObservedMethod,
+  Utils.ObservedTool,
+  Utils.ObservationContext,
+  Utils.ConfirmationFeature,
+  Utils.ObservationFact,
+  Utils.ObservationEnd,
+  Utils.RequestObservation,
+  Utils.RequestObserver,
+];
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B
+  ? 1
+  : 2
+  ? true
+  : false;
+type Assert<T extends true> = T;
+type ExactUtilsOption = Assert<
+  Equal<McpServerOptions['observer'], Utils.RequestObserver | undefined>
+>;
+type ExactRecorder = Assert<
+  Equal<
+    Parameters<Tool['execute']>[2],
+    ((fact: Utils.ObservationFact) => void) | undefined
+  >
+>;
+
+const observer: Utils.RequestObserver = (context) => ({
+  record: async (fact) => {
+    void context.method;
+    void fact.kind;
+  },
+  end: (result) => {
+    void result.durationMs;
+  },
+});
+const observedTool = tool({
+  description: 'Public third-argument compatibility',
+  parameters: z.object({}),
+  outputSchema: z.object({ ok: z.boolean() }),
+  execute: async (_params, _context, record) => {
+    record?.({ kind: 'operation', feature: 'cost', disposition: 'started' });
+    return { ok: true };
+  },
+});
+// Existing one-/two-argument implementations remain assignable.
+const oneArgument: typeof observedTool.execute = async (_params) => ({
+  ok: true,
+});
+const twoArguments: typeof observedTool.execute = async (
+  _params,
+  _context
+) => ({ ok: true });
+void oneArgument;
+void twoArguments;
+const coreOptions: McpServerOptions = {
+  name: 'packed-observer',
+  version: '0.0.0',
+  observer,
+  tools: { observed: observedTool },
+};
+void createMcpServer(coreOptions);
