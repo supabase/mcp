@@ -3,12 +3,15 @@ import {
   type CallToolRequestParams,
   type CallToolResult,
   type ClientCapabilities,
+  type ClientOptions,
   type InputRequiredResult,
+  type JSONRPCMessage,
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client';
 import type { Server } from '@modelcontextprotocol/server';
 import { StreamTransport } from '@supabase/mcp-utils';
 import type { SetupServer } from 'msw/node';
+import { invalidateContentApiSchemaCache } from '../src/content-api/index.js';
 import { createSupabaseApiPlatform } from '../src/platform/api-platform.js';
 import type { SupabasePlatform } from '../src/platform/types.js';
 import {
@@ -34,6 +37,9 @@ type SetupOptions = {
   features?: string[];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
   clientCapabilities?: ClientCapabilities;
+  versionNegotiation?: ClientOptions['versionNegotiation'];
+  /** Observes every raw JSON-RPC message the server sends to the client. */
+  onServerMessage?: (message: JSONRPCMessage) => void;
 };
 
 type ModernSetupOptions = {
@@ -86,6 +92,8 @@ export function createServerHarness() {
       throw new Error('Close the server harness before resetting it');
     }
     mockServer = setupMockApis();
+    // The schema cache is process-wide, so it would otherwise leak across tests.
+    invalidateContentApiSchemaCache();
   }
 
   async function setup(options: SetupOptions = {}) {
@@ -96,6 +104,8 @@ export function createServerHarness() {
       features,
       elicitation,
       clientCapabilities = {},
+      versionNegotiation,
+      onServerMessage,
     } = options;
     const connection: Connection = {
       shutdown: new AbortController(),
@@ -112,25 +122,40 @@ export function createServerHarness() {
       preventAbort: true,
       preventCancel: true,
     };
-    for (const [source, destination] of [
-      [clientTransport, serverTransport],
-      [serverTransport, clientTransport],
-    ] as const) {
+    function pipe(
+      source: ReadableStream<JSONRPCMessage>,
+      destination: WritableStream<JSONRPCMessage>
+    ) {
       connection.pipes.push(
-        source.readable
-          .pipeTo(destination.writable, pipeOptions)
-          .catch((error) => {
-            // Identity, not error text or a broad closing flag, proves local shutdown.
-            if (error !== shutdownReason) {
-              pipeErrors.push(error);
-            }
-          })
+        source.pipeTo(destination, pipeOptions).catch((error) => {
+          // Identity, not error text or a broad closing flag, proves local shutdown.
+          if (error !== shutdownReason) {
+            pipeErrors.push(error);
+          }
+        })
       );
+    }
+    pipe(clientTransport.readable, serverTransport.writable);
+    if (onServerMessage) {
+      // Tap the server -> client direction so tests can assert on the wire format.
+      const tap = new TransformStream<JSONRPCMessage, JSONRPCMessage>({
+        transform(message, controller) {
+          onServerMessage(message);
+          controller.enqueue(message);
+        },
+      });
+      pipe(serverTransport.readable, tap.writable);
+      pipe(tap.readable, clientTransport.writable);
+    } else {
+      pipe(serverTransport.readable, clientTransport.writable);
     }
 
     const client = (connection.client = new Client(
       { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
-      { capabilities: clientCapabilities }
+      {
+        capabilities: clientCapabilities,
+        ...(versionNegotiation && { versionNegotiation }),
+      }
     ));
     const platform =
       options.platform ??
