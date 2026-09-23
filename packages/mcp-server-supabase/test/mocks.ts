@@ -30,6 +30,9 @@ export const ACCESS_TOKEN = 'dummy-token';
 export const COUNTRY_CODE = 'US';
 export const CLOSEST_REGION = 'us-east-2';
 
+const DEFAULT_USER_AGENT = `${MCP_SERVER_NAME}/${MCP_SERVER_VERSION} (${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION})`;
+let expectedManagementApiUserAgent: string | null = DEFAULT_USER_AGENT;
+
 export const contentApiMockSchema = source`
   schema {
     query: RootQueryType
@@ -84,6 +87,10 @@ export type Migration = {
 export const mockOrgs = new Map<string, MockOrganization>();
 export const mockProjects = new Map<string, MockProject>();
 export const mockBranches = new Map<string, MockBranch>();
+export const mockSecrets = new Map<
+  string,
+  Array<{ name: string; value: string; updated_at: string }>
+>();
 
 export const mockContentApiSchemaLoadCount = { value: 0 };
 
@@ -152,9 +159,7 @@ export const mockManagementApi = [
    */
   http.all(`${API_URL}/*`, ({ request }) => {
     const userAgent = request.headers.get('user-agent');
-    expect(userAgent).toBe(
-      `${MCP_SERVER_NAME}/${MCP_SERVER_VERSION} (${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION})`
-    );
+    expect(userAgent).toBe(expectedManagementApiUserAgent);
   }),
 
   /**
@@ -856,6 +861,17 @@ export const mockManagementApi = [
   ),
 
   /**
+   * List secrets
+   */
+  http.get<{ projectId: string }>(
+    `${API_URL}/v1/projects/:projectId/secrets`,
+    ({ params }) => {
+      const secrets = mockSecrets.get(params.projectId) ?? [];
+      return HttpResponse.json(secrets);
+    }
+  ),
+
+  /**
    * List storage buckets
    */
   http.get<{ ref: string }>(
@@ -935,10 +951,16 @@ export const mockManagementApi = [
   ),
 ];
 
-export function setupMockApis(): SetupServer {
+export function setupMockApis({
+  expectedUserAgent = DEFAULT_USER_AGENT,
+}: {
+  expectedUserAgent?: string | null;
+} = {}): SetupServer {
+  expectedManagementApiUserAgent = expectedUserAgent;
   mockOrgs.clear();
   mockProjects.clear();
   mockBranches.clear();
+  mockSecrets.clear();
   mockContentApiSchemaLoadCount.value = 0;
 
   const mockServer = setupServer(...mockContentApi, ...mockManagementApi);
@@ -959,11 +981,38 @@ export async function createProject(options: MockProjectOptions) {
   mockProjects.set(project.id, project);
 
   // Change the project status to ACTIVE_HEALTHY after a delay
-  setTimeout(async () => {
-    project.status = 'ACTIVE_HEALTHY';
-  }, 0);
+  project.creation = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      project.status = 'ACTIVE_HEALTHY';
+      resolve();
+    }, 0);
+  });
 
   return project;
+}
+
+export async function createProjectFixture(
+  options: {
+    organization?: Partial<
+      Pick<MockOrganizationOptions, 'name' | 'allowed_release_channels'>
+    >;
+    project?: Partial<Pick<MockProjectOptions, 'name' | 'region'>>;
+  } = {}
+) {
+  const organization = await createOrganization({
+    name: 'My Org',
+    plan: 'free',
+    allowed_release_channels: ['ga'],
+    ...options.organization,
+  });
+  const project = await createProject({
+    name: 'Project 1',
+    region: 'us-east-1',
+    ...options.project,
+    organization_id: organization.id,
+  });
+  project.status = 'ACTIVE_HEALTHY';
+  return { organization, project };
 }
 
 export async function createBranch(options: {
@@ -994,15 +1043,19 @@ export async function createBranch(options: {
   project.migrations = [...parentProject.migrations];
 
   // Run migrations on the new branch in the background
-  setTimeout(async () => {
-    try {
-      await project.applyMigrations();
-      branch.status = 'MIGRATIONS_PASSED';
-    } catch (error) {
-      branch.status = 'MIGRATIONS_FAILED';
-      console.error('Migration error:', error);
-    }
-  }, 0);
+  project.creation = new Promise<void>((resolve) => {
+    setTimeout(async () => {
+      try {
+        await project.applyMigrations();
+        branch.status = 'MIGRATIONS_PASSED';
+      } catch (error) {
+        branch.status = 'MIGRATIONS_FAILED';
+        console.error('Migration error:', error);
+      } finally {
+        resolve();
+      }
+    }, 0);
+  });
 
   return branch;
 }
@@ -1191,19 +1244,27 @@ export class MockProject {
   migrations: Migration[] = [];
   edge_functions = new Map<string, MockEdgeFunction>();
   storage_buckets = new Map<string, MockStorageBucket>();
+  // The existing creation timer belongs to this project, not a global task list.
+  creation?: Promise<void>;
 
   #db?: PGliteInterface;
+  #dbInitialization?: Promise<PromiseSettledResult<unknown>>;
 
   // Lazy load the database connection
   get db() {
     if (!this.#db) {
-      this.#db = new PGlite();
-      this.#db.waitReady.then(() => {
-        this.#db!.exec(`
-          CREATE ROLE supabase_read_only_role;
-          GRANT pg_read_all_data TO supabase_read_only_role;
-        `);
-      });
+      const db = (this.#db = new PGlite());
+      this.#dbInitialization = db.waitReady
+        .then(() =>
+          db.exec(`
+            CREATE ROLE supabase_read_only_role;
+            GRANT pg_read_all_data TO supabase_read_only_role;
+          `)
+        )
+        .then(
+          (value) => ({ status: 'fulfilled' as const, value }),
+          (reason: unknown) => ({ status: 'rejected' as const, reason })
+        );
     }
     return this.#db;
   }
@@ -1251,11 +1312,31 @@ export class MockProject {
   }
 
   async resetDb() {
-    if (this.#db) {
-      await this.#db.close();
-    }
-    this.#db = undefined;
+    await this.#closeDb();
     return this.db;
+  }
+
+  async #closeDb() {
+    const db = this.#db;
+    if (!db) {
+      return;
+    }
+    const errors: unknown[] = [];
+    const initialization = await this.#dbInitialization;
+    if (initialization?.status === 'rejected') {
+      errors.push(initialization.reason);
+    }
+    try {
+      await db.close();
+    } catch (error) {
+      errors.push(error);
+    } finally {
+      this.#db = undefined;
+      this.#dbInitialization = undefined;
+    }
+    if (errors.length) {
+      throw new AggregateError(errors, 'Mock project database teardown failed');
+    }
   }
 
   async deployEdgeFunction(
@@ -1278,8 +1359,19 @@ export class MockProject {
   }
 
   async destroy() {
-    if (this.#db) {
-      await this.#db.close();
+    const errors: unknown[] = [];
+    try {
+      await this.creation;
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      await this.#closeDb();
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length) {
+      throw new AggregateError(errors, 'Mock project teardown failed');
     }
   }
 
