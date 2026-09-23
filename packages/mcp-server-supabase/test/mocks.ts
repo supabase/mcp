@@ -30,6 +30,7 @@ export const MCP_CLIENT_VERSION = '1.0.0';
 export const ACCESS_TOKEN = 'dummy-token';
 export const COUNTRY_CODE = 'US';
 export const CLOSEST_REGION = 'us-east-2';
+export const NOTEBOOKS_PAGE_SIZE = 2;
 
 const DEFAULT_USER_AGENT = `${MCP_SERVER_NAME}/${MCP_SERVER_VERSION} (${MCP_CLIENT_NAME}/${MCP_CLIENT_VERSION})`;
 let expectedManagementApiUserAgent: string | null = DEFAULT_USER_AGENT;
@@ -956,7 +957,7 @@ export const mockManagementApi = [
    */
   http.get<{ ref: string }>(
     `${API_URL}/v2/projects/:ref/notebooks`,
-    ({ params }) => {
+    ({ params, request }) => {
       const project = mockProjects.get(params.ref);
       if (!project) {
         return HttpResponse.json(
@@ -965,7 +966,21 @@ export const mockManagementApi = [
         );
       }
 
-      const data = Array.from(project.notebooks.values()).map((notebook) => ({
+      const url = new URL(request.url);
+      // Kept small (vs. the real API's default) so tests can exercise
+      // multi-page pagination without creating huge fixtures.
+      const pageSize =
+        Number(url.searchParams.get('page[size]')) || NOTEBOOKS_PAGE_SIZE;
+      const after = url.searchParams.get('page[after]');
+
+      const allNotebooks = Array.from(project.notebooks.values());
+      const startIndex = after
+        ? allNotebooks.findIndex((notebook) => notebook.id === after) + 1
+        : 0;
+      const page = allNotebooks.slice(startIndex, startIndex + pageSize);
+      const hasNextPage = startIndex + pageSize < allNotebooks.length;
+
+      const data = page.map((notebook) => ({
         type: 'notebook' as const,
         id: notebook.id,
         attributes: notebook.attributes,
@@ -973,7 +988,12 @@ export const mockManagementApi = [
 
       return HttpResponse.json({
         data,
-        links: { prev: null, next: null },
+        links: {
+          prev: null,
+          next: hasNextPage
+            ? `/v2/projects/${params.ref}/notebooks?page[size]=${pageSize}&page[after]=${page[page.length - 1]!.id}`
+            : null,
+        },
       });
     }
   ),

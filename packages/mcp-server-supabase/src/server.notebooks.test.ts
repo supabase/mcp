@@ -1,4 +1,8 @@
-import { createOrganization, createProject } from '../test/mocks.js';
+import {
+  createOrganization,
+  createProject,
+  NOTEBOOKS_PAGE_SIZE,
+} from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
@@ -58,6 +62,46 @@ describe('tools', () => {
     );
     // list_notebooks omits cell content
     expect(result.notebooks[0].content).toBeUndefined();
+  });
+
+  test('list notebooks follows pagination across multiple pages', async () => {
+    const { callTool } = await setup({ features: ['notebooks'] });
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    // One more notebook than fits in two pages, so the mock's page size
+    // forces the client to follow `links.next` at least twice.
+    const notebookCount = NOTEBOOKS_PAGE_SIZE * 2 + 1;
+    const names = Array.from(
+      { length: notebookCount },
+      (_, i) => `Notebook ${i + 1}`
+    );
+    for (const name of names) {
+      project.createNotebook({ name });
+    }
+
+    const result = await callTool({
+      name: 'list_notebooks',
+      arguments: {
+        project_id: project.id,
+      },
+    });
+
+    expect(result.notebooks.length).toBe(notebookCount);
+    expect(result.notebooks.map((notebook: any) => notebook.name)).toEqual(
+      names
+    );
   });
 
   test('get notebook', async () => {

@@ -43,6 +43,7 @@ import {
   type EdgeFunctionWithBody,
   type ExecuteSqlOptions,
   type GetLogsOptions,
+  type Notebook,
   type NotebookOperations,
   type QueryLogsOptions,
   type ResetBranchOptions,
@@ -852,23 +853,35 @@ export function createSupabaseApiPlatform(
 
   const notebooks: NotebookOperations = {
     async listNotebooks(projectId: string) {
-      const response = await managementApiV2Client.GET(
-        '/v2/projects/{ref}/notebooks',
-        {
-          params: {
-            path: {
-              ref: projectId,
+      const notebooks: Notebook[] = [];
+      let cursor: string | undefined;
+
+      do {
+        const response = await managementApiV2Client.GET(
+          '/v2/projects/{ref}/notebooks',
+          {
+            params: {
+              path: {
+                ref: projectId,
+              },
+              query: cursor ? { page: { after: cursor } } : undefined,
             },
-          },
-        }
-      );
+          }
+        );
 
-      assertSuccessV2(response, "Failed to retrieve project's notebooks");
+        assertSuccessV2(response, "Failed to retrieve project's notebooks");
 
-      return response.data.data.map(({ id, attributes }) => ({
-        id,
-        ...attributes,
-      }));
+        notebooks.push(
+          ...response.data.data.map(({ id, attributes }) => ({
+            id,
+            ...attributes,
+          }))
+        );
+
+        cursor = getNextNotebooksCursor(response.data.links.next);
+      } while (cursor);
+
+      return notebooks;
     },
     async getNotebook(projectId: string, notebookId: string) {
       const response = await managementApiV2Client.GET(
@@ -925,6 +938,19 @@ export function createSupabaseApiPlatform(
   };
 
   return platform;
+}
+
+/**
+ * Extracts the `page[after]` cursor from a JSON:API `links.next` URL path
+ * (e.g. `/v2/projects/{ref}/notebooks?page[size]=10&page[after]=<cursor>`).
+ */
+function getNextNotebooksCursor(next: string | null | undefined) {
+  if (!next) {
+    return undefined;
+  }
+
+  const url = new URL(next, 'https://supabase.com');
+  return url.searchParams.get('page[after]') ?? undefined;
 }
 
 function getProjectDomain(apiHostname: string) {
