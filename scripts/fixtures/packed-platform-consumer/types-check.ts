@@ -1,9 +1,11 @@
 import {
   createSupabaseMcpHandler,
+  createSupabaseMcpServer,
   CURRENT_ELICITATION_TOOLS,
   type ElicitationToolName,
   type SupabaseMcpServerOptions,
 } from '@supabase/mcp-server-supabase';
+import type * as Supabase from '@supabase/mcp-server-supabase';
 import {
   createMcpServer,
   tool,
@@ -129,3 +131,24 @@ const coreOptions: McpServerOptions = {
   tools: { observed: observedTool },
 };
 void createMcpServer(coreOptions);
+
+type SupabaseContract = [
+  Supabase.ObservedMethod,
+  Supabase.ObservedTool,
+  Supabase.ObservationContext,
+  Supabase.ConfirmationFeature,
+  Supabase.ObservationFact,
+  Supabase.ObservationEnd,
+  Supabase.RequestObservation,
+  Supabase.RequestObserver,
+];
+type ExactSupabaseContract = Assert<Equal<SupabaseContract, UtilsContract>>;
+type ExactSupabaseOption = Assert<
+  Equal<SupabaseMcpServerOptions['observer'], Utils.RequestObserver | undefined>
+>;
+const observedSupabaseOptions: SupabaseMcpServerOptions = {
+  ...options,
+  observer,
+};
+void createSupabaseMcpServer(observedSupabaseOptions);
+void createSupabaseMcpHandler(observedSupabaseOptions);

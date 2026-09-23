@@ -1,12 +1,12 @@
 # Observability
 
-The server provides an optional, vendor-neutral observer for five request-handler lifecycles and bounded facts recorded by tools, without exposing request contents. No collection, host metrics, provider, exporter, queue, or host adoption is configured by this API.
+The server provides an optional, vendor-neutral observer for five request-handler lifecycles and the existing cost-confirmation flow. It emits bounded facts without exposing request contents. No collection, host metrics, provider, exporter, queue, or host adoption is configured by this API.
 
 ## API and ownership
 
-Set `observer?: RequestObserver` on `McpServerOptions` for `createMcpServer`.
+Set `observer?: RequestObserver` on `McpServerOptions` for `createMcpServer` or on `SupabaseMcpServerOptions` for `createSupabaseMcpServer`. `createSupabaseMcpHandler` inherits the same options.
 
-`@supabase/mcp-utils` exports:
+Both `@supabase/mcp-utils` and `@supabase/mcp-server-supabase` export:
 
 - `ObservedMethod`
 - `ObservedTool`
@@ -22,7 +22,7 @@ Set `observer?: RequestObserver` on `McpServerOptions` for `createMcpServer`.
 - `record(fact): void | Promise<void>`
 - `end({ result, durationMs }): void | Promise<void>`
 
-Only the handler owns `end`. Tool code receives an optional safe, synchronous recorder through the additive third argument to `Tool.execute(params, context, record?: (fact: ObservationFact) => void)`. Existing one- and two-argument callers continue to work.
+Only the handler owns `end`. Tool code receives an optional safe, synchronous recorder through the additive third argument to `Tool.execute(params, context, record?: (fact: ObservationFact) => void)`. Existing one- and two-argument callers continue to work; `injectableTool` forwards the recorder.
 
 The observer factory must not return a Promise. An unsupported Promise return is discarded, with its rejection consumed.
 
@@ -58,9 +58,9 @@ Handler `durationMs` uses a monotonic clock from handler entry through response 
 
 Operation durations cover actual awaited protected calls, not the whole confirmation flow. `returned` does not prove readiness or commit; `threw` does not prove that nothing committed.
 
-## Tool-recorded facts: cost confirmation
+## Current facts: cost confirmation
 
-`ConfirmationFeature` contains only `cost`, and every fact has `feature: 'cost'`. Custom tools can record the full cost fact vocabulary; built-in Supabase cost instrumentation is not available.
+`ConfirmationFeature` currently contains only `cost`. Every current fact has `feature: 'cost'`.
 
 | `kind` | Fields and values |
 | --- | --- |
@@ -70,6 +70,21 @@ Operation durations cover actual awaited protected calls, not the whole confirma
 | `resume_validation` | `result: valid \| missing_response \| tool_mismatch \| arguments_mismatch \| changed_quote` |
 | `operation` | `disposition: started` |
 | `operation` | `disposition: returned \| threw`; `durationMs: number` |
+
+The decision pairs are:
+
+- `blocked/read_only`.
+- `legacy/not_configured`, checked before `legacy/capability_missing`.
+- `inline/eligible`.
+- Initial project-only `bypass/zero_cost`. Branch creation has no corresponding shortcut.
+
+Modern resume validation, missing responses, changed quotes, and actions use the literal facts above. Legacy hash checks are not reported as modern resume validation.
+
+All five actual protected project and branch call sites emit `operation/started`, followed by `operation/returned` or `operation/threw` with a duration. This includes legacy and zero-cost paths.
+
+`checkConfirmationState` records `input_required` after the caller's `askForConfirmation` resolves, so issuance is recorded only when minting and response construction succeed. It does not establish delivery or display. `input_response/accept` records an action, not independently verified consent.
+
+Observation does not change confirmation rules or execution behavior.
 
 ## Failure isolation and disabled behavior
 
@@ -85,3 +100,50 @@ The existing raw `onToolCall` callback is unchanged and is not certified privacy
 
 Hosts control any local collection, configuration, privacy policy, access, retention, and loss handling. None is enabled here. Hosts must not interpret missing observations as proof that an action did not occur.
 
+## Future extensions
+
+These recipes add observation to existing features, not feature behavior. Neither producer extension is implemented here; either may land first and must retain the other's accepted members.
+
+### Destructive SQL confirmation
+
+#408 is already merged (`c9c4e3f`). `database-operation-tools.ts` already calls `inspectConfirmationState`; preserve its parser, policy, and execution behavior.
+
+- Add `destructive_sql` to `ConfirmationFeature` and `not_destructive` to decision reasons.
+- Widen both operation variants to permit `cost | destructive_sql`; retain `durationMs` on `returned | threw`.
+- Reuse the `execute_sql` and `apply_migration` buckets; add no tool bucket, issuance mode, action, or end result.
+- Retain every cost member, including `tool_mismatch` and `changed_quote`, and any accepted URL members. Never add `secret_collection` to operations.
+- Malformed same-tool state remains generic `tool_error` only; do not add `invalid_state`.
+
+| Decision pair | Branch |
+| --- | --- |
+| `inline/eligible` | Eligible inline confirmation |
+| `bypass/not_configured` | Confirmation not configured |
+| `bypass/capability_missing` | Required capability missing |
+| `bypass/not_destructive` | Classifier reports not destructive |
+| `bypass/read_only` | `execute_sql` only |
+| `blocked/read_only` | `apply_migration` only |
+
+`not_destructive` reports the classifier's result, not global SQL safety or authorization. Preserve initial no-state, missing-response, tool/argument-mismatch, and cost `changed_quote` distinctions.
+If SQL adopts `checkConfirmationState`, keep it the sole owner of `input_response` and `resume_validation`; it also records `input_required` only after `askForConfirmation` resolves, when minting and response construction have succeeded. Time actual awaited `executeSql`/`applyMigration` calls, including bypass paths, not parsing or policy; emit no operations for decline, cancel, invalid, or missing-response paths.
+
+### URL secret collection
+
+#412 is already merged (`fb88629`). `secret-tools.ts` handles state inline; preserve its TTL, `issued_at`, fresh-call recovery, and gating without changing cost instrumentation.
+
+- Add `secret_collection` to `ConfirmationFeature`, `create_edge_function_secret` to `ObservedTool`, and decision reasons `recent_update | unsupported_client`.
+- Widen issuance modes to `form | url` and add issuance reason `update_not_observed`.
+- Add `Readonly<{ kind: 'url_metadata'; observation: 'recent_update_observed' | 'resume_update_observed' | 'update_not_observed' }>` with no `feature` field.
+- Retain cost and any accepted SQL members. Add neither secret operations nor `resume_validation.update_not_observed` nor a URL-only `invalid_state`.
+
+| Branch | Observations |
+| --- | --- |
+| Read-only block | `blocked/read_only` |
+| Initial unsupported client | `blocked/unsupported_client` |
+| Initial recent update | `bypass/recent_update` and `recent_update_observed` |
+| Normal initial issuance | `inline/eligible`, then successful `url/initial` issuance |
+| Retry | `inline/eligible`, without an invented capability check |
+
+Instrument the inline mismatch, missing-response, and action branches once. A validated accept emits `accept` and `valid` once, then `resume_update_observed` or `update_not_observed`; the latter reissues `url/update_not_observed` while preserving `issued_at`. Record issuance only after minting and response construction succeed.
+Neither `getUpdatedAt` nor external dashboard writes are observed operations, and there is no modern completion-notification hook. URL facts do not prove consent, display, opening, completion, a causal write, uniqueness, or abandonment.
+
+For either extension, update canonical types, public exports, recorder consumers, and exhaustive consumers, and deliberately select a compatible package version: finite-union additions can break exhaustive consumers. Exercise the packed ESM/CJS consumer fixtures against the immutable package artifact, retaining existing cost compatibility.

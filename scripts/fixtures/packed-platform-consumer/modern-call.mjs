@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -7,78 +9,160 @@ import { createSupabaseMcpHandler } from '@supabase/mcp-server-supabase';
 // https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/
 const MODERN_PROTOCOL_VERSION = '2026-07-28';
 
-// Stubbed `account` operations only run on a tool call. The account feature
-// registers real zod-built schemas, and the tools/list checks below verify
-// that create_project keeps its required properties with Platform's zod pin.
-// `docs` stays out: its tool description lazily calls supabase.com, and this
-// exchange must never leave the process.
-const notImplemented = () => Promise.reject(new Error('not implemented'));
+const project = {
+  id: 'PRIVATE_PROJECT_ID',
+  ref: 'PRIVATE_PROJECT_REF',
+  organization_id: 'PRIVATE_ORGANIZATION',
+  organization_slug: 'PRIVATE_SLUG',
+  name: 'PRIVATE_PROJECT_NAME',
+  status: 'ACTIVE_HEALTHY',
+  created_at: '2026-01-01T00:00:00Z',
+  region: 'us-east-1',
+};
+const args = {
+  name: project.name,
+  region: project.region,
+  organization_id: project.organization_id,
+};
+const decision = {
+  kind: 'confirmation_decision',
+  feature: 'cost',
+  route: 'inline',
+  reason: 'eligible',
+};
+const issuance = {
+  kind: 'input_required',
+  feature: 'cost',
+  mode: 'form',
+  reason: 'initial',
+};
 
-const handler = createSupabaseMcpHandler({
-  platform: {
-    account: {
-      listOrganizations: notImplemented,
-      getOrganization: notImplemented,
-      listProjects: notImplemented,
-      getProject: notImplemented,
-      createProject: notImplemented,
-      pauseProject: notImplemented,
-      restoreProject: notImplemented,
+// CJS calls this same scenario with its require()-loaded constructor. The SDK
+// transport stays fetch-in-process: no listener, credentials or backend.
+export async function runConsumer(createHandler = createSupabaseMcpHandler) {
+  const scopes = [];
+  let creates = 0;
+  const observer = (context) => {
+    const scope = { context, facts: [], ends: [] };
+    scopes.push(scope);
+    return {
+      record(fact) {
+        scope.facts.push(fact);
+      },
+      end(end) {
+        scope.ends.push(end);
+      },
+    };
+  };
+  const notImplemented = () =>
+    Promise.reject(new Error('unexpected platform call'));
+  const handler = createHandler({
+    observer,
+    platform: {
+      account: {
+        listOrganizations: notImplemented,
+        getOrganization: async () => ({
+          id: project.organization_id,
+          name: 'PRIVATE_ORG_NAME',
+          plan: 'pro',
+          allowed_release_channels: [],
+          opt_in_tags: [],
+        }),
+        listProjects: async () => [project],
+        getProject: notImplemented,
+        createProject: async (input) => {
+          assert.deepEqual(input, args);
+          creates++;
+          return project;
+        },
+        pauseProject: notImplemented,
+        restoreProject: notImplemented,
+      },
     },
-  },
-  features: ['account'],
-});
+    // docs descriptions can fetch supabase.com; deliberately register account only.
+    features: ['account'],
+    elicitation: {
+      requestState: {
+        key: 'a'.repeat(32), // fixed test-only key, never a credential
+        principal: 'PRIVATE_PRINCIPAL',
+      },
+      confirmation: { enabledTools: ['create_project'] },
+    },
+  });
+  const transport = new StreamableHTTPClientTransport(
+    new URL('http://packed-platform-consumer-fixture.invalid/mcp'),
+    { fetch: (url, init) => handler.fetch(new Request(url, init)) }
+  );
+  const client = new Client(
+    { name: 'PRIVATE_CLIENT_NAME', version: '0.0.0' },
+    {
+      capabilities: { elicitation: { form: {} } },
+      versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
+      inputRequired: { autoFulfill: false },
+    }
+  );
+  const call = (params) =>
+    client.request(
+      { method: 'tools/call', params },
+      { allowInputRequired: true }
+    );
+  const start = () => call({ name: 'create_project', arguments: args });
+  const resume = (first) =>
+    call({
+      name: 'create_project',
+      arguments: args,
+      requestState: first.requestState,
+      inputResponses: {
+        confirm_cost: { action: 'accept', content: {} },
+      },
+    });
+  try {
+    await client.connect(transport);
+    assert.equal(
+      scopes.length,
+      0,
+      'initialize must not start a producer scope'
+    );
+    const { tools } = await client.listTools();
+    const listProjects = tools.find((tool) => tool.name === 'list_projects');
+    assert.ok(listProjects?.inputSchema);
+    const createProject = tools.find((tool) => tool.name === 'create_project');
+    assert.ok(createProject?.inputSchema?.properties);
+    for (const property of ['name', 'region', 'organization_id']) {
+      assert.ok(
+        Object.hasOwn(createProject.inputSchema.properties, property),
+        `missing schema property ${property}`
+      );
+    }
+    assert.deepEqual(scopes[0].context, {
+      method: 'tools/list',
+      tool: 'not_applicable',
+    });
+    assert.deepEqual(scopes[0].facts, []);
+    assert.equal(scopes[0].ends[0].result, 'completed');
 
-const transport = new StreamableHTTPClientTransport(
-  new URL('http://packed-platform-consumer-fixture.invalid/mcp'),
-  {
-    // Routes every request straight into the handler's fetch face in-process.
-    fetch: (url, init) => handler.fetch(new Request(url, init)),
+    const first = await start();
+    assert.ok(first.inputRequests?.confirm_cost);
+    assert.equal(typeof first.requestState, 'string');
+    assert.equal(creates, 0);
+    assert.deepEqual(scopes[1].facts, [decision, issuance]);
+    assert.equal(scopes[1].ends[0].result, 'input_required');
+    const accepted = await resume(first);
+    assert.equal(accepted.isError, undefined);
+    assert.deepEqual(accepted.content, [
+      { type: 'text', text: JSON.stringify(project) },
+    ]);
+    assert.equal(creates, 1);
+    return tools.length;
+  } finally {
+    await client.close();
+    await handler.close();
   }
-);
-
-const client = new Client(
-  { name: 'packed-platform-consumer-fixture', version: '0.0.0' },
-  { versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } } }
-);
-
-await client.connect(transport);
-const { tools } = await client.listTools();
-
-// The no-argument witness proves that list_projects and its input schema are
-// present. The parameterized create_project witness below proves that the
-// zod-built schema keeps its required inputs across the dependency boundary.
-const listProjects = tools.find((tool) => tool.name === 'list_projects');
-
-if (!listProjects?.inputSchema) {
-  throw new Error(
-    `tools/list did not return list_projects with an input schema (got: ${JSON.stringify(tools.map((tool) => tool.name))})`
-  );
 }
 
-const createProject = tools.find((tool) => tool.name === 'create_project');
-
-if (!createProject?.inputSchema?.properties) {
-  throw new Error(
-    `tools/list did not return create_project with input schema properties (got: ${JSON.stringify(tools.map((tool) => tool.name))})`
-  );
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  console.log(`MODERN_CALL_OK tools=${await runConsumer()}`);
 }
-
-const requiredCreateProjectProperties = ['name', 'region', 'organization_id'];
-const createProjectProperties = Object.keys(
-  createProject.inputSchema.properties
-);
-const missingCreateProjectProperties = requiredCreateProjectProperties.filter(
-  (property) => !createProjectProperties.includes(property)
-);
-
-if (missingCreateProjectProperties.length > 0) {
-  throw new Error(
-    `create_project input schema is missing required properties: ${missingCreateProjectProperties.join(', ')} (got: ${JSON.stringify(createProjectProperties)})`
-  );
-}
-
-await client.close();
-await handler.close();
-
-console.log(`MODERN_CALL_OK tools=${tools.length}`);
