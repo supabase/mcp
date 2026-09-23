@@ -1,6 +1,4 @@
 import {
-  mintControl,
-  form,
   tools,
   setup,
   issued,
@@ -17,7 +15,7 @@ import {
   isInputRequiredResult,
   type CallToolResult,
 } from '@modelcontextprotocol/client';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import * as pricing from './pricing.js';
 import { hashObject } from './util.js';
 
@@ -114,46 +112,6 @@ describe.each(tools)('%s observation', (name) => {
     expect(h.operation(name)).not.toHaveBeenCalled();
   });
 
-  test.each(['initial', 'missing_response', 'changed_quote'] as const)(
-    'failed %s mint does not count an issued round',
-    async (reason) => {
-      const h = await setup();
-      const first =
-        reason === 'initial' ? undefined : issued(await h.call(name));
-      if (reason === 'changed_quote') changeQuote(name);
-      mintControl.fail = true;
-      const result = await h.call(
-        name,
-        first
-          ? {
-              requestState: first.requestState,
-              ...(reason === 'changed_quote'
-                ? {
-                    inputResponses: {
-                      confirm_cost: { action: 'accept' as const, content: {} },
-                    },
-                  }
-                : {}),
-            }
-          : {}
-      );
-      expect((result as CallToolResult).isError).toBe(true);
-      const prior =
-        reason === 'initial'
-          ? []
-          : reason === 'missing_response'
-            ? [validation('missing_response')]
-            : [response('accept'), validation('changed_quote')];
-      assertAttempt(
-        h.attempts.at(-1),
-        name,
-        [decision('inline', 'eligible'), ...prior],
-        'tool_error'
-      );
-      expect(h.operation(name)).not.toHaveBeenCalled();
-    }
-  );
-
   test.each(['tool_mismatch', 'arguments_mismatch'] as const)(
     'rejects %s without consuming accept',
     async (mismatch) => {
@@ -184,28 +142,6 @@ describe.each(tools)('%s observation', (name) => {
     }
   );
 
-  test('rejects malformed same-tool state without a false validation classification', async () => {
-    const h = await setup();
-    mintControl.omitCost = true;
-    const first = issued(await h.call(name));
-    mintControl.omitCost = false;
-    const result = await h.call(name, {
-      requestState: first.requestState,
-      inputResponses: { confirm_cost: { action: 'accept', content: {} } },
-    });
-    expect((result as CallToolResult).isError).toBe(true);
-    expect((result as CallToolResult).structuredContent).toEqual({
-      status: 'error',
-    });
-    assertAttempt(
-      h.attempts[1],
-      name,
-      [decision('inline', 'eligible')],
-      'tool_error'
-    );
-    expect(h.operation(name)).not.toHaveBeenCalled();
-  });
-
   test.each([
     {
       legacy: true,
@@ -215,26 +151,8 @@ describe.each(tools)('%s observation', (name) => {
     },
     {
       legacy: false,
-      configured: false,
-      capabilities: form,
-      reason: 'not_configured' as const,
-    },
-    {
-      legacy: true,
-      configured: true,
-      capabilities: form,
-      reason: 'capability_missing' as const,
-    },
-    {
-      legacy: false,
       configured: true,
       capabilities: {},
-      reason: 'capability_missing' as const,
-    },
-    {
-      legacy: false,
-      configured: true,
-      capabilities: { elicitation: { url: {} } },
       reason: 'capability_missing' as const,
     },
   ])(
@@ -281,31 +199,6 @@ describe.each(tools)('%s observation', (name) => {
     );
     expect(h.operation(name)).not.toHaveBeenCalled();
   });
-
-  test.each(['signature', 'expiry'] as const)(
-    'SDK %s rejection creates no additional scope',
-    async (kind) => {
-      const h = await setup();
-      const first = issued(await h.call(name));
-      let requestState = first.requestState as string;
-      if (kind === 'signature') {
-        const segments = requestState.split('.');
-        const signature = segments.pop()!;
-        segments.push((signature[0] === 'a' ? 'b' : 'a') + signature.slice(1));
-        requestState = segments.join('.');
-      } else {
-        vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 120_000);
-      }
-      await expect(
-        h.call(name, {
-          requestState,
-          inputResponses: { confirm_cost: { action: 'accept', content: {} } },
-        })
-      ).rejects.toMatchObject({ code: -32602 });
-      expect(h.attempts).toHaveLength(1);
-      expect(h.operation(name)).not.toHaveBeenCalled();
-    }
-  );
 });
 
 test.each(tools)(

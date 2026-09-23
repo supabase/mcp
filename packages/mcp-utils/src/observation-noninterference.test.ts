@@ -5,7 +5,7 @@ import type {
   RequestObservation,
   RequestObserver,
 } from './observation.js';
-import { action, capture, handlers } from './observation-test-helpers.js';
+import { action, handlers } from './observation-test-helpers.js';
 
 const decline: ObservationFact = {
   kind: 'input_response',
@@ -106,22 +106,6 @@ describe('observer noninterference', () => {
       });
     }
   );
-
-  test('resources/read error serialization failure ends as handler_error', async () => {
-    const seen = capture();
-    const run = handlers({
-      observer: seen.observer,
-      resources: () => {
-        throw { message: 1n };
-      },
-    });
-    await expect(
-      run('resources/read', { uri: 'test://a' })
-    ).rejects.toBeInstanceOf(TypeError);
-    expect(seen.scopes[0]!.ends).toEqual([
-      { result: 'handler_error', durationMs: expect.any(Number) },
-    ]);
-  });
 });
 
 test.each(['factory', 'record', 'end'] as const)(

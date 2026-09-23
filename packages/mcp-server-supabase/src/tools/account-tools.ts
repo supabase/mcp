@@ -10,6 +10,7 @@ import {
   actionOnlyElicitationSchema,
   checkConfirmationState,
   isFormCapable,
+  observeCostOperation,
   projectCostStateSchema,
   type ElicitationState,
 } from './confirmation.js';
@@ -332,34 +333,9 @@ export function getAccountTools({
               route: 'bypass',
               reason: 'zero_cost',
             });
-            const startedAt = record ? performance.now() : 0;
-            record?.({
-              kind: 'operation',
-              feature: 'cost',
-              disposition: 'started',
-            });
-            try {
-              const result = await account.createProject({
-                name,
-                region,
-                organization_id,
-              });
-              record?.({
-                kind: 'operation',
-                feature: 'cost',
-                disposition: 'returned',
-                durationMs: performance.now() - startedAt,
-              });
-              return result;
-            } catch (error) {
-              record?.({
-                kind: 'operation',
-                feature: 'cost',
-                disposition: 'threw',
-                durationMs: performance.now() - startedAt,
-              });
-              throw error;
-            }
+            return await observeCostOperation(record, () =>
+              account.createProject({ name, region, organization_id })
+            );
           }
 
           record?.({
@@ -371,10 +347,8 @@ export function getAccountTools({
 
           const costSuffix = cost.recurrence === 'monthly' ? '/month' : '/hr';
 
-          const askForConfirmation = async (
-            reason: 'initial' | 'missing_response' | 'changed_quote'
-          ) => {
-            const result = inputRequired({
+          const askForConfirmation = async () => {
+            return inputRequired({
               inputRequests: {
                 confirm_cost: inputRequired.elicit({
                   mode: 'form',
@@ -391,13 +365,6 @@ export function getAccountTools({
                 ctx
               ),
             });
-            record?.({
-              kind: 'input_required',
-              feature: 'cost',
-              mode: 'form',
-              reason,
-            });
-            return result;
           };
 
           const confirmationState = await checkConfirmationState({
@@ -419,37 +386,18 @@ export function getAccountTools({
             declinedText: 'Project creation was declined.',
             cancelledText: 'Project creation was cancelled.',
           });
-          if (confirmationState.kind !== 'proceed') {
-            return confirmationState.result;
-          }
-          const confirmedState = confirmationState.state;
-          const startedAt = record ? performance.now() : 0;
-          record?.({
-            kind: 'operation',
-            feature: 'cost',
-            disposition: 'started',
-          });
-          try {
-            const result = await account.createProject({
-              name: confirmedState.name,
-              region: confirmedState.region,
-              organization_id: confirmedState.organization_id,
-            });
-            record?.({
-              kind: 'operation',
-              feature: 'cost',
-              disposition: 'returned',
-              durationMs: performance.now() - startedAt,
-            });
-            return result;
-          } catch (error) {
-            record?.({
-              kind: 'operation',
-              feature: 'cost',
-              disposition: 'threw',
-              durationMs: performance.now() - startedAt,
-            });
-            throw error;
+          switch (confirmationState.kind) {
+            case 'reprompt':
+            case 'terminal':
+              return confirmationState.result;
+            case 'proceed':
+              return await observeCostOperation(record, () =>
+                account.createProject({
+                  name: confirmationState.state.name,
+                  region: confirmationState.state.region,
+                  organization_id: confirmationState.state.organization_id,
+                })
+              );
           }
         }
 
@@ -467,34 +415,9 @@ export function getAccountTools({
           );
         }
 
-        const startedAt = record ? performance.now() : 0;
-        record?.({
-          kind: 'operation',
-          feature: 'cost',
-          disposition: 'started',
-        });
-        try {
-          const result = await account.createProject({
-            name,
-            region,
-            organization_id,
-          });
-          record?.({
-            kind: 'operation',
-            feature: 'cost',
-            disposition: 'returned',
-            durationMs: performance.now() - startedAt,
-          });
-          return result;
-        } catch (error) {
-          record?.({
-            kind: 'operation',
-            feature: 'cost',
-            disposition: 'threw',
-            durationMs: performance.now() - startedAt,
-          });
-          throw error;
-        }
+        return await observeCostOperation(record, () =>
+          account.createProject({ name, region, organization_id })
+        );
       },
     }),
     pause_project: tool({

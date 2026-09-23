@@ -132,12 +132,14 @@ type ConfirmationStateOptions<S extends ConfirmationState> = {
   payloadMatch?: (state: S) => boolean;
   declinedText: string;
   cancelledText: string;
+  /** Internal cost-only recorder; SQL callers do not provide one. */
+  recordCost?: CostConfirmationRecord;
 };
 
 type CostConfirmationRecord = (
   fact: Extract<
     ObservationFact,
-    { kind: 'resume_validation' | 'input_response' }
+    { kind: 'resume_validation' | 'input_response' | 'input_required' }
   >
 ) => void;
 
@@ -150,11 +152,7 @@ type ConfirmationDecision<S extends ConfirmationState> =
 
 export async function checkConfirmationState<S extends ConfirmationState>(
   options: ConfirmationStateOptions<S> & {
-    askForConfirmation: (
-      reason: RepromptReason
-    ) => Promise<InputRequiredResult>;
-    /** Internal cost-only recorder; SQL callers do not provide one. */
-    recordCost?: CostConfirmationRecord;
+    askForConfirmation: () => Promise<InputRequiredResult>;
   }
 ): Promise<
   CheckConfirmationStateResult &
@@ -164,19 +162,23 @@ export async function checkConfirmationState<S extends ConfirmationState>(
       | { kind: 'terminal' }
     )
 > {
-  const decision = inspectConfirmationState(options, options.recordCost);
-  return decision.kind === 'reprompt'
-    ? {
-        kind: 'reprompt',
-        result: await options.askForConfirmation(decision.reason),
-      }
-    : decision;
+  const decision = inspectConfirmationState(options);
+  if (decision.kind !== 'reprompt') {
+    return decision;
+  }
+  const result = await options.askForConfirmation();
+  options.recordCost?.({
+    kind: 'input_required',
+    feature: 'cost',
+    mode: 'form',
+    reason: decision.reason,
+  });
+  return { kind: 'reprompt', result };
 }
 
 /** Inspect SDK-verified state without issuing a new confirmation. */
 export function inspectConfirmationState<S extends ConfirmationState>(
-  options: ConfirmationStateOptions<S>,
-  recordCost?: CostConfirmationRecord
+  options: ConfirmationStateOptions<S>
 ): ConfirmationDecision<S> {
   const {
     ctx,
@@ -187,6 +189,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     payloadMatch,
     declinedText,
     cancelledText,
+    recordCost,
   } = options;
   const raw = ctx.mcpReq.requestState<unknown>();
   if (raw === undefined) {
@@ -205,7 +208,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
       typeof raw.tool === 'string' &&
       raw.tool !== tool
     ) {
-      recordCost?.({
+      recordCost({
         kind: 'resume_validation',
         feature: 'cost',
         result: 'tool_mismatch',
@@ -302,6 +305,40 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     result: 'valid',
   });
   return { kind: 'proceed', state };
+}
+
+/** Records only the duration and disposition of the actual cost-bearing operation. */
+export function observeCostOperation<T>(
+  record:
+    | ((fact: Extract<ObservationFact, { kind: 'operation' }>) => void)
+    | undefined,
+  run: () => Promise<T>
+): Promise<T> {
+  if (!record) {
+    return run();
+  }
+  const startedAt = performance.now();
+  record({ kind: 'operation', feature: 'cost', disposition: 'started' });
+  return (async () => {
+    try {
+      const result = await run();
+      record({
+        kind: 'operation',
+        feature: 'cost',
+        disposition: 'returned',
+        durationMs: performance.now() - startedAt,
+      });
+      return result;
+    } catch (error) {
+      record({
+        kind: 'operation',
+        feature: 'cost',
+        disposition: 'threw',
+        durationMs: performance.now() - startedAt,
+      });
+      throw error;
+    }
+  })();
 }
 
 /**

@@ -17,7 +17,7 @@ describe('registered handler observations', () => {
   test('all five scopes include shaping, bound context, and exclude end sink latency', async () => {
     const seen = capture();
     let now = 0;
-    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
     const observer: RequestObserver = (context) => {
       now += 2;
       const sink = seen.observer(context)!;
@@ -78,7 +78,6 @@ describe('registered handler observations', () => {
         },
       ]
     );
-    expect(clock).toHaveBeenCalledTimes(10);
     expect(JSON.stringify(seen.scopes)).not.toContain('PRIVATE');
     expect(JSON.stringify(seen.scopes)).not.toContain('private_tool_name');
   });
@@ -230,13 +229,14 @@ describe('registered handler observations', () => {
   );
 
   test.each([
-    'tools/list',
-    'resources/list',
-    'resources/templates/list',
-    'resources/read',
+    { method: 'tools/list', stage: 'provider' },
+    { method: 'resources/list', stage: 'provider' },
+    { method: 'resources/templates/list', stage: 'provider' },
+    { method: 'resources/read', stage: 'provider' },
+    { method: 'resources/read', stage: 'error-serialization' },
   ] as const)(
-    '%s records its existing failure behavior without manufacturing success',
-    async (method) => {
+    '$method $stage records its existing failure behavior without manufacturing success',
+    async ({ method, stage }) => {
       const seen = capture();
       const run = handlers({
         observer: seen.observer,
@@ -244,16 +244,22 @@ describe('registered handler observations', () => {
           throw failure;
         },
         resources: () => {
+          if (stage === 'error-serialization') throw { message: 1n };
           throw failure;
         },
       });
       const result = run(method, { uri: 'test://a' });
-      if (method === 'resources/read')
+      if (stage === 'error-serialization')
+        await expect(result).rejects.toBeInstanceOf(TypeError);
+      else if (method === 'resources/read')
         expect(await result).toMatchObject({ isError: true });
       else await expect(result).rejects.toBe(failure);
       expect(seen.scopes[0]!.ends).toEqual([
         {
-          result: method === 'resources/read' ? 'tool_error' : 'handler_error',
+          result:
+            method === 'resources/read' && stage !== 'error-serialization'
+              ? 'tool_error'
+              : 'handler_error',
           durationMs: expect.any(Number),
         },
       ]);

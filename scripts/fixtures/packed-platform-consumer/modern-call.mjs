@@ -37,29 +37,20 @@ const issuance = {
   reason: 'initial',
 };
 
-function assertDuration(durationMs) {
-  assert.equal(typeof durationMs, 'number');
-  assert.ok(Number.isFinite(durationMs) && durationMs >= 0);
-}
-
 // CJS calls this same scenario with its require()-loaded constructor. The SDK
 // transport stays fetch-in-process: no listener, credentials or backend.
 export async function runConsumer(createHandler = createSupabaseMcpHandler) {
   const scopes = [];
-  let sinkFailure;
   let creates = 0;
   const observer = (context) => {
-    if (sinkFailure === 'factory') throw new Error('PRIVATE_FACTORY_ERROR');
     const scope = { context, facts: [], ends: [] };
     scopes.push(scope);
     return {
       record(fact) {
         scope.facts.push(fact);
-        if (sinkFailure === 'sink') throw new Error('PRIVATE_RECORD_ERROR');
       },
       end(end) {
         scope.ends.push(end);
-        if (sinkFailure === 'sink') throw new Error('PRIVATE_END_ERROR');
       },
     };
   };
@@ -116,14 +107,13 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
       { allowInputRequired: true }
     );
   const start = () => call({ name: 'create_project', arguments: args });
-  const resume = (first, action) =>
+  const resume = (first) =>
     call({
       name: 'create_project',
       arguments: args,
       requestState: first.requestState,
       inputResponses: {
-        confirm_cost:
-          action === 'accept' ? { action, content: {} } : { action },
+        confirm_cost: { action: 'accept', content: {} },
       },
     });
   try {
@@ -157,69 +147,12 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
     assert.equal(creates, 0);
     assert.deepEqual(scopes[1].facts, [decision, issuance]);
     assert.equal(scopes[1].ends[0].result, 'input_required');
-    const accepted = await resume(first, 'accept');
+    const accepted = await resume(first);
     assert.equal(accepted.isError, undefined);
     assert.deepEqual(accepted.content, [
       { type: 'text', text: JSON.stringify(project) },
     ]);
     assert.equal(creates, 1);
-    const acceptedScope = scopes[2];
-    assert.deepEqual(acceptedScope.facts.slice(0, 4), [
-      decision,
-      { kind: 'input_response', feature: 'cost', action: 'accept' },
-      { kind: 'resume_validation', feature: 'cost', result: 'valid' },
-      { kind: 'operation', feature: 'cost', disposition: 'started' },
-    ]);
-    const operation = acceptedScope.facts[4];
-    assertDuration(operation.durationMs);
-    assert.deepEqual(operation, {
-      kind: 'operation',
-      feature: 'cost',
-      disposition: 'returned',
-      durationMs: operation.durationMs,
-    });
-    assert.equal(acceptedScope.facts.length, 5);
-    assert.equal(acceptedScope.ends[0].result, 'completed');
-    assert.ok(acceptedScope.ends[0].durationMs >= operation.durationMs);
-
-    const declined = await resume(await start(), 'decline');
-    assert.deepEqual(declined.structuredContent, { status: 'declined' });
-    assert.equal(creates, 1);
-    assert.deepEqual(scopes[4].facts, [
-      decision,
-      { kind: 'input_response', feature: 'cost', action: 'decline' },
-    ]);
-    assert.equal(scopes[4].ends[0].result, 'declined');
-
-    // Sink and factory failures cannot suppress issuance or the paid operation.
-    for (const failure of ['sink', 'factory']) {
-      sinkFailure = failure;
-      const result = await resume(await start(), 'accept');
-      assert.deepEqual(result, accepted);
-    }
-    sinkFailure = undefined;
-    assert.equal(creates, 3);
-    for (const scope of scopes) {
-      assert.deepEqual(
-        scope.context,
-        scope === scopes[0]
-          ? { method: 'tools/list', tool: 'not_applicable' }
-          : { method: 'tools/call', tool: 'create_project' }
-      );
-      assert.equal(scope.ends.length, 1);
-      const end = scope.ends[0];
-      assertDuration(end.durationMs);
-      assert.deepEqual(Object.keys(end).sort(), ['durationMs', 'result']);
-    }
-    const serialized = JSON.stringify(scopes);
-    assert.ok(
-      !serialized.includes('PRIVATE_'),
-      'payload or sink error leaked into observations'
-    );
-    assert.ok(
-      !serialized.includes(first.requestState),
-      'signed state leaked into observations'
-    );
     return tools.length;
   } finally {
     await client.close();

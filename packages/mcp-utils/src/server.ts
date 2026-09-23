@@ -20,7 +20,6 @@ import { beginObservation } from './observation.js';
 import type {
   ObservationEnd,
   ObservationFact,
-  ObservationScope,
   ObservedTool,
   RequestObserver,
 } from './observation.js';
@@ -75,7 +74,7 @@ export type Tool<
    *
    * The optional third `record` argument is a safe, synchronous recorder
    * for {@link ObservationFact}s tied to this call's observation scope.
-   * It is `undefined` whenever no observer is configured for this server;
+   * It may be `undefined` (for example, when no observer is configured);
    * it never throws back into the tool and never returns a promise the
    * tool needs to handle.
    */
@@ -406,22 +405,17 @@ export function createMcpServer(options: McpServerOptions) {
     server.setRequestHandler(
       'resources/list',
       async (): Promise<ListResourcesResult> => {
-        let scope: ObservationScope | undefined;
-        let startedAt = 0;
-
-        if (options.observer) {
-          startedAt = performance.now();
-          scope = beginObservation(options.observer, {
-            method: 'resources/list',
-            tool: 'not_applicable',
-          });
-        }
-
-        let outcome: ObservationEnd['result'] = 'completed';
+        const scope = options.observer
+          ? beginObservation(options.observer, {
+              method: 'resources/list',
+              tool: 'not_applicable',
+            })
+          : undefined;
+        let outcome: ObservationEnd['result'] = 'handler_error';
 
         try {
           const allResources = await getResources();
-          return {
+          const result = {
             resources: allResources
               .filter((resource) => 'uri' in resource)
               .map(({ uri, name, description, mimeType }) => {
@@ -433,14 +427,10 @@ export function createMcpServer(options: McpServerOptions) {
                 };
               }),
           };
-        } catch (error) {
-          outcome = 'handler_error';
-          throw error;
+          outcome = 'completed';
+          return result;
         } finally {
-          scope?.end({
-            result: outcome,
-            durationMs: performance.now() - startedAt,
-          });
+          scope?.end(outcome);
         }
       }
     );
@@ -448,22 +438,17 @@ export function createMcpServer(options: McpServerOptions) {
     server.setRequestHandler(
       'resources/templates/list',
       async (): Promise<ListResourceTemplatesResult> => {
-        let scope: ObservationScope | undefined;
-        let startedAt = 0;
-
-        if (options.observer) {
-          startedAt = performance.now();
-          scope = beginObservation(options.observer, {
-            method: 'resources/templates/list',
-            tool: 'not_applicable',
-          });
-        }
-
-        let outcome: ObservationEnd['result'] = 'completed';
+        const scope = options.observer
+          ? beginObservation(options.observer, {
+              method: 'resources/templates/list',
+              tool: 'not_applicable',
+            })
+          : undefined;
+        let outcome: ObservationEnd['result'] = 'handler_error';
 
         try {
           const allResources = await getResources();
-          return {
+          const result = {
             resourceTemplates: allResources
               .filter((resource) => 'uriTemplate' in resource)
               .map(({ uriTemplate, name, description, mimeType }) => {
@@ -475,14 +460,10 @@ export function createMcpServer(options: McpServerOptions) {
                 };
               }),
           };
-        } catch (error) {
-          outcome = 'handler_error';
-          throw error;
+          outcome = 'completed';
+          return result;
         } finally {
-          scope?.end({
-            result: outcome,
-            durationMs: performance.now() - startedAt,
-          });
+          scope?.end(outcome);
         }
       }
     );
@@ -490,94 +471,83 @@ export function createMcpServer(options: McpServerOptions) {
     server.setRequestHandler(
       'resources/read',
       async (request): Promise<ReadResourceResult> => {
-        let scope: ObservationScope | undefined;
-        let startedAt = 0;
-
-        if (options.observer) {
-          startedAt = performance.now();
-          scope = beginObservation(options.observer, {
-            method: 'resources/read',
-            tool: 'not_applicable',
-          });
-        }
-
-        let outcome: ObservationEnd['result'] = 'completed';
+        const scope = options.observer
+          ? beginObservation(options.observer, {
+              method: 'resources/read',
+              tool: 'not_applicable',
+            })
+          : undefined;
+        let outcome: ObservationEnd['result'] = 'handler_error';
 
         try {
-          try {
-            const allResources = await getResources();
-            const { uri } = request.params;
+          const allResources = await getResources();
+          const { uri } = request.params;
 
-            const resources = allResources.filter(
-              (resource) => 'uri' in resource
-            );
-            const resource = resources.find((resource) =>
-              compareUris(resource.uri, uri)
-            );
+          const resources = allResources.filter(
+            (resource) => 'uri' in resource
+          );
+          const resource = resources.find((resource) =>
+            compareUris(resource.uri, uri)
+          );
 
-            if (resource) {
-              const result = await resource.read(
-                uri as `${string}://${string}`
-              );
-
-              const contents = Array.isArray(result) ? result : [result];
-
-              return {
-                contents,
-              };
-            }
-
-            const resourceTemplates = allResources.filter(
-              (resource) => 'uriTemplate' in resource
-            );
-            const resourceTemplateUris = resourceTemplates.map(
-              ({ uriTemplate }) => assertValidUri(uriTemplate)
-            );
-
-            const templateMatch = matchUriTemplate(uri, resourceTemplateUris);
-
-            if (!templateMatch) {
-              throw new Error('resource not found');
-            }
-
-            const resourceTemplate = resourceTemplates.find(
-              (r) => r.uriTemplate === templateMatch.uri
-            );
-
-            if (!resourceTemplate) {
-              throw new Error('resource not found');
-            }
-
-            const result = await resourceTemplate.read(
-              uri as `${string}://${string}`,
-              templateMatch.params
-            );
+          if (resource) {
+            const result = await resource.read(uri as `${string}://${string}`);
 
             const contents = Array.isArray(result) ? result : [result];
 
+            outcome = 'completed';
             return {
               contents,
             };
-          } catch (error) {
-            outcome = 'tool_error';
-            return {
-              isError: true,
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify({ error: enumerateError(error) }),
-                },
-              ],
-            } as any;
           }
+
+          const resourceTemplates = allResources.filter(
+            (resource) => 'uriTemplate' in resource
+          );
+          const resourceTemplateUris = resourceTemplates.map(
+            ({ uriTemplate }) => assertValidUri(uriTemplate)
+          );
+
+          const templateMatch = matchUriTemplate(uri, resourceTemplateUris);
+
+          if (!templateMatch) {
+            throw new Error('resource not found');
+          }
+
+          const resourceTemplate = resourceTemplates.find(
+            (r) => r.uriTemplate === templateMatch.uri
+          );
+
+          if (!resourceTemplate) {
+            throw new Error('resource not found');
+          }
+
+          const result = await resourceTemplate.read(
+            uri as `${string}://${string}`,
+            templateMatch.params
+          );
+
+          const contents = Array.isArray(result) ? result : [result];
+
+          outcome = 'completed';
+          return {
+            contents,
+          };
         } catch (error) {
-          outcome = 'handler_error';
-          throw error;
+          // Preserve the existing resource error payload despite the SDK result type.
+          const result = {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: enumerateError(error) }),
+              },
+            ],
+          } as unknown as ReadResourceResult;
+          outcome = 'tool_error';
+          return result;
         } finally {
-          scope?.end({
-            result: outcome,
-            durationMs: performance.now() - startedAt,
-          });
+          scope?.end(outcome);
         }
       }
     );
@@ -587,23 +557,18 @@ export function createMcpServer(options: McpServerOptions) {
     server.setRequestHandler(
       'tools/list',
       async (_request, ctx): Promise<ListToolsResult> => {
-        let scope: ObservationScope | undefined;
-        let startedAt = 0;
-
-        if (options.observer) {
-          startedAt = performance.now();
-          scope = beginObservation(options.observer, {
-            method: 'tools/list',
-            tool: 'not_applicable',
-          });
-        }
-
-        let outcome: ObservationEnd['result'] = 'completed';
+        const scope = options.observer
+          ? beginObservation(options.observer, {
+              method: 'tools/list',
+              tool: 'not_applicable',
+            })
+          : undefined;
+        let outcome: ObservationEnd['result'] = 'handler_error';
 
         try {
           const tools = await getTools(ctx);
 
-          return {
+          const result = {
             tools: await Promise.all(
               Object.entries(tools)
                 .filter(([, tool]) => !tool.hidden)
@@ -628,131 +593,110 @@ export function createMcpServer(options: McpServerOptions) {
                 )
             ),
           } satisfies ListToolsResult;
-        } catch (error) {
-          outcome = 'handler_error';
-          throw error;
+          outcome = 'completed';
+          return result;
         } finally {
-          scope?.end({
-            result: outcome,
-            durationMs: performance.now() - startedAt,
-          });
+          scope?.end(outcome);
         }
       }
     );
 
     server.setRequestHandler('tools/call', async (request, ctx) => {
       const toolName = request.params.name;
-      let scope: ObservationScope | undefined;
-      let startedAt = 0;
-
-      if (options.observer) {
-        startedAt = performance.now();
-        scope = beginObservation(options.observer, {
-          method: 'tools/call',
-          tool: normalizeObservedTool(toolName),
-        });
-      }
-
-      let outcome: ObservationEnd['result'] = 'completed';
+      const scope = options.observer
+        ? beginObservation(options.observer, {
+            method: 'tools/call',
+            tool: normalizeObservedTool(toolName),
+          })
+        : undefined;
+      let outcome: ObservationEnd['result'] = 'handler_error';
 
       try {
-        try {
-          const tools = await getTools(ctx);
+        const tools = await getTools(ctx);
 
-          if (!(toolName in tools)) {
-            throw new Error('tool not found');
-          }
-
-          const tool = tools[toolName];
-
-          if (!tool) {
-            throw new Error('tool not found');
-          }
-          const args = tool.parameters
-            .strict()
-            .parse(request.params.arguments ?? {});
-
-          const executeWithCallback = async (tool: Tool) => {
-            // Wrap success or error in a result value
-            const res = await tool
-              .execute(args, ctx, scope?.record)
-              .then((data: unknown) => ({ success: true as const, data }))
-              .catch((error) => ({ success: false as const, error }));
-
-            try {
-              options.onToolCall?.({
-                name: toolName,
-                arguments: args,
-                annotations: tool.annotations,
-                ...res,
-              });
-            } catch (error) {
-              // Don't fail the tool call if the callback fails
-              console.error('Failed to run tool callback', error);
-            }
-
-            // Unwrap result
-            if (!res.success) {
-              throw res.error;
-            }
-            return res.data;
-          };
-
-          const result = await executeWithCallback(tool);
-
-          // An InputRequiredResult is already shaped for the wire.
-          if (isInputRequiredResult(result)) {
-            if (scope) {
-              outcome =
-                'isError' in result && result.isError === true
-                  ? 'tool_error'
-                  : 'input_required';
-            }
-            return result;
-          }
-
-          // A direct CallToolResult is already shaped for the wire; pass it
-          // through instead of JSON-wrapping it.
-          if (isCallToolResult(result)) {
-            if (scope) {
-              outcome =
-                result.isError === true
-                  ? 'tool_error'
-                  : (scope.consumedTerminal() ?? 'completed');
-            }
-            return result;
-          }
-
-          outcome = scope?.consumedTerminal() ?? 'completed';
-
-          const content =
-            result != null
-              ? [{ type: 'text' as const, text: JSON.stringify(result) }]
-              : [];
-
-          return {
-            content,
-          };
-        } catch (error) {
-          outcome = 'tool_error';
-          return {
-            isError: true,
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({ error: enumerateError(error) }),
-              },
-            ],
-          };
+        if (!(toolName in tools)) {
+          throw new Error('tool not found');
         }
+
+        const tool = tools[toolName];
+
+        if (!tool) {
+          throw new Error('tool not found');
+        }
+        const args = tool.parameters
+          .strict()
+          .parse(request.params.arguments ?? {});
+
+        const executeWithCallback = async (tool: Tool) => {
+          // Wrap success or error in a result value
+          const res = await tool
+            .execute(args, ctx, scope?.record)
+            .then((data: unknown) => ({ success: true as const, data }))
+            .catch((error) => ({ success: false as const, error }));
+
+          try {
+            options.onToolCall?.({
+              name: toolName,
+              arguments: args,
+              annotations: tool.annotations,
+              ...res,
+            });
+          } catch (error) {
+            // Don't fail the tool call if the callback fails
+            console.error('Failed to run tool callback', error);
+          }
+
+          // Unwrap result
+          if (!res.success) {
+            throw res.error;
+          }
+          return res.data;
+        };
+
+        const result = await executeWithCallback(tool);
+
+        // An InputRequiredResult is already shaped for the wire.
+        if (isInputRequiredResult(result)) {
+          outcome =
+            scope && 'isError' in result && result.isError === true
+              ? 'tool_error'
+              : 'input_required';
+          return result;
+        }
+
+        // A direct CallToolResult is already shaped for the wire; pass it
+        // through instead of JSON-wrapping it.
+        if (isCallToolResult(result)) {
+          outcome =
+            scope && result.isError === true
+              ? 'tool_error'
+              : (scope?.consumedTerminal() ?? 'completed');
+          return result;
+        }
+
+        const content =
+          result != null
+            ? [{ type: 'text' as const, text: JSON.stringify(result) }]
+            : [];
+
+        outcome = scope?.consumedTerminal() ?? 'completed';
+        return {
+          content,
+        };
       } catch (error) {
-        outcome = 'handler_error';
-        throw error;
+        const result = {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ error: enumerateError(error) }),
+            },
+          ],
+        } satisfies CallToolResult;
+        outcome = 'tool_error';
+        return result;
       } finally {
-        scope?.end({
-          result: outcome,
-          durationMs: performance.now() - startedAt,
-        });
+        scope?.end(outcome);
       }
     });
   }

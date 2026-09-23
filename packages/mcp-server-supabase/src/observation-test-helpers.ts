@@ -1,16 +1,13 @@
 import {
-  Client,
   isInputRequiredResult,
-  StreamableHTTPClientTransport,
   type CallToolRequestParams,
   type CallToolResult,
   type ClientCapabilities,
   type InputRequiredResult,
   type InputResponses,
 } from '@modelcontextprotocol/client';
-import type * as ServerSdk from '@modelcontextprotocol/server';
-import { StreamTransport } from '@supabase/mcp-utils';
 import { afterEach, expect, vi } from 'vitest';
+import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import type {
   ObservationContext,
   ObservationEnd,
@@ -19,35 +16,7 @@ import type {
 } from './index.js';
 import type { Branch, Project, SupabasePlatform } from './platform/types.js';
 import * as pricing from './pricing.js';
-import {
-  createSupabaseMcpServer,
-  type SupabaseMcpServerOptions,
-} from './server.js';
-import { createSupabaseMcpHandler } from './transports/http.js';
-
-// Control issuance while retaining the real SDK codec and verification path.
-const mintControl = vi.hoisted(() => ({ fail: false, omitCost: false }));
-vi.mock('@modelcontextprotocol/server', async (importOriginal) => {
-  const actual = await importOriginal<typeof ServerSdk>();
-  return {
-    ...actual,
-    createRequestStateCodec: ((
-      ...args: Parameters<typeof actual.createRequestStateCodec>
-    ) => {
-      const codec = actual.createRequestStateCodec(...args);
-      return {
-        ...codec,
-        mint: (...mintArgs: Parameters<typeof codec.mint>) => {
-          if (mintControl.fail) throw new Error('PRIVATE_MINT_FAILURE');
-          if (mintControl.omitCost) {
-            mintArgs[0] = { ...(mintArgs[0] as object), cost: undefined };
-          }
-          return codec.mint(...mintArgs);
-        },
-      };
-    }) as typeof actual.createRequestStateCodec,
-  };
-});
+import type { SupabaseMcpServerOptions } from './server.js';
 
 const confirmation = {
   requestState: {
@@ -65,14 +34,12 @@ type Attempt = {
   facts: ObservationFact[];
   ends: ObservationEnd[];
 };
-const cleanups: (() => Promise<void>)[] = [];
+const harness = createServerHarness();
 
 afterEach(async () => {
-  mintControl.fail = false;
-  mintControl.omitCost = false;
   vi.restoreAllMocks();
   vi.useRealTimers();
-  await Promise.all(cleanups.splice(0).map((close) => close()));
+  await harness.close();
 });
 
 function fakePlatform() {
@@ -163,49 +130,12 @@ async function setup(
     observer,
     onToolCall: options.onToolCall,
   };
-  const client = new Client(
-    { name: 'PRIVATE_CLIENT', version: '1.0' },
-    {
-      capabilities: options.capabilities ?? form,
-      ...(options.legacy
-        ? {}
-        : {
-            versionNegotiation: { mode: { pin: '2026-07-28' } },
-            inputRequired: { autoFulfill: false },
-          }),
-    }
-  );
-  if (options.legacy) {
-    const clientTransport = new StreamTransport();
-    const serverTransport = new StreamTransport();
-    const pipes = Promise.allSettled([
-      clientTransport.readable.pipeTo(serverTransport.writable),
-      serverTransport.readable.pipeTo(clientTransport.writable),
-    ]);
-    const server = createSupabaseMcpServer(serverOptions);
-    await server.connect(serverTransport);
-    await client.connect(clientTransport);
-    cleanups.push(async () => {
-      await client.close();
-      await server.close();
-      for (const result of await pipes) {
-        if (result.status === 'rejected') {
-          expect(result.reason).toMatchObject({ message: 'connection closed' });
-        }
-      }
-    });
-  } else {
-    const handler = createSupabaseMcpHandler(serverOptions);
-    await client.connect(
-      new StreamableHTTPClientTransport(
-        new URL('https://PRIVATE_URL.test/mcp'),
-        {
-          fetch: (url, init) => handler.fetch(new Request(url, init)),
-        }
-      )
-    );
-    cleanups.push(() => client.close());
-  }
+  const { client } = await (options.legacy
+    ? harness.setup
+    : harness.setupModern)({
+    ...serverOptions,
+    clientCapabilities: options.capabilities ?? form,
+  });
   attempts.length = 0;
   function args(name: CostTool): Record<string, unknown> {
     return name === 'create_project'
@@ -226,13 +156,7 @@ async function setup(
         inputResponses?: InputResponses;
       } = {}
   ) {
-    return (await client.request(
-      {
-        method: 'tools/call',
-        params: { name, arguments: args(name), ...extra },
-      },
-      { allowInputRequired: true }
-    )) as CallToolResult | InputRequiredResult;
+    return callModernTool(client, { name, arguments: args(name), ...extra });
   }
   function operation(name: CostTool) {
     return name === 'create_project' ? fake.createProject : fake.createBranch;
@@ -249,32 +173,24 @@ function issued(
   return result;
 }
 function decision(
-  route: 'inline' | 'legacy' | 'bypass' | 'blocked',
-  reason:
-    | 'eligible'
-    | 'not_configured'
-    | 'capability_missing'
-    | 'read_only'
-    | 'zero_cost'
+  route: Extract<ObservationFact, { kind: 'confirmation_decision' }>['route'],
+  reason: Extract<ObservationFact, { kind: 'confirmation_decision' }>['reason']
 ): ObservationFact {
   return { kind: 'confirmation_decision', feature: 'cost', route, reason };
 }
 function required(
-  reason: 'initial' | 'missing_response' | 'changed_quote'
+  reason: Extract<ObservationFact, { kind: 'input_required' }>['reason']
 ): ObservationFact {
   return { kind: 'input_required', feature: 'cost', mode: 'form', reason };
 }
 function validation(
-  result:
-    | 'valid'
-    | 'missing_response'
-    | 'tool_mismatch'
-    | 'arguments_mismatch'
-    | 'changed_quote'
+  result: Extract<ObservationFact, { kind: 'resume_validation' }>['result']
 ): ObservationFact {
   return { kind: 'resume_validation', feature: 'cost', result };
 }
-function response(action: 'accept' | 'decline' | 'cancel'): ObservationFact {
+function response(
+  action: Extract<ObservationFact, { kind: 'input_response' }>['action']
+): ObservationFact {
   return { kind: 'input_response', feature: 'cost', action };
 }
 const started: ObservationFact = {
@@ -282,7 +198,12 @@ const started: ObservationFact = {
   feature: 'cost',
   disposition: 'started',
 };
-function operationEnd(disposition: 'returned' | 'threw') {
+function operationEnd(
+  disposition: Extract<
+    ObservationFact,
+    { kind: 'operation'; durationMs: number }
+  >['disposition']
+) {
   return {
     kind: 'operation',
     feature: 'cost',
@@ -324,7 +245,6 @@ function changeQuote(name: CostTool) {
 }
 
 export {
-  mintControl,
   form,
   tools,
   setup,
