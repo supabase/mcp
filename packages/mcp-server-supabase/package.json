@@ -55,6 +55,7 @@
     "@mjackson/multipart-parser": "^0.10.1",
     "@modelcontextprotocol/node": "catalog:",
     "@supabase/mcp-utils": "workspace:^",
+    "agentcat": "2.1.0",
     "common-tags": "^1.8.2",
     "gqlmin": "^0.3.1",
     "graphql": "^16.11.0",

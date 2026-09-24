@@ -96,6 +96,9 @@ importers:
       '@supabase/mcp-utils':
         specifier: workspace:^
         version: link:../mcp-utils
+      agentcat:
+        specifier: 2.1.0
+        version: 2.1.0(@modelcontextprotocol/server@2.0.0)
       common-tags:
         specifier: ^1.8.2
         version: 1.8.2
@@ -1027,6 +1030,21 @@ packages:
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
+
+  agentcat-api@1.0.1:
+    resolution: {integrity: sha512-1OeMru3nQGMtazs44ZtzP9UgeEq8+eEG+Hgj6B12qZnOneH56NmULthYv0YT3MAZ3EAAzh4lEtWFA3OzcY8XnQ==}
+
+  agentcat@2.1.0:
+    resolution: {integrity: sha512-QkRqLpweL5vGwe32P3BtPcwgXdKRa0FPxvREps13s5OZxIu0TdWRFrKPtRzoBKKHjGeis+WI6sMwSV1FsbiESg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@modelcontextprotocol/sdk': '>=1.11 <2'
+      '@modelcontextprotocol/server': '>=2.0.0 <3'
+    peerDependenciesMeta:
+      '@modelcontextprotocol/sdk':
+        optional: true
+      '@modelcontextprotocol/server':
+        optional: true
 
   ai@6.0.100:
     resolution: {integrity: sha512-BIxhG7M7wvcWCF+IEnZi7WpkRLOM3jR2vJ0mMuohl2UB2i1R/ZUa1cHFel1xI8nWvyUpOoQXKqsM0BAH50EYSQ==}
@@ -2639,6 +2657,14 @@ snapshots:
   acorn@8.15.0: {}
 
   agent-base@7.1.4: {}
+
+  agentcat-api@1.0.1: {}
+
+  agentcat@2.1.0(@modelcontextprotocol/server@2.0.0):
+    dependencies:
+      agentcat-api: 1.0.1
+    optionalDependencies:
+      '@modelcontextprotocol/server': 2.0.0
 
   ai@6.0.100(zod@4.2.1):
     dependencies:
