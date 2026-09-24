@@ -191,6 +191,15 @@ const notebookDatabaseCellSchema = z.object({
   chart: notebookChartConfigSchema.optional(),
 });
 
+const notebookLogTimeUnitSchema = z.enum([
+  'minute',
+  'hour',
+  'day',
+  'week',
+  'month',
+  'year',
+]);
+
 const notebookLogTimeRangeSchema = z.union([
   z.object({
     type: z.literal('absolute'),
@@ -199,7 +208,7 @@ const notebookLogTimeRangeSchema = z.union([
   }),
   z.object({
     type: z.literal('relative'),
-    unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']),
+    unit: notebookLogTimeUnitSchema,
     amount: z.number(),
   }),
 ]);
@@ -221,17 +230,31 @@ export const notebookCellSchema = z.discriminatedUnion('type', [
 ]);
 
 // Creation uses the Management API cell format, without server-assigned ids.
-export const newNotebookCellSchema = z.discriminatedUnion('type', [
+// Unlike the read schemas above, every level rejects unknown keys, so a
+// misspelled key fails instead of being silently dropped.
+const newNotebookChartConfigSchema = notebookChartConfigSchema
+  .extend({
+    y_series: z.array(z.object({ column: z.string() }).strict()),
+  })
+  .strict();
+
+const newNotebookSqlSchema = z.string().trim().min(1);
+
+const newNotebookCellSchema = z.discriminatedUnion('type', [
   notebookMarkdownCellSchema.omit({ id: true }).strict(),
   notebookDatabaseCellSchema
     .omit({ id: true })
     .extend({
+      sql: newNotebookSqlSchema,
+      row_limit: z.number().int().positive(),
       database_identifier: z.string().min(1).optional(),
+      chart: newNotebookChartConfigSchema.optional(),
     })
     .strict(),
   notebookLogCellSchema
     .omit({ id: true })
     .extend({
+      sql: newNotebookSqlSchema,
       time_range: z.discriminatedUnion('type', [
         z
           .object({
@@ -239,33 +262,30 @@ export const newNotebookCellSchema = z.discriminatedUnion('type', [
             start: z.iso.datetime({ offset: true }),
             end: z.iso.datetime({ offset: true }),
           })
+          .strict()
           .refine((range) => Date.parse(range.end) > Date.parse(range.start), {
             message: 'The end must be later than the start of the range.',
             path: ['end'],
           }),
-        z.object({
-          type: z.literal('relative'),
-          unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']),
-          amount: z.number().int().positive(),
-        }),
+        z
+          .object({
+            type: z.literal('relative'),
+            unit: notebookLogTimeUnitSchema,
+            amount: z.number().int().positive(),
+          })
+          .strict(),
       ]),
+      chart: newNotebookChartConfigSchema.optional(),
     })
     .strict(),
 ]);
 
 export const createNotebookOptionsSchema = z.object({
-  name: z
-    .string()
-    .min(1)
-    .describe('A short, descriptive name for the notebook.'),
-  description: z.string().optional().describe('What the notebook is for.'),
-  content: z
-    .object({
-      cells: z.array(newNotebookCellSchema),
-    })
-    .describe(
-      'Ordered markdown, database, and log cells. Omit cell ids; the server assigns them. Omit database_identifier to use the primary database.'
-    ),
+  name: z.string().trim().min(1),
+  description: z.string().optional(),
+  content: z.object({
+    cells: z.array(newNotebookCellSchema),
+  }),
 });
 
 export const notebookSchema = z.object({

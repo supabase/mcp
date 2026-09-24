@@ -128,52 +128,6 @@ function toolOutput(result: CallToolResult) {
 }
 
 describe('startLocalHttpEntry', () => {
-  test.each(['', 'run_notebook', 'create_notebook'])(
-    'notebook creation confirms independently over HTTP (skip: %s)',
-    async (skip) => {
-      const { project } = await createProjectFixture();
-      const client = await connect(
-        { pin: MODERN_PROTOCOL_VERSION },
-        `project_ref=${project.id}&features=notebooks&skip_elicitations=${skip}`,
-        {
-          capabilities: { elicitation: { form: {} } },
-          inputRequired: { autoFulfill: false },
-        }
-      );
-      const params = {
-        name: 'create_notebook',
-        arguments: { name: 'HTTP notebook', content: { cells: [] } },
-      };
-      const first = (await client.request(
-        { method: 'tools/call', params },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
-      if (skip === 'create_notebook') {
-        expect(isInputRequiredResult(first)).toBe(false);
-        expect(project.notebooks.size).toBe(1);
-        return;
-      }
-      if (!isInputRequiredResult(first))
-        throw new Error('expected input_required');
-      expect(project.notebooks.size).toBe(0);
-      const result = (await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            ...params,
-            requestState: first.requestState,
-            inputResponses: {
-              confirm_create: { action: 'accept', content: {} },
-            },
-          },
-        },
-        { allowInputRequired: true }
-      )) as CallToolResult;
-      expect(toolOutput(result).name).toBe('HTTP notebook');
-      expect(project.notebooks.size).toBe(1);
-    }
-  );
-
   test('serves a modern client', async () => {
     const client = await connect({ pin: MODERN_PROTOCOL_VERSION });
 

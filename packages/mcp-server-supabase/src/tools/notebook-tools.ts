@@ -6,6 +6,7 @@ import {
 import { z } from 'zod/v4';
 import { resolveLogWindow } from '../logs.js';
 import type {
+  CreateNotebookOptions,
   DatabaseOperations,
   DebuggingOperations,
   NotebookOperations,
@@ -55,15 +56,22 @@ type NotebookToolsOptions = {
    */
   confirmation?: {
     codec: RequestStateCodec<ElicitationState>;
-  };
-  /** Creation approval is configured independently from run approval. */
-  createConfirmation?: {
-    codec: RequestStateCodec<ElicitationState>;
+    enabledTools: readonly ('run_notebook' | 'create_notebook')[];
   };
 };
 
-const createNotebookInputSchema = createNotebookOptionsSchema.extend({
+// Reuses the platform's validation, adding the descriptions shown to models.
+const createNotebookInputSchema = z.object({
   project_id: z.string(),
+  name: createNotebookOptionsSchema.shape.name.describe(
+    'A short, descriptive name for the notebook.'
+  ),
+  description: createNotebookOptionsSchema.shape.description.describe(
+    'What the notebook is for.'
+  ),
+  content: createNotebookOptionsSchema.shape.content.describe(
+    'Ordered markdown, database, and log cells. Omit cell ids; the server assigns them. Omit database_identifier to use the primary database.'
+  ),
 });
 
 const createNotebookOutputSchema = notebookSchema.pick({
@@ -112,7 +120,7 @@ const runNotebookOutputSchema = z.object({
 export const notebookToolDefs = {
   create_notebook: {
     description:
-      'Creates a saved notebook shared with everyone who has access to the Supabase project. Use for investigations or dashboards the user wants to revisit. Saves markdown, database SQL, and log SQL cells without executing queries. Cell ids are assigned by the server. The user may be asked to confirm before saving. Use get_notebook and run_notebook to run the saved notebook.',
+      'Creates a saved notebook shared with everyone who has access to the Supabase project. Use for investigations or dashboards the user wants to revisit. Saves markdown, database SQL, and log SQL cells without executing queries. Cell ids are assigned by the server. The user may be asked to confirm before saving. Use get_notebook and run_notebook to run the saved notebook; run_notebook can only run log cells whose time range is 24 hours or less.',
     parameters: createNotebookInputSchema,
     outputSchema: createNotebookOutputSchema,
     annotations: {
@@ -243,7 +251,6 @@ export function getNotebookTools({
   projectId,
   readOnly,
   confirmation,
-  createConfirmation,
 }: NotebookToolsOptions) {
   const project_id = projectId;
   const createNotebook = notebooks.createNotebook?.bind(notebooks);
@@ -258,20 +265,24 @@ export function getNotebookTools({
             throw new Error('Cannot create notebook in read-only mode.');
           }
 
-          if (createConfirmation && isFormCapable(ctx)) {
-            const { codec } = createConfirmation;
+          // Nothing runs here, but the notebook becomes visible to everyone
+          // with project access, and any of them can run its SQL later. Show
+          // the whole proposal before it is shared.
+          if (
+            confirmation?.enabledTools.includes('create_notebook') &&
+            isFormCapable(ctx)
+          ) {
+            const { codec } = confirmation;
             const notebookHash = await hashObject(options);
             const askForConfirmation = async () =>
               inputRequired({
                 inputRequests: {
                   confirm_create: inputRequired.elicit({
                     mode: 'form',
-                    message: [
-                      `Create notebook "${singleLine(options.name)}" in project ${project_id}?`,
-                      'The notebook will be shared with everyone who has access to the project. Queries will be saved, not executed.',
-                      '',
-                      JSON.stringify(options, null, 2),
-                    ].join('\n'),
+                    message: buildCreateConfirmationMessage({
+                      projectId: project_id,
+                      notebook: options,
+                    }),
                     requestedSchema: actionOnlyElicitationSchema,
                   }),
                 },
