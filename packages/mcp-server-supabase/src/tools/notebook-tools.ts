@@ -6,7 +6,6 @@ import {
 import { z } from 'zod/v4';
 import { resolveLogWindow } from '../logs.js';
 import type {
-  CreateNotebookOptions,
   DatabaseOperations,
   DebuggingOperations,
   NotebookOperations,
@@ -19,7 +18,6 @@ import { hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
   checkConfirmationState,
-  createNotebookStateSchema,
   isFormCapable,
   runNotebookStateSchema,
   type ElicitationState,
@@ -56,7 +54,6 @@ type NotebookToolsOptions = {
    */
   confirmation?: {
     codec: RequestStateCodec<ElicitationState>;
-    enabledTools: readonly ('run_notebook' | 'create_notebook')[];
   };
 };
 
@@ -120,7 +117,7 @@ const runNotebookOutputSchema = z.object({
 export const notebookToolDefs = {
   create_notebook: {
     description:
-      'Creates a saved notebook shared with everyone who has access to the Supabase project. Use for investigations or dashboards the user wants to revisit. Saves markdown, database SQL, and log SQL cells without executing queries. Cell ids are assigned by the server. The user may be asked to confirm before saving. Use get_notebook and run_notebook to run the saved notebook; run_notebook can only run log cells whose time range is 24 hours or less.',
+      'Creates a saved notebook shared with everyone who has access to the Supabase project. Use for investigations or dashboards the user wants to revisit. Saves markdown, database SQL, and log SQL cells without executing queries. Cell ids are assigned by the server. Use get_notebook and run_notebook to run the saved notebook; run_notebook can only run log cells whose time range is 24 hours or less.',
     parameters: createNotebookInputSchema,
     outputSchema: createNotebookOutputSchema,
     annotations: {
@@ -260,56 +257,9 @@ export function getNotebookTools({
       create_notebook: injectableTool({
         ...notebookToolDefs.create_notebook,
         inject: { project_id },
-        execute: async ({ project_id, ...options }, ctx: ServerContext) => {
+        execute: async ({ project_id, ...options }) => {
           if (readOnly) {
             throw new Error('Cannot create notebook in read-only mode.');
-          }
-
-          // Nothing runs yet, but anyone with project access can run the saved
-          // SQL later, so show the whole notebook before sharing it.
-          if (
-            confirmation?.enabledTools.includes('create_notebook') &&
-            isFormCapable(ctx)
-          ) {
-            const { codec } = confirmation;
-            const notebookHash = await hashObject(options);
-            const askForConfirmation = async () =>
-              inputRequired({
-                inputRequests: {
-                  confirm_create: inputRequired.elicit({
-                    mode: 'form',
-                    message: buildCreateConfirmationMessage({
-                      projectId: project_id,
-                      notebook: options,
-                    }),
-                    requestedSchema: actionOnlyElicitationSchema,
-                  }),
-                },
-                requestState: await codec.mint(
-                  {
-                    tool: 'create_notebook',
-                    project_id,
-                    notebookHash,
-                  },
-                  ctx
-                ),
-              });
-
-            const confirmationState = await checkConfirmationState({
-              ctx,
-              tool: 'create_notebook',
-              schema: createNotebookStateSchema,
-              requestKey: 'confirm_create',
-              askForConfirmation,
-              argsMatch: (state) => state.project_id === project_id,
-              payloadMatch: (state) => state.notebookHash === notebookHash,
-              declinedText: 'Notebook creation was declined.',
-              cancelledText: 'Notebook creation was cancelled.',
-            });
-
-            if (confirmationState.kind !== 'proceed') {
-              return confirmationState.result;
-            }
           }
 
           const { id, name, updated_at } = await createNotebook(

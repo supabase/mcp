@@ -92,16 +92,6 @@ export type RunNotebookState = {
   readOnly: boolean;
 };
 
-/**
- * Signed `requestState` payload for the `create_notebook` confirmation, bound
- * to the project and a hash of the proposed notebook shown to the user.
- */
-export type CreateNotebookState = {
-  tool: 'create_notebook';
-  project_id: string;
-  notebookHash: string;
-};
-
 export type DestructiveSqlState = ExecuteSqlState | ApplyMigrationState;
 export type CostConfirmationState = ProjectCostState | BranchCostState;
 
@@ -112,8 +102,7 @@ export type CostConfirmationState = ProjectCostState | BranchCostState;
 export type ConfirmationState =
   | CostConfirmationState
   | DestructiveSqlState
-  | RunNotebookState
-  | CreateNotebookState;
+  | RunNotebookState;
 
 /**
  * Signed state for URL-mode secret collection, bound to the project and name.
@@ -150,12 +139,6 @@ export const runNotebookStateSchema = z.object({
   cellsHash: z.string(),
   readOnly: z.boolean(),
 }) satisfies z.ZodType<RunNotebookState>;
-
-export const createNotebookStateSchema = z.object({
-  tool: z.literal('create_notebook'),
-  project_id: z.string(),
-  notebookHash: z.string(),
-}) satisfies z.ZodType<CreateNotebookState>;
 
 export type CheckConfirmationStateResult =
   | { kind: 'proceed' }

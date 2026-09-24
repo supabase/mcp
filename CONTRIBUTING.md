@@ -57,7 +57,7 @@ In this package's local HTTP server, signed `requestState` used by secret collec
 
 Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--secret-url-template`, `--version`.
 
-For this package's local HTTP server, the optional `skip_elicitations` query parameter accepts comma-separated values (`create_project`, `create_branch`, `execute_sql`, `apply_migration`, `run_notebook`). Skipping `create_project` or `create_branch` uses legacy cost confirmation instead of elicitation; it does not bypass cost confirmation. Skipping `execute_sql` or `apply_migration` disables destructive SQL elicitation, so SQL may execute without a prompt or legacy confirmation fallback. Skipping `run_notebook` runs notebook cells without a prompt. By default, non-destructive and read-only notebook runs do not prompt; destructive runs require form elicitation and are rejected before any cell runs if the client lacks form support. Omitting the parameter or leaving it blank preserves the configured or default eligible tools.
+For this package's local HTTP server, the optional `skip_elicitations` query parameter accepts comma-separated values (`create_project`, `create_branch`, `execute_sql`, `apply_migration`, `run_notebook`). Skipping `create_project` or `create_branch` uses legacy cost confirmation instead of elicitation; it does not bypass cost confirmation. Skipping `execute_sql` or `apply_migration` disables destructive SQL elicitation, so SQL may execute without a prompt or legacy confirmation fallback. Skipping `run_notebook` runs notebook cells without a prompt. Notebook creation never prompts. By default, non-destructive and read-only notebook runs do not prompt; destructive runs require form elicitation and are rejected before any cell runs if the client lacks form support. Omitting the parameter or leaving it blank preserves the configured or default eligible tools.
 
 To try the HTTP entry from a PR without cloning, run the preview build published by pkg.pr.new:
 
@@ -121,7 +121,7 @@ Start in the existing test file closest to the behavior. Keep pure-helper tests 
 | `src/server.functions.test.ts` | Edge functions and URL-mode secret collection |
 | `src/server.branching.test.ts` | Branch creation/lifecycle, listing, merge, reset, rebase and branch cost confirmation |
 | `src/server.storage.test.ts` | Storage buckets and configuration |
-| `src/server.notebooks.test.ts` | Notebook listing, retrieval, running and notebook run confirmation |
+| `src/server.notebooks.test.ts` | Notebook listing, retrieval, creation, running and notebook confirmation |
 
 Keep project and branch cost-confirmation flows with their respective feature groups, including legacy fallback, modern elicitation, approval, token, retry and tamper cases. General server contracts, feature-surface checks and docs stay in core. HTTP transport behavior belongs in `src/transports/http.test.ts`. Keep integration/e2e tests in their existing locations and projects.
 
