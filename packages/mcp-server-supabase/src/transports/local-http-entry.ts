@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import {
+  CLIENT_CAPABILITIES_META_KEY,
   CLIENT_INFO_META_KEY,
   createMcpHandler,
   hostHeaderValidationResponse,
@@ -17,6 +18,8 @@ import { z } from 'zod/v4';
 
 import { createSupabaseApiPlatform } from '../platform/api-platform.js';
 import { createSupabaseMcpServer } from '../server.js';
+import { assertValidConnectUrlTemplate } from '../tools/secret-tools.js';
+import { CURRENT_ELICITATION_TOOLS } from '../types.js';
 import { parseFeatureGroups } from '../util.js';
 import { parseList } from './util.js';
 
@@ -24,6 +27,7 @@ export type LocalHttpEntryOptions = {
   port: number;
   apiUrl?: string;
   contentApiUrl?: string;
+  secretUrlTemplate?: string;
   log?: (line: string) => void;
 };
 
@@ -35,6 +39,11 @@ const querySchema = z.object({
     .string()
     .transform((value) => parseList(value))
     .optional(),
+  skip_elicitations: z
+    .string()
+    .transform((value) => parseList(value))
+    .optional()
+    .pipe(z.array(z.enum(CURRENT_ELICITATION_TOOLS)).optional()),
 });
 
 /** e.g. `tools/call create_branch  claude-code/2.1.260  (2026-07-28)` */
@@ -43,6 +52,7 @@ export function describeRequest(body: unknown): string {
   let client: Implementation | undefined;
   let method: string | undefined;
   let protocolVersion: string | undefined;
+  let elicitation: string | undefined;
   for (const message of messages) {
     if (!isJSONRPCRequest(message) && !isJSONRPCNotification(message)) continue;
     method ??= isSpecType.CallToolRequest(message)
@@ -56,25 +66,60 @@ export function describeRequest(body: unknown): string {
     if (isSpecType.InitializeRequest(message)) {
       client ??= message.params.clientInfo;
       protocolVersion ??= message.params.protocolVersion;
+      elicitation ??=
+        JSON.stringify(message.params.capabilities.elicitation) ?? 'absent';
+    } else if (
+      isSpecType.CallToolRequest(message) &&
+      (message.params.name === 'create_edge_function_secret' ||
+        (CURRENT_ELICITATION_TOOLS as readonly string[]).includes(
+          message.params.name
+        ))
+    ) {
+      const capabilities = meta?.[CLIENT_CAPABILITIES_META_KEY] as
+        | { elicitation?: unknown }
+        | undefined;
+      elicitation ??= JSON.stringify(capabilities?.elicitation) ?? 'absent';
     }
   }
   const name = client
     ? [client.name, client.version].filter(Boolean).join('/')
     : 'unknown';
-  return [
+  const description = [
     (method ?? 'unknown').padEnd(28),
     name.padEnd(24),
     `(${protocolVersion ?? 'legacy'})`,
   ].join('  ');
+  return elicitation === undefined
+    ? description
+    : `${description}  elicitation=${elicitation}`;
 }
 
 export async function startLocalHttpEntry({
   port,
   apiUrl,
   contentApiUrl,
+  secretUrlTemplate,
   log = (line) =>
     console.error(`[${new Date().toLocaleTimeString('en-GB')}] ${line}`),
 }: LocalHttpEntryOptions) {
+  if (secretUrlTemplate === undefined) {
+    switch (new URL(apiUrl ?? 'https://api.supabase.com').origin) {
+      case 'https://api.supabase.com':
+        secretUrlTemplate =
+          'https://supabase.com/dashboard/mcp/secrets?ref={ref}&name={name}';
+        break;
+      case 'https://api.supabase.green':
+        secretUrlTemplate =
+          'https://supabase.green/dashboard/mcp/secrets?ref={ref}&name={name}';
+        break;
+      default:
+        throw new Error(
+          'A custom --api-url requires an explicit --secret-url-template.'
+        );
+    }
+  }
+  assertValidConnectUrlTemplate(secretUrlTemplate);
+  const secretCollection = { connectUrlTemplate: secretUrlTemplate };
   const requestStateKey = randomBytes(32);
   const allowedHostnames = localhostAllowedHostnames();
 
@@ -99,6 +144,18 @@ export async function startLocalHttpEntry({
           }
 
           const url = new URL(request.url);
+          // Hosted query parsing turns repeated or bracketed skips into
+          // non-string values. Reject those before flattening query parameters.
+          let skipCount = 0;
+          for (const key of url.searchParams.keys()) {
+            if (key === 'skip_elicitations') skipCount++;
+            if (skipCount > 1 || /^skip_elicitations\[[^[\]]*\]/.test(key)) {
+              return Response.json(
+                { error: 'skip_elicitations must be a single CSV string' },
+                { status: 400 }
+              );
+            }
+          }
           const query = querySchema.safeParse(
             Object.fromEntries(url.searchParams)
           );
@@ -112,6 +169,7 @@ export async function startLocalHttpEntry({
             project_ref: projectId,
             read_only: readOnly,
             features,
+            skip_elicitations: skipElicitations,
           } = query.data;
 
           log(
@@ -133,13 +191,21 @@ export async function startLocalHttpEntry({
                 readOnly,
                 features,
                 contentApiUrl,
-                costConfirmation: {
-                  requestStateKey,
-                  // One process can serve several PATs, so the principal is the token's hash.
-                  principal: createHash('sha256')
-                    .update(accessToken)
-                    .digest('hex'),
-                  enabledTools: ['create_project', 'create_branch'],
+                elicitation: {
+                  requestState: {
+                    key: requestStateKey,
+                    ttlSeconds: 120,
+                    // One process can serve several PATs, so the principal is the token's hash.
+                    principal: createHash('sha256')
+                      .update(accessToken)
+                      .digest('hex'),
+                  },
+                  confirmation: {
+                    enabledTools: CURRENT_ELICITATION_TOOLS.filter(
+                      (tool) => !skipElicitations?.includes(tool)
+                    ),
+                  },
+                  secretCollection,
                 },
               }),
             { legacy: 'stateless', onerror: console.error }

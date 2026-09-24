@@ -7,6 +7,8 @@ import { debuggingToolDefs } from './debugging-tools.js';
 import { developmentToolDefs } from './development-tools.js';
 import { docsToolDefs } from './docs-tools.js';
 import { edgeFunctionToolDefs } from './edge-function-tools.js';
+import { notebookToolDefs } from './notebook-tools.js';
+import { secretToolDefs } from './secret-tools.js';
 import { storageToolDefs } from './storage-tools.js';
 import type { ToolDefs } from './util.js';
 
@@ -71,7 +73,9 @@ export const supabaseMcpToolSchemas = {
   ...defsToSchemas(developmentToolDefs),
   ...defsToSchemas(docsToolDefs),
   ...defsToSchemas(edgeFunctionToolDefs),
+  ...defsToSchemas(secretToolDefs),
   ...defsToSchemas(storageToolDefs),
+  ...defsToSchemas(notebookToolDefs),
 } satisfies Record<string, SchemaEntry>;
 
 /**
@@ -95,15 +99,22 @@ const FEATURE_TOOL_MAP = {
   development: Object.keys(
     developmentToolDefs
   ) as readonly (keyof typeof developmentToolDefs)[],
-  functions: Object.keys(
-    edgeFunctionToolDefs
-  ) as readonly (keyof typeof edgeFunctionToolDefs)[],
+  functions: [
+    ...Object.keys(edgeFunctionToolDefs),
+    ...Object.keys(secretToolDefs),
+  ] as readonly (
+    | keyof typeof edgeFunctionToolDefs
+    | keyof typeof secretToolDefs
+  )[],
   branching: Object.keys(
     branchingToolDefs
   ) as readonly (keyof typeof branchingToolDefs)[],
   storage: Object.keys(
     storageToolDefs
   ) as readonly (keyof typeof storageToolDefs)[],
+  notebooks: Object.keys(
+    notebookToolDefs
+  ) as readonly (keyof typeof notebookToolDefs)[],
 } satisfies Record<
   FeatureGroup,
   readonly (keyof typeof supabaseMcpToolSchemas)[]
