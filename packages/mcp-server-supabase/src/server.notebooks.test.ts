@@ -1371,6 +1371,15 @@ describe('run_notebook', () => {
 });
 
 describe('create_notebook', () => {
+  const chart = {
+    type: 'bar',
+    x_column: 'day',
+    y_series: [{ column: 'total' }],
+    scale: 'linear',
+    cumulative: false,
+    show_labels: true,
+  };
+
   const content = {
     cells: [
       { type: 'markdown', text: '# Weekly review' },
@@ -1380,14 +1389,7 @@ describe('create_notebook', () => {
         row_limit: 25,
         title: 'Total',
         view: 'chart',
-        chart: {
-          type: 'bar',
-          x_column: 'day',
-          y_series: [{ column: 'total' }],
-          scale: 'linear',
-          cumulative: false,
-          show_labels: true,
-        },
+        chart,
       },
       {
         type: 'log',
@@ -1520,15 +1522,6 @@ describe('create_notebook', () => {
     expect(project.notebooks.size).toBe(0);
   });
 
-  const chart = {
-    type: 'bar',
-    x_column: 'day',
-    y_series: [{ column: 'total' }],
-    scale: 'linear',
-    cumulative: false,
-    show_labels: true,
-  };
-
   test.each([
     [{ type: 'markdown', id: 'invented', text: 'hello' }, []],
     [{ type: 'database', sql: 'select 1', row_limit: 100, id: 'invented' }, []],
@@ -1642,18 +1635,12 @@ describe('create_notebook', () => {
     async (name) => {
       const { callTool } = await setup({ features: ['notebooks'] });
       const { project } = await createProjectFixture();
-      const issues = await callTool({
-        name: 'create_notebook',
-        arguments: { project_id: project.id, name, content: { cells: [] } },
-      }).then(
-        () => {
-          throw new Error('expected invalid input');
-        },
-        (error: Error) => JSON.parse(error.message)
-      );
-      expect(issues).toContainEqual(
-        expect.objectContaining({ path: ['name'] })
-      );
+      await expect(
+        callTool({
+          name: 'create_notebook',
+          arguments: { project_id: project.id, name, content: { cells: [] } },
+        })
+      ).rejects.toThrow('"name"');
       expect(project.notebooks.size).toBe(0);
     }
   );

@@ -233,7 +233,9 @@ export const notebookCellSchema = z.discriminatedUnion('type', [
 // above, so a misspelled key fails instead of being silently dropped.
 const newNotebookChartConfigSchema = notebookChartConfigSchema
   .extend({
-    y_series: z.array(z.object({ column: z.string() }).strict()),
+    y_series: z.array(
+      notebookChartConfigSchema.shape.y_series.element.strict()
+    ),
   })
   .strict();
 
