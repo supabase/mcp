@@ -74,3 +74,39 @@ export function getClickHouseLogQuery(
       throw new Error(`unsupported log service type: ${service}`);
   }
 }
+
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function resolveLogWindow(
+  iso_timestamp_start?: string,
+  iso_timestamp_end?: string
+) {
+  const endMs = iso_timestamp_end ? Date.parse(iso_timestamp_end) : Date.now();
+  if (Number.isNaN(endMs)) {
+    throw new Error(
+      `Invalid iso_timestamp_end: "${iso_timestamp_end}". Expected an ISO 8601 timestamp.`
+    );
+  }
+
+  const startMs = iso_timestamp_start
+    ? Date.parse(iso_timestamp_start)
+    : endMs - DAY_MS;
+  if (Number.isNaN(startMs)) {
+    throw new Error(
+      `Invalid iso_timestamp_start: "${iso_timestamp_start}". Expected an ISO 8601 timestamp.`
+    );
+  }
+
+  if (startMs >= endMs) {
+    throw new Error('iso_timestamp_start must be before iso_timestamp_end.');
+  }
+
+  if (endMs - startMs > DAY_MS) {
+    throw new Error('The log window can be at most 24 hours.');
+  }
+
+  return {
+    iso_timestamp_start: new Date(startMs).toISOString(),
+    iso_timestamp_end: new Date(endMs).toISOString(),
+  };
+}

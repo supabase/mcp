@@ -4,6 +4,7 @@ import {
   type ServerContext,
 } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
+import { resolveLogWindow } from '../logs.js';
 import type {
   DatabaseOperations,
   DebuggingOperations,
@@ -18,7 +19,6 @@ import {
   runNotebookStateSchema,
   type ElicitationState,
 } from './confirmation.js';
-import { resolveLogWindow } from './debugging-tools.js';
 import { isDestructiveSql } from './destructive-sql.js';
 import {
   applyRowLimit,
