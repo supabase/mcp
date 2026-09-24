@@ -1369,3 +1369,466 @@ describe('run_notebook', () => {
     });
   });
 });
+
+describe('create_notebook', () => {
+  const content = {
+    cells: [
+      { type: 'markdown', text: '# Weekly review' },
+      {
+        type: 'database',
+        sql: 'select 1 as total',
+        row_limit: 25,
+        title: 'Total',
+        view: 'chart',
+        chart: {
+          type: 'bar',
+          x_column: 'day',
+          y_series: [{ column: 'total' }],
+          scale: 'linear',
+          cumulative: false,
+          show_labels: true,
+        },
+      },
+      {
+        type: 'log',
+        sql: "select timestamp, event_message from logs where source = 'auth_logs'",
+        time_range: { type: 'relative', unit: 'day', amount: 7 },
+      },
+    ],
+  };
+  const proposal = {
+    name: 'Weekly review',
+    description: 'Saved investigation',
+    content,
+  };
+
+  test('creates through the v2 API, assigns ids, and round-trips all cells without executing SQL', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
+    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+    const { callTool } = await setup({ platform, features: ['notebooks'] });
+    const { project } = await createProjectFixture();
+    let sentBody: unknown;
+    harness.mockServer!.use(
+      http.post(
+        `${API_URL}/v2/projects/:ref/notebooks`,
+        async ({ request }) => {
+          sentBody = await request.clone().json();
+          // Fall through to the shared API mock, which persists the notebook.
+        }
+      )
+    );
+
+    const created = await callTool({
+      name: 'create_notebook',
+      arguments: { project_id: project.id, ...proposal },
+    });
+    expect(sentBody).toEqual({
+      data: { type: 'notebook', attributes: proposal },
+    });
+    expect(created).toEqual({
+      id: expect.any(String),
+      name: proposal.name,
+      updated_at: expect.any(String),
+    });
+    const listed = await callTool({
+      name: 'list_notebooks',
+      arguments: { project_id: project.id },
+    });
+    expect(listed.notebooks).toContainEqual(expect.objectContaining(created));
+    const fetched = await callTool({
+      name: 'get_notebook',
+      arguments: { project_id: project.id, notebook_id: created.id },
+    });
+    expect(fetched.description).toBe(proposal.description);
+    expect(fetched.content.schema_version).toBe(1);
+    const cells = parseCellResults(fetched.content.cells);
+    expect(cells).toEqual(
+      content.cells.map((cell) => ({ ...cell, id: expect.any(String) }))
+    );
+    expect(new Set(cells.map((cell: { id: string }) => cell.id)).size).toBe(3);
+    expect(executeSql).not.toHaveBeenCalled();
+    expect(queryLogs).not.toHaveBeenCalled();
+  });
+
+  test('project-scoped creation uses the configured project and can be run separately', async () => {
+    const { project } = await createProjectFixture();
+    const { project: other } = await createProjectFixture();
+    const { callTool, client } = await setup({
+      projectId: project.id,
+      features: RUN_FEATURES,
+    });
+    const { tools } = await client.listTools();
+    const tool = tools.find((tool) => tool.name === 'create_notebook');
+    expect(tool?.inputSchema.properties).not.toHaveProperty('project_id');
+    expect(tool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    });
+    await expect(
+      callTool({
+        name: 'create_notebook',
+        arguments: { project_id: other.id, ...proposal },
+      })
+    ).rejects.toThrow('project_id');
+    const created = await callTool({
+      name: 'create_notebook',
+      arguments: {
+        name: 'One',
+        content: {
+          cells: [{ type: 'database', sql: 'select 1 as one', row_limit: 100 }],
+        },
+      },
+    });
+    expect(project.notebooks.has(created.id)).toBe(true);
+    expect(other.notebooks.size).toBe(0);
+    const fetched = await callTool({
+      name: 'get_notebook',
+      arguments: { notebook_id: created.id },
+    });
+    const run = await callTool({
+      name: 'run_notebook',
+      arguments: {
+        notebook_id: created.id,
+        expected_updated_at: fetched.updated_at,
+      },
+    });
+    expect(parseCellResults(run.cells)).toEqual([
+      expect.objectContaining({ status: 'success', rows: [{ one: 1 }] }),
+    ]);
+  });
+
+  test('read-only mode hides creation and rejects direct calls', async () => {
+    const { client, callTool } = await setup({
+      features: ['notebooks'],
+      readOnly: true,
+    });
+    const { project } = await createProjectFixture();
+    expect(
+      (await client.listTools()).tools.map((tool) => tool.name)
+    ).not.toContain('create_notebook');
+    await expect(
+      callTool({
+        name: 'create_notebook',
+        arguments: { project_id: project.id, ...proposal },
+      })
+    ).rejects.toThrow('Cannot create notebook in read-only mode.');
+    expect(project.notebooks.size).toBe(0);
+  });
+
+  test.each([
+    { type: 'markdown', id: 'invented', text: 'hello' },
+    { type: 'database', sql: 'select 1', row_limit: 100, id: 'invented' },
+    { type: 'database', sql: 'select 1' },
+    {
+      type: 'database',
+      sql: 'select 1',
+      row_limit: 100,
+      database_identifier: '',
+    },
+    { type: 'unknown', text: 'hello' },
+    {
+      type: 'log',
+      sql: 'select 1',
+      time_range: { type: 'relative', unit: 'day', amount: 0 },
+    },
+    {
+      type: 'log',
+      sql: 'select 1',
+      time_range: { type: 'relative', unit: 'day', amount: 1.5 },
+    },
+    {
+      type: 'log',
+      sql: 'select 1',
+      time_range: {
+        type: 'absolute',
+        start: 'invalid',
+        end: '2026-09-24T00:00:00Z',
+      },
+    },
+    {
+      type: 'log',
+      sql: 'select 1',
+      time_range: {
+        type: 'absolute',
+        start: '2026-09-24T00:00:00Z',
+        end: '2026-09-23T00:00:00Z',
+      },
+    },
+  ])('rejects invalid cell input before saving: %j', async (cell) => {
+    const { client } = await setup({ features: ['notebooks'] });
+    const { project } = await createProjectFixture();
+    const result = await client.callTool({
+      name: 'create_notebook',
+      arguments: {
+        project_id: project.id,
+        name: 'Invalid',
+        content: { cells: [cell] },
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(project.notebooks.size).toBe(0);
+  });
+
+  test('preserves absolute log windows and explicit database targets', async () => {
+    const { callTool } = await setup({ features: ['notebooks'] });
+    const { project } = await createProjectFixture();
+    const cells = [
+      {
+        type: 'database',
+        database_identifier: project.id,
+        sql: 'select 1',
+        row_limit: 100,
+      },
+      {
+        type: 'log',
+        sql: 'select timestamp from logs',
+        time_range: {
+          type: 'absolute',
+          start: '2026-09-23T00:00:00+10:00',
+          end: '2026-09-24T00:00:00+10:00',
+        },
+      },
+    ];
+    const created = await callTool({
+      name: 'create_notebook',
+      arguments: {
+        project_id: project.id,
+        name: 'Explicit sources',
+        content: { cells },
+      },
+    });
+    expect(project.notebooks.get(created.id)?.content.cells).toEqual(
+      cells.map((cell) => ({ ...cell, id: expect.any(String) }))
+    );
+  });
+
+  test.each([
+    [
+      401,
+      { message: 'Unauthorized' },
+      'Unauthorized. Please provide a valid access token',
+    ],
+    [
+      403,
+      {
+        error: {
+          code: 'forbidden',
+          message: 'Insufficient notebook permissions',
+        },
+      },
+      'Insufficient notebook permissions',
+    ],
+    [500, {}, 'Failed to create notebook'],
+  ])('surfaces API errors (%s)', async (status, body, message) => {
+    const { callTool } = await setup({ features: ['notebooks'] });
+    harness.mockServer!.use(
+      http.post(`${API_URL}/v2/projects/:ref/notebooks`, () =>
+        HttpResponse.json(body, { status })
+      )
+    );
+    await expect(
+      callTool({
+        name: 'create_notebook',
+        arguments: { project_id: 'test-project', ...proposal },
+      })
+    ).rejects.toThrow(message);
+  });
+
+  describe('confirmation via elicitation', () => {
+    test('creation rejects approval issued for running a notebook', async () => {
+      const { client } = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const { project, notebook } = await createNotebookFixture([
+        { id: 'one', type: 'database', sql: 'select 1', row_limit: 100 },
+      ]);
+      const first = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: runArgs(project, notebook),
+      });
+      if (!isInputRequiredResult(first))
+        throw new Error('expected input_required');
+      const result = await callModernTool(client, {
+        name: 'create_notebook',
+        arguments: {
+          project_id: project.id,
+          name: 'New notebook',
+          content: { cells: [] },
+        },
+        requestState: first.requestState,
+        inputResponses: { confirm_create: { action: 'accept', content: {} } },
+      });
+      expect(result).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: 'text',
+            text: 'Request state was not issued for create_notebook.',
+          },
+        ],
+      });
+      expect(project.notebooks.size).toBe(1);
+    });
+
+    test('shows all proposed content before saving, including markdown-only notebooks', async () => {
+      const { client } = await setupModern({
+        features: ['notebooks'],
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const { project } = await createProjectFixture();
+      const args = {
+        project_id: project.id,
+        name: 'Notes',
+        content: { cells: [content.cells[0]] },
+      };
+      const first = await callModernTool(client, {
+        name: 'create_notebook',
+        arguments: args,
+      });
+      if (!isInputRequiredResult(first))
+        throw new Error('expected input_required');
+      expect(first.inputRequests?.confirm_create).toMatchObject({
+        method: 'elicitation/create',
+        params: {
+          mode: 'form',
+          message: expect.stringContaining('# Weekly review'),
+        },
+      });
+      expect(project.notebooks.size).toBe(0);
+      const result = await callModernTool(client, {
+        name: 'create_notebook',
+        arguments: args,
+        requestState: first.requestState,
+        inputResponses: { confirm_create: { action: 'accept', content: {} } },
+      });
+      if (isInputRequiredResult(result))
+        throw new Error('expected created notebook');
+      expect(result.isError).not.toBe(true);
+      expect(project.notebooks.size).toBe(1);
+    });
+
+    test.each(['accept', 'decline', 'cancel'] as const)(
+      '%s saves only with approval',
+      async (elicitationAction) => {
+        const { client, platform } = await setupModern({
+          features: ['notebooks'],
+          clientCapabilities: FORM_CAPABLE,
+          elicitationAction,
+        });
+        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+        const { project } = await createProjectFixture();
+        const result = await client.callTool({
+          name: 'create_notebook',
+          arguments: { project_id: project.id, ...proposal },
+        });
+        expect(project.notebooks.size).toBe(
+          elicitationAction === 'accept' ? 1 : 0
+        );
+        if (elicitationAction !== 'accept')
+          expect(result.structuredContent).toEqual({
+            status: elicitationAction === 'decline' ? 'declined' : 'cancelled',
+          });
+        expect(executeSql).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each([
+      { name: 'Changed title' },
+      { description: 'Changed description' },
+      { content: { cells: [{ type: 'markdown', text: 'Changed content' }] } },
+    ])('asks again when the approved proposal changes: %j', async (changes) => {
+      const { client } = await setupModern({
+        features: ['notebooks'],
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const { project } = await createProjectFixture();
+      const args = { project_id: project.id, ...proposal };
+      const first = await callModernTool(client, {
+        name: 'create_notebook',
+        arguments: args,
+      });
+      if (!isInputRequiredResult(first))
+        throw new Error('expected input_required');
+      const changed = { ...args, ...changes };
+      const second = await callModernTool(client, {
+        name: 'create_notebook',
+        arguments: changed,
+        requestState: first.requestState,
+        inputResponses: { confirm_create: { action: 'accept', content: {} } },
+      });
+      expect(isInputRequiredResult(second)).toBe(true);
+      expect(project.notebooks.size).toBe(0);
+      if (!isInputRequiredResult(second))
+        throw new Error('expected fresh approval');
+      const result = await callModernTool(client, {
+        name: 'create_notebook',
+        arguments: changed,
+        requestState: second.requestState,
+        inputResponses: { confirm_create: { action: 'accept', content: {} } },
+      });
+      expect(isInputRequiredResult(result)).toBe(false);
+      expect(project.notebooks.size).toBe(1);
+    });
+
+    test('rejects approval for a different project', async () => {
+      const { client } = await setupModern({
+        features: ['notebooks'],
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const { project } = await createProjectFixture();
+      const { project: other } = await createProjectFixture();
+      const first = await callModernTool(client, {
+        name: 'create_notebook',
+        arguments: { project_id: project.id, ...proposal },
+      });
+      if (!isInputRequiredResult(first))
+        throw new Error('expected input_required');
+      const result = await callModernTool(client, {
+        name: 'create_notebook',
+        arguments: { project_id: other.id, ...proposal },
+        requestState: first.requestState,
+        inputResponses: { confirm_create: { action: 'accept', content: {} } },
+      });
+      expect(result).toMatchObject({
+        isError: true,
+        structuredContent: { status: 'error' },
+      });
+      expect(project.notebooks.size + other.notebooks.size).toBe(0);
+    });
+
+    test.each([false, true])(
+      'preserves execution without an active form gate (form support: %s)',
+      async (formCapable) => {
+        const { client } = await setupModern({
+          features: ['notebooks'],
+          clientCapabilities: formCapable ? FORM_CAPABLE : {},
+          elicitation: {
+            requestState: { key: 'a'.repeat(32), principal: 'test-user' },
+            confirmation: {
+              enabledTools: formCapable
+                ? ['run_notebook']
+                : ['create_notebook'],
+            },
+          },
+        });
+        const { project } = await createProjectFixture();
+        const result = await callModernTool(client, {
+          name: 'create_notebook',
+          arguments: {
+            project_id: project.id,
+            name: 'Empty',
+            content: { cells: [] },
+          },
+        });
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect(project.notebooks.size).toBe(1);
+      }
+    );
+  });
+});

@@ -10,11 +10,15 @@ import type {
   DebuggingOperations,
   NotebookOperations,
 } from '../platform/types.js';
-import { notebookSchema } from '../platform/types.js';
+import {
+  createNotebookOptionsSchema,
+  notebookSchema,
+} from '../platform/types.js';
 import { hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
   checkConfirmationState,
+  createNotebookStateSchema,
   isFormCapable,
   runNotebookStateSchema,
   type ElicitationState,
@@ -52,7 +56,21 @@ type NotebookToolsOptions = {
   confirmation?: {
     codec: RequestStateCodec<ElicitationState>;
   };
+  /** Creation approval is configured independently from run approval. */
+  createConfirmation?: {
+    codec: RequestStateCodec<ElicitationState>;
+  };
 };
+
+const createNotebookInputSchema = createNotebookOptionsSchema.extend({
+  project_id: z.string(),
+});
+
+const createNotebookOutputSchema = notebookSchema.pick({
+  id: true,
+  name: true,
+  updated_at: true,
+});
 
 const listNotebooksInputSchema = z.object({
   project_id: z.string(),
@@ -92,6 +110,19 @@ const runNotebookOutputSchema = z.object({
 });
 
 export const notebookToolDefs = {
+  create_notebook: {
+    description:
+      'Creates a saved notebook shared with everyone who has access to the Supabase project. Use for investigations or dashboards the user wants to revisit. Saves markdown, database SQL, and log SQL cells without executing queries. Cell ids are assigned by the server. The user may be asked to confirm before saving. Use get_notebook and run_notebook to run the saved notebook.',
+    parameters: createNotebookInputSchema,
+    outputSchema: createNotebookOutputSchema,
+    annotations: {
+      title: 'Create notebook',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+  },
   list_notebooks: {
     description:
       'Lists the notebooks in a Supabase project. Notebook bodies are omitted — use get_notebook to read a specific notebook.',
@@ -212,10 +243,73 @@ export function getNotebookTools({
   projectId,
   readOnly,
   confirmation,
+  createConfirmation,
 }: NotebookToolsOptions) {
   const project_id = projectId;
+  const createNotebook = notebooks.createNotebook?.bind(notebooks);
 
   return {
+    ...(createNotebook && {
+      create_notebook: injectableTool({
+        ...notebookToolDefs.create_notebook,
+        inject: { project_id },
+        execute: async ({ project_id, ...options }, ctx: ServerContext) => {
+          if (readOnly) {
+            throw new Error('Cannot create notebook in read-only mode.');
+          }
+
+          if (createConfirmation && isFormCapable(ctx)) {
+            const { codec } = createConfirmation;
+            const notebookHash = await hashObject(options);
+            const askForConfirmation = async () =>
+              inputRequired({
+                inputRequests: {
+                  confirm_create: inputRequired.elicit({
+                    mode: 'form',
+                    message: [
+                      `Create notebook "${singleLine(options.name)}" in project ${project_id}?`,
+                      'The notebook will be shared with everyone who has access to the project. Queries will be saved, not executed.',
+                      '',
+                      JSON.stringify(options, null, 2),
+                    ].join('\n'),
+                    requestedSchema: actionOnlyElicitationSchema,
+                  }),
+                },
+                requestState: await codec.mint(
+                  {
+                    tool: 'create_notebook',
+                    project_id,
+                    notebookHash,
+                  },
+                  ctx
+                ),
+              });
+
+            const confirmationState = await checkConfirmationState({
+              ctx,
+              tool: 'create_notebook',
+              schema: createNotebookStateSchema,
+              requestKey: 'confirm_create',
+              askForConfirmation,
+              argsMatch: (state) => state.project_id === project_id,
+              payloadMatch: (state) => state.notebookHash === notebookHash,
+              declinedText: 'Notebook creation was declined.',
+              cancelledText: 'Notebook creation was cancelled.',
+            });
+
+            if (confirmationState.kind !== 'proceed') {
+              return confirmationState.result;
+            }
+          }
+
+          const { id, name, updated_at } = await createNotebook(
+            project_id,
+            options
+          );
+          return { id, name, updated_at };
+        },
+      }),
+    }),
     list_notebooks: injectableTool({
       ...notebookToolDefs.list_notebooks,
       inject: { project_id },

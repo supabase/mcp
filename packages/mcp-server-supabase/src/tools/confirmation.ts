@@ -92,6 +92,13 @@ export type RunNotebookState = {
   readOnly: boolean;
 };
 
+/** Binds creation approval to the project and the complete proposed notebook. */
+export type CreateNotebookState = {
+  tool: 'create_notebook';
+  project_id: string;
+  notebookHash: string;
+};
+
 export type DestructiveSqlState = ExecuteSqlState | ApplyMigrationState;
 export type CostConfirmationState = ProjectCostState | BranchCostState;
 
@@ -102,7 +109,8 @@ export type CostConfirmationState = ProjectCostState | BranchCostState;
 export type ConfirmationState =
   | CostConfirmationState
   | DestructiveSqlState
-  | RunNotebookState;
+  | RunNotebookState
+  | CreateNotebookState;
 
 /**
  * Signed state for URL-mode secret collection, bound to the project and name.
@@ -139,6 +147,12 @@ export const runNotebookStateSchema = z.object({
   cellsHash: z.string(),
   readOnly: z.boolean(),
 }) satisfies z.ZodType<RunNotebookState>;
+
+export const createNotebookStateSchema = z.object({
+  tool: z.literal('create_notebook'),
+  project_id: z.string(),
+  notebookHash: z.string(),
+}) satisfies z.ZodType<CreateNotebookState>;
 
 export type CheckConfirmationStateResult =
   | { kind: 'proceed' }

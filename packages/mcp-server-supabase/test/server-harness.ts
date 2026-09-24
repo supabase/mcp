@@ -180,6 +180,7 @@ export function createServerHarness() {
             'execute_sql',
             'apply_migration',
             'run_notebook',
+            'create_notebook',
           ],
         },
       },
