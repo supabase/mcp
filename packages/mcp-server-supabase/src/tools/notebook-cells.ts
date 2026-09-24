@@ -32,7 +32,10 @@ export function applyRowLimit(sql: string, limit: number): string {
   return `${sql.trim().replace(/;+$/, '')} limit ${limit};`;
 }
 
-/** Normalize analytics envelopes while allowing platforms to return rows directly. */
+/**
+ * Returns the rows from a log query response, unwrapping a `{ result }`
+ * envelope and throwing any error it reports.
+ */
 export function getLogCellRows(response: unknown): unknown {
   if (response === null || typeof response !== 'object') {
     return response;
