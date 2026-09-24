@@ -7,7 +7,6 @@ import { z } from 'zod/v4';
 import type {
   DatabaseOperations,
   DebuggingOperations,
-  NotebookCell,
   NotebookOperations,
 } from '../platform/types.js';
 import { notebookSchema } from '../platform/types.js';
@@ -24,7 +23,10 @@ import { isDestructiveSql } from './destructive-sql.js';
 import {
   applyRowLimit,
   getLogCellRows,
+  isPrimaryDatabaseCell,
+  isQueryCell,
   resolveLogCellWindow,
+  type QueryCell,
 } from './notebook-cells.js';
 import {
   injectableTool,
@@ -132,94 +134,11 @@ export const notebookToolDefs = {
   },
 } as const satisfies ToolDefs;
 
-type QueryCell = Extract<NotebookCell, { type: 'database' | 'log' }>;
-
 type CellResult = {
   cell_id: string;
   title?: string;
   type: QueryCell['type'];
 } & ({ status: 'success'; rows: unknown } | { status: 'error'; error: string });
-
-/** Longest SQL shown per cell in the run confirmation message. */
-const MAX_CONFIRMATION_SQL_LENGTH = 1000;
-
-function isQueryCell(cell: NotebookCell): cell is QueryCell {
-  return cell.type === 'database' || cell.type === 'log';
-}
-
-function describeCellTarget(cell: QueryCell) {
-  if (cell.type === 'database') {
-    return cell.database_identifier
-      ? `database ${cell.database_identifier}`
-      : 'database';
-  }
-  const range = cell.time_range;
-  return range.type === 'relative'
-    ? `logs, last ${range.amount} ${range.unit}${range.amount === 1 ? '' : 's'}`
-    : `logs, ${range.start} to ${range.end}`;
-}
-
-/**
- * Collapses notebook-authored text onto one line, so a name or title can't
- * fake the layout of the confirmation message.
- */
-function singleLine(text: string) {
-  return text.replace(/\s+/g, ' ').trim();
-}
-
-function buildConfirmationMessage({
-  notebookName,
-  projectId,
-  cells,
-  readOnly,
-}: {
-  notebookName: string;
-  projectId: string;
-  cells: QueryCell[];
-  readOnly?: boolean;
-}) {
-  const count = `${cells.length} ${cells.length === 1 ? 'query' : 'queries'}`;
-  const lines = [
-    `Run ${count} from notebook "${singleLine(notebookName)}" on project ${projectId}?`,
-    readOnly
-      ? 'Database queries run read-only.'
-      : 'Database queries can modify or delete data.',
-  ];
-
-  // Checked against the full SQL, so a destructive statement is flagged even
-  // when it falls past the part of the SQL shown below.
-  const destructive = readOnly
-    ? []
-    : cells.flatMap((cell, index) =>
-        cell.type === 'database' && isDestructiveSql(cell.sql)
-          ? [index + 1]
-          : []
-      );
-  if (destructive.length > 0) {
-    const [noun, verb] =
-      destructive.length === 1 ? ['Query', 'includes'] : ['Queries', 'include'];
-    lines.push(
-      `${noun} ${destructive.join(', ')} ${verb} destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).`
-    );
-  }
-
-  cells.forEach((cell, index) => {
-    const title = singleLine(cell.title ?? '') || 'Untitled query';
-    const target = singleLine(describeCellTarget(cell));
-    const marker = destructive.includes(index + 1) ? ', destructive' : '';
-    const sql = cell.sql.trim();
-    const omitted = sql.length - MAX_CONFIRMATION_SQL_LENGTH;
-    lines.push(
-      '',
-      `${index + 1}. ${title} (${target}${marker})`,
-      omitted > 0
-        ? `${sql.slice(0, MAX_CONFIRMATION_SQL_LENGTH).trimEnd()}\n… ${omitted} more characters not shown`
-        : sql
-    );
-  });
-
-  return lines.join('\n');
-}
 
 /** Runs one query cell, returning its rows or the error it failed with. */
 async function runQueryCell(
@@ -250,10 +169,7 @@ async function runQueryCell(
           'Database queries are not available on this server, so database cells cannot be run.'
         );
       }
-      if (
-        cell.database_identifier !== undefined &&
-        cell.database_identifier !== projectId
-      ) {
+      if (!isPrimaryDatabaseCell(cell, projectId)) {
         throw new Error(
           `Running cells against read replica "${cell.database_identifier}" is not supported. Only cells that target the primary database can be run.`
         );
@@ -349,22 +265,20 @@ export function getNotebookTools({
 
           // Use the same SQL heuristic as execute_sql, but only for cells
           // this server can execute. Check before running even the first cell.
-          const hasDestructiveSql =
-            !readOnly &&
-            database !== undefined &&
-            queryCells.some(
-              (cell) =>
-                cell.type === 'database' &&
-                (cell.database_identifier === undefined ||
-                  cell.database_identifier === project_id) &&
-                isDestructiveSql(cell.sql)
-            );
+          const destructiveCells = queryCells.filter(
+            (cell) =>
+              !readOnly &&
+              database &&
+              isPrimaryDatabaseCell(cell, project_id) &&
+              isDestructiveSql(cell.sql)
+          );
 
           if (
             confirmation &&
             // Still validate pending approvals and honor decline/cancel if
             // the notebook or execution mode changed in the meantime.
-            (hasDestructiveSql || ctx.mcpReq.requestState() !== undefined)
+            (destructiveCells.length > 0 ||
+              ctx.mcpReq.requestState() !== undefined)
           ) {
             if (!isFormCapable(ctx)) {
               throw new Error(
@@ -379,12 +293,13 @@ export function getNotebookTools({
                 inputRequests: {
                   confirm_run: inputRequired.elicit({
                     mode: 'form',
-                    message: buildConfirmationMessage({
-                      notebookName: notebook.name,
-                      projectId: project_id,
-                      cells: queryCells,
-                      readOnly,
-                    }),
+                    message: [
+                      `Run notebook? Query cells: ${queryCells.length}.`,
+                      readOnly
+                        ? 'Database queries run read-only.'
+                        : `Potentially destructive queries: ${destructiveCells.length}. These may modify or delete data.`,
+                      `Review notebook: https://supabase.com/dashboard/project/${encodeURIComponent(project_id)}/explorer/notebook/${encodeURIComponent(notebook_id)}`,
+                    ].join('\n'),
                     requestedSchema: actionOnlyElicitationSchema,
                   }),
                 },

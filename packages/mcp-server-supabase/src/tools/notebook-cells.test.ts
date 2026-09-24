@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { applyRowLimit, resolveLogCellWindow } from './notebook-cells.js';
+import {
+  applyRowLimit,
+  getLogCellRows,
+  resolveLogCellWindow,
+} from './notebook-cells.js';
 
 describe('applyRowLimit', () => {
   test.each([
@@ -76,4 +80,32 @@ describe('resolveLogCellWindow', () => {
       });
     }
   );
+});
+
+describe('getLogCellRows', () => {
+  test.each([
+    { error: 'Unknown column', message: 'Unknown column' },
+    {
+      error: { message: 'Unknown column', code: 47 },
+      message: 'Unknown column',
+    },
+    {
+      error: {
+        errors: [{ message: 'Unknown column' }, { message: 'At line 1' }],
+      },
+      message: 'Unknown column\nAt line 1',
+    },
+    {
+      error: { code: 47, detail: 'Unknown column' },
+      message: '{"code":47,"detail":"Unknown column"}',
+    },
+  ])('preserves log error diagnostics: $message', ({ error, message }) => {
+    expect(() => getLogCellRows({ result: [], error })).toThrow(message);
+  });
+
+  test('unwraps rows from the API envelope', () => {
+    const rows = [{ event_message: 'Recovered' }];
+    expect(getLogCellRows({ result: rows, error: null })).toBe(rows);
+    expect(getLogCellRows(rows)).toBe(rows);
+  });
 });

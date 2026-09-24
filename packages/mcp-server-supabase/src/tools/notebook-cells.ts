@@ -2,6 +2,21 @@ import type { NotebookCell } from '../platform/types.js';
 
 type LogTimeRange = Extract<NotebookCell, { type: 'log' }>['time_range'];
 
+export type QueryCell = Extract<NotebookCell, { type: 'database' | 'log' }>;
+
+/** Only primary database cells can execute on the current project. */
+export function isPrimaryDatabaseCell(cell: QueryCell, projectId: string) {
+  return (
+    cell.type === 'database' &&
+    (cell.database_identifier === undefined ||
+      cell.database_identifier === projectId)
+  );
+}
+
+export function isQueryCell(cell: NotebookCell): cell is QueryCell {
+  return cell.type === 'database' || cell.type === 'log';
+}
+
 /**
  * Appends `limit <n>` to a single `select` statement that doesn't already
  * limit its rows. Anything it can't reason about safely (multiple statements,

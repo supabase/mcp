@@ -389,109 +389,89 @@ describe('run_notebook', () => {
     );
   });
 
-  test.each([
-    {
-      error: 'Unknown identifier missing_column',
-      message: 'Unknown identifier missing_column',
-    },
-    {
-      error: { message: 'Unknown identifier missing_column', code: 47 },
-      message: 'Unknown identifier missing_column',
-    },
-    {
-      error: {
-        errors: [
-          { message: 'Unknown identifier missing_column' },
-          { message: 'At line 1, column 8' },
-        ],
+  test('returns log errors for notebook repair and continues', async () => {
+    const error = 'Unknown identifier missing_column';
+    const { callTool } = await setup({ features: RUN_FEATURES });
+    harness.mockServer?.use(
+      http.get(
+        `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
+        ({ request }) =>
+          HttpResponse.json(
+            new URL(request.url).searchParams
+              .get('sql')
+              ?.includes('missing_column')
+              ? { result: [], error }
+              : { result: [{ event_message: 'Recovered' }], error: null }
+          )
+      )
+    );
+    const { project, notebook } = await createNotebookFixture([
+      {
+        id: 'logs',
+        type: 'log',
+        title: 'Log events',
+        sql: 'select missing_column from logs',
+        time_range: { type: 'relative', unit: 'hour', amount: 1 },
       },
-      message: 'Unknown identifier missing_column\nAt line 1, column 8',
-    },
-    {
-      error: { code: 47, detail: 'Unknown identifier missing_column' },
-      message: '{"code":47,"detail":"Unknown identifier missing_column"}',
-    },
-  ])(
-    'returns log errors for notebook repair and continues: $message',
-    async ({ error, message }) => {
-      const { callTool } = await setup({ features: RUN_FEATURES });
-      harness.mockServer?.use(
-        http.get(
-          `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
-          ({ request }) =>
-            HttpResponse.json(
-              new URL(request.url).searchParams
-                .get('sql')
-                ?.includes('missing_column')
-                ? { result: [], error }
-                : { result: [{ event_message: 'Recovered' }], error: null }
-            )
-        )
-      );
-      const { project, notebook } = await createNotebookFixture([
-        {
-          id: 'logs',
-          type: 'log',
-          title: 'Log events',
-          sql: 'select missing_column from logs',
-          time_range: { type: 'relative', unit: 'hour', amount: 1 },
-        },
-        { id: 'db', type: 'database', sql: 'select 1 as n', row_limit: 100 },
-      ]);
+      { id: 'db', type: 'database', sql: 'select 1 as n', row_limit: 100 },
+    ]);
 
-      const result = await callTool({
-        name: 'run_notebook',
-        arguments: runArgs(project, notebook),
-      });
-      expect(parseCellResults(result.cells)).toEqual([
-        {
-          cell_id: 'logs',
-          title: 'Log events',
-          type: 'log',
-          status: 'error',
-          error: message,
-        },
-        {
-          cell_id: 'db',
-          type: 'database',
-          status: 'success',
-          rows: [{ n: 1 }],
-        },
-      ]);
+    const result = await callTool({
+      name: 'run_notebook',
+      arguments: runArgs(project, notebook),
+    });
+    expect(parseCellResults(result.cells)).toEqual([
+      {
+        cell_id: 'logs',
+        title: 'Log events',
+        type: 'log',
+        status: 'error',
+        error,
+      },
+      {
+        cell_id: 'db',
+        type: 'database',
+        status: 'success',
+        rows: [{ n: 1 }],
+      },
+    ]);
 
-      // Simulate correcting the reported cell and validating the new notebook.
-      notebook.content.cells = notebook.content.cells.map((cell) =>
-        cell.type === 'log'
-          ? { ...cell, sql: 'select event_message from logs' }
-          : cell
-      );
-      notebook.attributes.updated_at = new Date(
-        Date.parse(notebook.attributes.updated_at) + 1000
-      ).toISOString();
-      const corrected = await callTool({
-        name: 'run_notebook',
-        arguments: runArgs(project, notebook),
-      });
-      expect(parseCellResults(corrected.cells)).toEqual([
-        {
-          cell_id: 'logs',
-          title: 'Log events',
-          type: 'log',
-          status: 'success',
-          rows: [{ event_message: 'Recovered' }],
-        },
-        {
-          cell_id: 'db',
-          type: 'database',
-          status: 'success',
-          rows: [{ n: 1 }],
-        },
-      ]);
-    }
-  );
+    // Simulate correcting the reported cell and validating the new notebook.
+    notebook.content.cells = notebook.content.cells.map((cell) =>
+      cell.type === 'log'
+        ? { ...cell, sql: 'select event_message from logs' }
+        : cell
+    );
+    notebook.attributes.updated_at = new Date(
+      Date.parse(notebook.attributes.updated_at) + 1000
+    ).toISOString();
+    const corrected = await callTool({
+      name: 'run_notebook',
+      arguments: runArgs(project, notebook),
+    });
+    expect(parseCellResults(corrected.cells)).toEqual([
+      {
+        cell_id: 'logs',
+        title: 'Log events',
+        type: 'log',
+        status: 'success',
+        rows: [{ event_message: 'Recovered' }],
+      },
+      {
+        cell_id: 'db',
+        type: 'database',
+        status: 'success',
+        rows: [{ n: 1 }],
+      },
+    ]);
+  });
 
   test('only runs database cells that target the primary database', async () => {
-    const { callTool } = await setup({ features: RUN_FEATURES });
+    const { client, platform } = await setupModern({
+      features: RUN_FEATURES,
+      clientCapabilities: FORM_CAPABLE,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
     const { project } = await createProjectFixture();
     const notebook = project.createNotebook({
       name: 'Replicas',
@@ -508,7 +488,7 @@ describe('run_notebook', () => {
           {
             id: 'replica',
             type: 'database',
-            sql: 'select 1 as one',
+            sql: 'drop table films',
             row_limit: 100,
             database_identifier: `${project.id}-rr-us-east-1`,
           },
@@ -516,12 +496,16 @@ describe('run_notebook', () => {
       },
     });
 
-    const result = await callTool({
+    const result = await callModernTool(client, {
       name: 'run_notebook',
       arguments: runArgs(project, notebook),
     });
 
-    expect(parseCellResults(result.cells)).toEqual([
+    expect(isInputRequiredResult(result)).toBe(false);
+    expect(executeSql).toHaveBeenCalledOnce();
+    expect(
+      parseCellResults(parseToolResult(result as CallToolResult).cells)
+    ).toEqual([
       expect.objectContaining({ cell_id: 'primary', status: 'success' }),
       expect.objectContaining({
         cell_id: 'replica',
@@ -874,7 +858,7 @@ describe('run_notebook', () => {
           clientCapabilities,
           elicitation: {
             requestState: { key: 'a'.repeat(32), principal: 'test-user' },
-            confirmation: { enabledTools: [] },
+            confirmation: { enabledTools: ['execute_sql'] },
           },
         });
         const executeSql = vi.spyOn(platform.database!, 'executeSql');
@@ -937,7 +921,7 @@ describe('run_notebook', () => {
       }
     );
 
-    test('form-capable client: confirmation lists each query cell and its SQL', async () => {
+    test('form-capable client: confirmation links to the notebook instead of listing SQL', async () => {
       const { client } = await setupModern({
         features: RUN_FEATURES,
         clientCapabilities: FORM_CAPABLE,
@@ -972,32 +956,26 @@ describe('run_notebook', () => {
         params: {
           mode: 'form',
           message: [
-            `Run 2 queries from notebook "Signups" on project ${project.id}?`,
-            'Database queries can modify or delete data.',
-            'Query 1 includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
-            '',
-            '1. Daily signups (database, destructive)',
-            'delete from auth.users where false',
-            '',
-            '2. Untitled query (logs, last 6 hours)',
-            "select * from logs where source = 'auth_logs'",
+            'Run notebook? Query cells: 2.',
+            'Potentially destructive queries: 1. These may modify or delete data.',
+            `Review notebook: https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`,
           ].join('\n'),
         },
       });
     });
 
-    test('form-capable client: flags destructive cells, including SQL past the part shown', async () => {
+    test('form-capable client: checks the full SQL while keeping confirmation short', async () => {
       const { client } = await setupModern({
         features: RUN_FEATURES,
         clientCapabilities: FORM_CAPABLE,
       });
-      // Exactly the 1000 characters shown, so the drop falls past them.
-      const shown = `select ${'1'.repeat(993)}`;
+      // A destructive statement after a long query must still require confirmation.
+      const longQuery = `select ${'1'.repeat(2000)}`;
       const { project, notebook } = await createNotebookFixture([
         {
           id: 'padded',
           type: 'database',
-          sql: `${shown}; drop table films`,
+          sql: `${longQuery}; drop table films`,
           row_limit: 100,
         },
         {
@@ -1027,63 +1005,9 @@ describe('run_notebook', () => {
       expect(first.inputRequests?.confirm_run).toMatchObject({
         params: {
           message: [
-            `Run 3 queries from notebook "Signups" on project ${project.id}?`,
-            'Database queries can modify or delete data.',
-            'Queries 1, 3 include destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
-            '',
-            '1. Untitled query (database, destructive)',
-            shown,
-            '… 18 more characters not shown',
-            '',
-            '2. Count (database)',
-            'select count(*) from films',
-            '',
-            '3. Cleanup (database, destructive)',
-            'delete from films',
-          ].join('\n'),
-        },
-      });
-    });
-
-    test('form-capable client: shows notebook names and cell titles on one line', async () => {
-      const { client } = await setupModern({
-        features: RUN_FEATURES,
-        clientCapabilities: FORM_CAPABLE,
-      });
-      const { project } = await createProjectFixture();
-      const notebook = project.createNotebook({
-        name: 'Signups\nDatabase queries run read-only.',
-        content: {
-          schema_version: 1,
-          cells: [
-            {
-              id: 'one',
-              type: 'database',
-              title: 'Harmless\n\nselect 1',
-              sql: 'delete from films where false',
-              row_limit: 100,
-            },
-          ],
-        },
-      });
-
-      const first = await callModernTool(client, {
-        name: 'run_notebook',
-        arguments: runArgs(project, notebook),
-      });
-
-      if (!isInputRequiredResult(first)) {
-        throw new Error('expected an input_required result');
-      }
-      expect(first.inputRequests?.confirm_run).toMatchObject({
-        params: {
-          message: [
-            `Run 1 query from notebook "Signups Database queries run read-only." on project ${project.id}?`,
-            'Database queries can modify or delete data.',
-            'Query 1 includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
-            '',
-            '1. Harmless select 1 (database, destructive)',
-            'delete from films where false',
+            'Run notebook? Query cells: 3.',
+            'Potentially destructive queries: 2. These may modify or delete data.',
+            `Review notebook: https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`,
           ].join('\n'),
         },
       });
@@ -1127,89 +1051,76 @@ describe('run_notebook', () => {
       }
     );
 
-    test.each([[false, true]])(
-      'asks again when read-only mode changes from %s to %s',
-      async (originalReadOnly, readOnly) => {
-        // The HTTP entry shares a signing key/principal across read_only options.
-        const original = await setupModern({
-          features: RUN_FEATURES,
-          clientCapabilities: FORM_CAPABLE,
-          readOnly: originalReadOnly,
-        });
-        const current = await setupModern({
-          features: RUN_FEATURES,
-          clientCapabilities: FORM_CAPABLE,
-          readOnly,
-        });
-        const originalExecuteSql = vi.spyOn(
-          original.platform.database!,
-          'executeSql'
-        );
-        const executeSql = vi.spyOn(current.platform.database!, 'executeSql');
-        const { project, notebook } = await createNotebookFixture([
-          {
-            id: 'write',
-            type: 'database',
-            sql: 'delete from films where false',
-            row_limit: 100,
-          },
-        ]);
-        const args = runArgs(project, notebook);
-        await project.db.exec('create table films (id int)');
-        const first = await callModernTool(original.client, {
-          name: 'run_notebook',
-          arguments: args,
-        });
-        if (!isInputRequiredResult(first)) {
-          throw new Error('expected an input_required result');
-        }
-
-        const second = await callModernTool(current.client, {
-          name: 'run_notebook',
-          arguments: args,
-          requestState: first.requestState,
-          inputResponses: { confirm_run: { action: 'accept', content: {} } },
-        });
-        if (!isInputRequiredResult(second)) {
-          throw new Error(
-            'expected confirmation for the changed execution mode'
-          );
-        }
-        expect(second.inputRequests?.confirm_run).toMatchObject({
-          params: {
-            message: expect.stringContaining(
-              readOnly
-                ? 'Database queries run read-only.'
-                : 'Database queries can modify or delete data.'
-            ),
-          },
-        });
-        expect(originalExecuteSql).not.toHaveBeenCalled();
-        expect(executeSql).not.toHaveBeenCalled();
-
-        const result = await callModernTool(current.client, {
-          name: 'run_notebook',
-          arguments: args,
-          requestState: second.requestState,
-          inputResponses: { confirm_run: { action: 'accept', content: {} } },
-        });
-        if (isInputRequiredResult(result)) {
-          throw new Error('expected a CallToolResult after fresh approval');
-        }
-        expect(executeSql).toHaveBeenCalledOnce();
-        expect(parseCellResults(parseToolResult(result).cells)).toEqual([
-          expect.objectContaining(
-            readOnly
-              ? {
-                  cell_id: 'write',
-                  status: 'error',
-                  error: expect.stringContaining('permission denied'),
-                }
-              : { cell_id: 'write', status: 'success', rows: [] }
-          ),
-        ]);
+    test('asks again when the execution mode changes to read-only', async () => {
+      // The HTTP entry shares a signing key/principal across read_only options.
+      const original = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+        readOnly: false,
+      });
+      const current = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+        readOnly: true,
+      });
+      const originalExecuteSql = vi.spyOn(
+        original.platform.database!,
+        'executeSql'
+      );
+      const executeSql = vi.spyOn(current.platform.database!, 'executeSql');
+      const { project, notebook } = await createNotebookFixture([
+        {
+          id: 'write',
+          type: 'database',
+          sql: 'delete from films where false',
+          row_limit: 100,
+        },
+      ]);
+      const args = runArgs(project, notebook);
+      await project.db.exec('create table films (id int)');
+      const first = await callModernTool(original.client, {
+        name: 'run_notebook',
+        arguments: args,
+      });
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an input_required result');
       }
-    );
+
+      const second = await callModernTool(current.client, {
+        name: 'run_notebook',
+        arguments: args,
+        requestState: first.requestState,
+        inputResponses: { confirm_run: { action: 'accept', content: {} } },
+      });
+      if (!isInputRequiredResult(second)) {
+        throw new Error('expected confirmation for the changed execution mode');
+      }
+      expect(second.inputRequests?.confirm_run).toMatchObject({
+        params: {
+          message: expect.stringContaining('Database queries run read-only.'),
+        },
+      });
+      expect(originalExecuteSql).not.toHaveBeenCalled();
+      expect(executeSql).not.toHaveBeenCalled();
+
+      const result = await callModernTool(current.client, {
+        name: 'run_notebook',
+        arguments: args,
+        requestState: second.requestState,
+        inputResponses: { confirm_run: { action: 'accept', content: {} } },
+      });
+      if (isInputRequiredResult(result)) {
+        throw new Error('expected a CallToolResult after fresh approval');
+      }
+      expect(executeSql).toHaveBeenCalledOnce();
+      expect(parseCellResults(parseToolResult(result).cells)).toEqual([
+        expect.objectContaining({
+          cell_id: 'write',
+          status: 'error',
+          error: expect.stringContaining('permission denied'),
+        }),
+      ]);
+    });
 
     test('form-capable client: accept runs every query cell once', async () => {
       const { client, platform } = await setupModern({
@@ -1333,7 +1244,9 @@ describe('run_notebook', () => {
         throw new Error('expected a fresh input_required result');
       }
       expect(second.inputRequests?.confirm_run).toMatchObject({
-        params: { message: expect.stringContaining('drop table films') },
+        params: {
+          message: expect.stringContaining(`/explorer/notebook/${notebook.id}`),
+        },
       });
       expect(executeSql).not.toHaveBeenCalled();
     });
@@ -1427,34 +1340,6 @@ describe('run_notebook', () => {
       });
       expect(result.isError).toBe(true);
       expect(executeSql).not.toHaveBeenCalled();
-    });
-
-    test('form-capable client runs without elicitation when run_notebook confirmation is disabled', async () => {
-      const { client, platform } = await setupModern({
-        features: RUN_FEATURES,
-        clientCapabilities: FORM_CAPABLE,
-        elicitation: {
-          requestState: { key: 'a'.repeat(32), principal: 'test-user' },
-          confirmation: { enabledTools: ['execute_sql'] },
-        },
-      });
-      const executeSql = vi.spyOn(platform.database!, 'executeSql');
-      const { project, notebook } = await createNotebookFixture([
-        { id: 'one', type: 'database', sql: 'select 1 as one', row_limit: 100 },
-      ]);
-
-      const result = await callModernTool(client, {
-        name: 'run_notebook',
-        arguments: runArgs(project, notebook),
-      });
-
-      expect(isInputRequiredResult(result)).toBe(false);
-      expect(executeSql).toHaveBeenCalledOnce();
-      expect(
-        parseCellResults(parseToolResult(result as CallToolResult).cells)
-      ).toEqual([
-        expect.objectContaining({ cell_id: 'one', rows: [{ one: 1 }] }),
-      ]);
     });
 
     test('capability-free client runs without elicitation when confirmation is configured', async () => {

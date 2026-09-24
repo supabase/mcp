@@ -870,16 +870,10 @@ describe('startLocalHttpEntry', () => {
     expect(again.tools).toEqual(tools);
   });
 
-  test.each([
-    { form: false, destructive: false, skip: '', outcome: 'run' },
-    { form: true, destructive: false, skip: '', outcome: 'run' },
-    { form: false, destructive: true, skip: '', outcome: 'error' },
-    { form: true, destructive: true, skip: '', outcome: 'confirm' },
-    { form: false, destructive: true, skip: 'run_notebook', outcome: 'run' },
-    { form: true, destructive: true, skip: 'run_notebook', outcome: 'run' },
-  ])(
-    'notebook run confirmation over HTTP: %j',
-    async ({ form, destructive, skip, outcome }) => {
+  test.each(['', 'execute_sql', 'run_notebook'])(
+    'notebook run confirmation respects HTTP skip_elicitations=%j',
+    async (skip) => {
+      const skipped = skip === 'run_notebook';
       const { project } = await createProjectFixture();
       await project.db.exec('create table films (id int)');
       const notebook = project.createNotebook({
@@ -896,7 +890,7 @@ describe('startLocalHttpEntry', () => {
             {
               id: 'last',
               type: 'database',
-              sql: destructive ? 'drop table films' : 'select 1',
+              sql: 'drop table films',
               row_limit: 100,
             },
           ],
@@ -906,7 +900,7 @@ describe('startLocalHttpEntry', () => {
         { pin: MODERN_PROTOCOL_VERSION },
         `project_ref=${project.id}&features=notebooks,database&skip_elicitations=${skip}`,
         {
-          capabilities: form ? { elicitation: { form: {} } } : {},
+          capabilities: { elicitation: { form: {} } },
           inputRequired: { autoFulfill: false },
         }
       );
@@ -923,13 +917,9 @@ describe('startLocalHttpEntry', () => {
         },
         { allowInputRequired: true }
       )) as CallToolResult | InputRequiredResult;
-      expect(isInputRequiredResult(result)).toBe(outcome === 'confirm');
+      expect(isInputRequiredResult(result)).toBe(!skipped);
       if (!isInputRequiredResult(result)) {
-        expect(Boolean(result.isError)).toBe(outcome === 'error');
-        if (outcome === 'error')
-          expect(JSON.stringify(result)).toContain(
-            'does not support form elicitation'
-          );
+        expect(result.isError).toBeFalsy();
       }
       expect(
         (
@@ -937,11 +927,11 @@ describe('startLocalHttpEntry', () => {
             "select to_regclass('public.notebook_probe') as name"
           )
         ).rows
-      ).toEqual([{ name: outcome === 'run' ? 'notebook_probe' : null }]);
+      ).toEqual([{ name: skipped ? 'notebook_probe' : null }]);
       expect(
         (await project.db.query("select to_regclass('public.films') as name"))
           .rows
-      ).toEqual([{ name: outcome === 'run' && destructive ? null : 'films' }]);
+      ).toEqual([{ name: skipped ? null : 'films' }]);
     }
   );
 
