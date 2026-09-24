@@ -229,9 +229,8 @@ export const notebookCellSchema = z.discriminatedUnion('type', [
   notebookLogCellSchema,
 ]);
 
-// Creation uses the Management API cell format, without server-assigned ids.
-// Unlike the read schemas above, every level rejects unknown keys, so a
-// misspelled key fails instead of being silently dropped.
+// Cells to create, without server-assigned ids. Stricter than the read schemas
+// above, so a misspelled key fails instead of being silently dropped.
 const newNotebookChartConfigSchema = notebookChartConfigSchema
   .extend({
     y_series: z.array(z.object({ column: z.string() }).strict()),

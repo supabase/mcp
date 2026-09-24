@@ -92,7 +92,10 @@ export type RunNotebookState = {
   readOnly: boolean;
 };
 
-/** Binds creation approval to the project and the complete proposed notebook. */
+/**
+ * Signed `requestState` payload for the `create_notebook` confirmation, bound
+ * to the project and a hash of the proposed notebook shown to the user.
+ */
 export type CreateNotebookState = {
   tool: 'create_notebook';
   project_id: string;

@@ -265,9 +265,8 @@ export function getNotebookTools({
             throw new Error('Cannot create notebook in read-only mode.');
           }
 
-          // Nothing runs here, but the notebook becomes visible to everyone
-          // with project access, and any of them can run its SQL later. Show
-          // the whole proposal before it is shared.
+          // Nothing runs yet, but anyone with project access can run the saved
+          // SQL later, so show the whole notebook before sharing it.
           if (
             confirmation?.enabledTools.includes('create_notebook') &&
             isFormCapable(ctx)

@@ -995,7 +995,9 @@ export const mockManagementApi = [
     );
   }),
 
-  /** List notebooks */
+  /**
+   * List notebooks
+   */
   http.get<{ ref: string }>(
     `${API_URL}/v2/projects/:ref/notebooks`,
     ({ params, request }) => {
