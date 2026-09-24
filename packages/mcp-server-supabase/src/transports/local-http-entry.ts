@@ -28,6 +28,7 @@ export type LocalHttpEntryOptions = {
   apiUrl?: string;
   contentApiUrl?: string;
   secretUrlTemplate?: string;
+  agentcatOtlpEndpoint?: string;
   log?: (line: string) => void;
 };
 
@@ -99,6 +100,7 @@ export async function startLocalHttpEntry({
   apiUrl,
   contentApiUrl,
   secretUrlTemplate,
+  agentcatOtlpEndpoint,
   log = (line) =>
     console.error(`[${new Date().toLocaleTimeString('en-GB')}] ${line}`),
 }: LocalHttpEntryOptions) {
@@ -122,6 +124,16 @@ export async function startLocalHttpEntry({
   const secretCollection = { connectUrlTemplate: secretUrlTemplate };
   const requestStateKey = randomBytes(32);
   const allowedHostnames = localhostAllowedHostnames();
+  if (agentcatOtlpEndpoint) {
+    const hostname = new URL(agentcatOtlpEndpoint).hostname;
+    if (!['localhost', '127.0.0.1', '[::1]'].includes(hostname)) {
+      throw new Error('AgentCat OTLP endpoint must use a loopback hostname.');
+    }
+  }
+  // Lazy loading keeps AgentCat's process handlers out of untracked stdio runs.
+  const trackWithAgentCat = agentcatOtlpEndpoint
+    ? (await import('../agentcat-tracking.js')).trackWithAgentCat
+    : undefined;
 
   const server = createServer(
     toNodeHandler(
@@ -142,6 +154,17 @@ export async function startLocalHttpEntry({
               { status: 401 }
             );
           }
+
+          const principal = createHash('sha256')
+            .update(accessToken)
+            .digest('hex');
+          const requestedAgentcatSessionId = request.headers
+            .get('x-supabase-agentcat-session-id')
+            ?.trim();
+          // ponytail: fallback buckets merge tasks; send the header for exact sessions.
+          const agentcatSessionId = requestedAgentcatSessionId
+            ? `${principal}:${requestedAgentcatSessionId}`
+            : `${principal}:${Math.floor(Date.now() / 1_800_000)}`;
 
           const url = new URL(request.url);
           // Hosted query parsing turns repeated or bracketed skips into
@@ -184,8 +207,8 @@ export async function startLocalHttpEntry({
           const platform = createSupabaseApiPlatform({ accessToken, apiUrl });
           if (features) parseFeatureGroups(platform, features);
           const handler = createMcpHandler(
-            () =>
-              createSupabaseMcpServer({
+            () => {
+              const mcpServer = createSupabaseMcpServer({
                 platform,
                 projectId,
                 readOnly,
@@ -196,9 +219,7 @@ export async function startLocalHttpEntry({
                     key: requestStateKey,
                     ttlSeconds: 120,
                     // One process can serve several PATs, so the principal is the token's hash.
-                    principal: createHash('sha256')
-                      .update(accessToken)
-                      .digest('hex'),
+                    principal,
                   },
                   confirmation: {
                     enabledTools: CURRENT_ELICITATION_TOOLS.filter(
@@ -207,7 +228,16 @@ export async function startLocalHttpEntry({
                   },
                   secretCollection,
                 },
-              }),
+              });
+              return trackWithAgentCat && agentcatOtlpEndpoint
+                ? trackWithAgentCat(
+                    mcpServer,
+                    agentcatOtlpEndpoint,
+                    principal,
+                    agentcatSessionId
+                  )
+                : mcpServer;
+            },
             { legacy: 'stateless', onerror: console.error }
           );
           request.signal.addEventListener('abort', () => handler.close(), {

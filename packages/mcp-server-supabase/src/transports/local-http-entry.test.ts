@@ -61,7 +61,10 @@ let logLines!: string[];
 const cleanups: Array<() => Promise<void>> = [];
 
 async function startEntry(
-  options: Pick<LocalHttpEntryOptions, 'apiUrl' | 'secretUrlTemplate'> = {}
+  options: Pick<
+    LocalHttpEntryOptions,
+    'agentcatOtlpEndpoint' | 'apiUrl' | 'secretUrlTemplate'
+  > = {}
 ) {
   const started = await startLocalHttpEntry({
     port: 0,
@@ -104,11 +107,12 @@ afterEach(async () => {
 async function connect(
   mode: VersionNegotiationMode,
   query = 'read_only=true',
-  options: ClientOptions = {}
+  options: ClientOptions = {},
+  headers: Record<string, string> = {}
 ) {
   const transport = new StreamableHTTPClientTransport(
     new URL(`${entry.url}?${query}`),
-    { requestInit: { headers: AUTH_HEADERS } }
+    { requestInit: { headers: { ...AUTH_HEADERS, ...headers } } }
   );
   const client = new Client(
     { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
@@ -145,6 +149,73 @@ describe('startLocalHttpEntry', () => {
     expect(result.content).toEqual([
       { type: 'text', text: JSON.stringify({ result: { dummy: true } }) },
     ]);
+  });
+
+  test('adds AgentCat context only when OTLP is configured', async () => {
+    const otlpPayloads: unknown[] = [];
+    mockServer.use(
+      http.post('http://127.0.0.1:4318/v1/traces', async ({ request }) => {
+        otlpPayloads.push(await request.json());
+        return HttpResponse.json({});
+      })
+    );
+    const defaultClient = await connect({ pin: MODERN_PROTOCOL_VERSION });
+    const defaultTools = await defaultClient.listTools();
+    const defaultListProjects = defaultTools.tools.find(
+      (tool) => tool.name === 'list_projects'
+    );
+    expect(defaultListProjects?.inputSchema.properties).not.toHaveProperty(
+      'context'
+    );
+
+    await entry.close();
+    entry = await startEntry({
+      agentcatOtlpEndpoint: 'http://127.0.0.1:4318',
+    });
+    const trackedClient = await connect(
+      { pin: MODERN_PROTOCOL_VERSION },
+      'read_only=true',
+      {},
+      { 'X-Supabase-AgentCat-Session-Id': 'seed-001' }
+    );
+    const { tools } = await trackedClient.listTools();
+    const listProjects = tools.find((tool) => tool.name === 'list_projects');
+
+    expect(tools.map((tool) => tool.name)).not.toContain('get_more_tools');
+    expect(listProjects?.inputSchema).toMatchObject({
+      properties: { context: expect.any(Object) },
+    });
+    expect(listProjects?.inputSchema.properties).not.toHaveProperty(
+      'session_id'
+    );
+
+    const result = await trackedClient.callTool({
+      name: 'search_docs',
+      arguments: {
+        context: 'Find the TypeScript client documentation',
+        graphql_query:
+          '{ searchDocs(query: "typescript") { nodes { title href } } }',
+      },
+    });
+    expect(toolOutput(result)).toEqual({ result: { dummy: true } });
+    await vi.waitFor(() => expect(otlpPayloads).toHaveLength(1));
+    const otlpPayload = JSON.stringify(otlpPayloads[0]);
+    expect(otlpPayload).toContain('search_docs');
+    expect(otlpPayload).toContain('mcp.session_id');
+    expect(otlpPayload).toContain('Find the TypeScript client documentation');
+    expect(otlpPayload).not.toContain(ACCESS_TOKEN);
+    expect(otlpPayload).not.toContain('seed-001');
+    expect(otlpPayload).not.toContain('graphql_query');
+    expect(otlpPayload).not.toContain('dummy');
+  });
+
+  test('rejects non-loopback AgentCat OTLP endpoints', async () => {
+    await expect(
+      startLocalHttpEntry({
+        port: 0,
+        agentcatOtlpEndpoint: 'https://collector.example.com',
+      })
+    ).rejects.toThrow('AgentCat OTLP endpoint must use a loopback hostname.');
   });
 
   test('serves a legacy client', async () => {
