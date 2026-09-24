@@ -1,4 +1,5 @@
 # Supabase MCP Server
+[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/supabase-community/supabase-mcp)](https://archestra.ai/mcp-catalog/supabase-community__supabase-mcp)
 
 [![MCP Registry Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.modelcontextprotocol.io%2Fv0.1%2Fservers%2Fcom.supabase%252Fmcp%2Fversions%2Flatest&query=%24.server.version&label=MCP%20Registry&logo=modelcontextprotocol)](https://registry.modelcontextprotocol.io/?q=com.supabase%2Fmcp)
 
