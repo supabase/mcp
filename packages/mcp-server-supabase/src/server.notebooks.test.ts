@@ -648,6 +648,50 @@ describe('run_notebook', () => {
     ]);
   });
 
+  test('database cells fail when the database feature is disabled', async () => {
+    const { callTool } = await setup({ features: ['notebooks', 'debugging'] });
+    harness.mockServer?.use(
+      http.get(
+        `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
+        () =>
+          HttpResponse.json({
+            result: [{ event_message: 'Auth error' }],
+            error: null,
+          })
+      )
+    );
+    const { project, notebook } = await createNotebookFixture([
+      { id: 'one', type: 'database', sql: 'select 1 as one', row_limit: 100 },
+      {
+        id: 'errors',
+        type: 'log',
+        sql: "select * from logs where source = 'auth_logs'",
+        time_range: { type: 'relative', unit: 'hour', amount: 1 },
+      },
+    ]);
+
+    const result = await callTool({
+      name: 'run_notebook',
+      arguments: runArgs(project, notebook),
+    });
+
+    expect(parseCellResults(result.cells)).toEqual([
+      {
+        cell_id: 'one',
+        type: 'database',
+        status: 'error',
+        error:
+          'Database queries are not available on this server, so database cells cannot be run.',
+      },
+      {
+        cell_id: 'errors',
+        type: 'log',
+        status: 'success',
+        rows: [{ event_message: 'Auth error' }],
+      },
+    ]);
+  });
+
   test('read-only mode runs database cells read-only', async () => {
     const { callTool, client } = await setup({
       features: RUN_FEATURES,

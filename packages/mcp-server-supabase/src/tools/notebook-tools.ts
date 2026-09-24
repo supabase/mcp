@@ -34,7 +34,10 @@ import {
 
 type NotebookToolsOptions = {
   notebooks: NotebookOperations;
-  /** Runs database cells. `run_notebook` is only offered when present. */
+  /**
+   * Runs database cells. `run_notebook` is offered when this or
+   * `debugging.queryLogs` is present; cells it can't run return an error.
+   */
   database?: DatabaseOperations;
   /** Runs log cells. Without `queryLogs`, log cells return an error. */
   debugging?: DebuggingOperations;
@@ -228,7 +231,7 @@ async function runQueryCell(
     readOnly,
   }: {
     projectId: string;
-    database: DatabaseOperations;
+    database?: DatabaseOperations;
     debugging?: DebuggingOperations;
     readOnly?: boolean;
   }
@@ -242,6 +245,11 @@ async function runQueryCell(
   try {
     let rows: unknown;
     if (cell.type === 'database') {
+      if (!database) {
+        throw new Error(
+          'Database queries are not available on this server, so database cells cannot be run.'
+        );
+      }
       if (
         cell.database_identifier !== undefined &&
         cell.database_identifier !== projectId
@@ -317,7 +325,7 @@ export function getNotebookTools({
         };
       },
     }),
-    ...(database && {
+    ...((database || debugging?.queryLogs) && {
       run_notebook: injectableTool({
         ...notebookToolDefs.run_notebook,
         annotations: {
