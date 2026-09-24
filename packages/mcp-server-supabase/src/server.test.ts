@@ -469,6 +469,19 @@ describe('feature groups', () => {
     expect(toolNames).toEqual(['list_notebooks', 'get_notebook']);
   });
 
+  test('notebooks tools with the database feature can run notebooks', async () => {
+    const { client } = await setup({
+      features: ['notebooks', 'database'],
+    });
+
+    const { tools } = await client.listTools();
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toEqual(
+      expect.arrayContaining(['list_notebooks', 'get_notebook', 'run_notebook'])
+    );
+  });
+
   test('invalid group fails', async () => {
     const setupPromise = setup({
       features: ['my-invalid-group'],

@@ -82,9 +82,10 @@ export type SupabaseMcpServerOptions = {
       ttlSeconds?: number;
     };
     /**
-     * Form confirmation for the listed cost and destructive SQL tools. Clients
-     * without form capability keep the existing SQL behavior and legacy
-     * `get_cost` -> `confirm_cost` -> `confirm_cost_id` flow.
+     * Form confirmation for the listed cost, destructive SQL and notebook run
+     * tools. Clients without form capability keep the existing SQL and
+     * notebook run behavior and legacy `get_cost` -> `confirm_cost` ->
+     * `confirm_cost_id` flow.
      */
     confirmation?: {
       /** Tools that accept a confirmation elicitation. Empty disables all forms. */
@@ -301,7 +302,23 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       }
 
       if (notebooks && enabledFeatures.has('notebooks')) {
-        Object.assign(tools, getNotebookTools({ notebooks, projectId }));
+        Object.assign(
+          tools,
+          getNotebookTools({
+            notebooks,
+            // Running cells executes SQL and log queries, so it is gated on
+            // the feature groups that own those capabilities.
+            database: enabledFeatures.has('database') ? database : undefined,
+            debugging: enabledFeatures.has('debugging') ? debugging : undefined,
+            projectId,
+            readOnly,
+            confirmation:
+              elicitationCodec &&
+              enabledConfirmationTools.includes('run_notebook')
+                ? { codec: elicitationCodec }
+                : undefined,
+          })
+        );
       }
 
       if (

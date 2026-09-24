@@ -53,11 +53,11 @@ For a custom local API, replace the placeholders:
 pnpm dev:http --api-url 'http://127.0.0.1:<port>' --secret-url-template '<absolute URL containing {ref} and {name}>'
 ```
 
-In this package's local HTTP server, signed `requestState` used by secret collection, cost confirmation, and destructive SQL confirmation expires after 120 seconds. The secret tool retains a separate 600-second timestamp-based recovery window for fresh calls; this does not extend URL or token validity. Watch restarts invalidate pending state. Restart the server in your MCP client after each change.
+In this package's local HTTP server, signed `requestState` used by secret collection, cost confirmation, destructive SQL confirmation, and notebook run confirmation expires after 120 seconds. The secret tool retains a separate 600-second timestamp-based recovery window for fresh calls; this does not extend URL or token validity. Watch restarts invalidate pending state. Restart the server in your MCP client after each change.
 
 Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--secret-url-template`, `--version`.
 
-For this package's local HTTP server, the optional `skip_elicitations` query parameter accepts comma-separated values (`create_project`, `create_branch`, `execute_sql`, `apply_migration`). Skipping `create_project` or `create_branch` uses legacy cost confirmation instead of elicitation; it does not bypass cost confirmation. Skipping `execute_sql` or `apply_migration` disables destructive SQL elicitation, so SQL may execute without a prompt or legacy confirmation fallback. Omitting the parameter or leaving it blank preserves the configured or default eligible tools.
+For this package's local HTTP server, the optional `skip_elicitations` query parameter accepts comma-separated values (`create_project`, `create_branch`, `execute_sql`, `apply_migration`, `run_notebook`). Skipping `create_project` or `create_branch` uses legacy cost confirmation instead of elicitation; it does not bypass cost confirmation. Skipping `execute_sql` or `apply_migration` disables destructive SQL elicitation, so SQL may execute without a prompt or legacy confirmation fallback. Skipping `run_notebook` runs notebook cells without a prompt. Omitting the parameter or leaving it blank preserves the configured or default eligible tools.
 
 To try the HTTP entry from a PR without cloning, run the preview build published by pkg.pr.new:
 
@@ -121,7 +121,7 @@ Start in the existing test file closest to the behavior. Keep pure-helper tests 
 | `src/server.functions.test.ts` | Edge functions and URL-mode secret collection |
 | `src/server.branching.test.ts` | Branch creation/lifecycle, listing, merge, reset, rebase and branch cost confirmation |
 | `src/server.storage.test.ts` | Storage buckets and configuration |
-| `src/server.notebooks.test.ts` | Notebook listing and retrieval |
+| `src/server.notebooks.test.ts` | Notebook listing, retrieval, running and notebook run confirmation |
 
 Keep project and branch cost-confirmation flows with their respective feature groups, including legacy fallback, modern elicitation, approval, token, retry and tamper cases. General server contracts, feature-surface checks and docs stay in core. HTTP transport behavior belongs in `src/transports/http.test.ts`. Keep integration/e2e tests in their existing locations and projects.
 
