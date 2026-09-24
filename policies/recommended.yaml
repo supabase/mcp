@@ -1,0 +1,109 @@
+version: "1"
+description: "Supabase MCP — recommended policy. Rate limits on writes, blocks destructive SQL patterns, reads allowed freely."
+default: allow
+
+tools:
+  # SQL execution — highest risk, tightest limits
+  execute_sql:
+    rules:
+      - name: "block-drop"
+        when:
+          args.query: "(?i)\\bDROP\\s+(TABLE|SCHEMA|DATABASE|INDEX|VIEW|FUNCTION|TRIGGER|EXTENSION)\\b"
+        action: deny
+        on_deny: "DROP statements are blocked — use apply_migration for schema changes"
+      - name: "block-truncate"
+        when:
+          args.query: "(?i)\\bTRUNCATE\\b"
+        action: deny
+        on_deny: "TRUNCATE is blocked — use targeted DELETE with WHERE clause instead"
+      - name: "block-delete-without-where"
+        when:
+          args.query: "(?i)\\bDELETE\\s+FROM\\s+\\w+\\s*;?$"
+        action: deny
+        on_deny: "DELETE without WHERE clause is blocked — add a WHERE condition"
+      - name: "block-alter-drop-column"
+        when:
+          args.query: "(?i)\\bALTER\\s+TABLE\\s+.*\\bDROP\\s+COLUMN\\b"
+        action: deny
+        on_deny: "DROP COLUMN is blocked — use apply_migration for schema changes"
+      - name: "burst-limit"
+        rate_limit: "10/minute"
+        on_deny: "Slow down — max 10 SQL executions per minute"
+      - name: "hourly-cap"
+        rate_limit: "120/hour"
+        on_deny: "Hourly SQL execution limit (120) reached"
+
+  # Schema migrations — deliberate changes only
+  apply_migration:
+    rules:
+      - name: "burst-limit"
+        rate_limit: "3/minute"
+        on_deny: "Slow down — max 3 migrations per minute"
+      - name: "daily-cap"
+        rate_limit: "20/day"
+        on_deny: "Daily migration limit (20) reached"
+
+  # Edge Function deployment — deploys executable code
+  deploy_edge_function:
+    rules:
+      - name: "burst-limit"
+        rate_limit: "3/minute"
+        on_deny: "Slow down — max 3 deployments per minute"
+      - name: "hourly-cap"
+        rate_limit: "10/hour"
+        on_deny: "Hourly deployment limit (10) reached"
+
+  # Project management — high impact
+  create_project:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "3/hour"
+        on_deny: "Max 3 project creations per hour"
+
+  pause_project:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "3/hour"
+        on_deny: "Max 3 project pauses per hour"
+
+  # Branch management — destructive operations
+  delete_branch:
+    rules:
+      - name: "burst-limit"
+        rate_limit: "2/minute"
+        on_deny: "Slow down — max 2 branch deletions per minute"
+      - name: "daily-cap"
+        rate_limit: "10/day"
+        on_deny: "Daily branch deletion limit (10) reached"
+
+  reset_branch:
+    rules:
+      - name: "burst-limit"
+        rate_limit: "2/minute"
+        on_deny: "Slow down — max 2 branch resets per minute"
+      - name: "daily-cap"
+        rate_limit: "10/day"
+        on_deny: "Daily branch reset limit (10) reached"
+
+  merge_branch:
+    rules:
+      - name: "burst-limit"
+        rate_limit: "2/minute"
+        on_deny: "Slow down — max 2 branch merges per minute"
+      - name: "daily-cap"
+        rate_limit: "10/day"
+        on_deny: "Daily branch merge limit (10) reached"
+
+  # Storage config — can affect file access
+  update_storage_config:
+    rules:
+      - name: "rate-limit"
+        rate_limit: "5/hour"
+        on_deny: "Max 5 storage config updates per hour"
+
+  # Global safety net
+  "*":
+    rules:
+      - name: "global-rate-limit"
+        rate_limit: "60/minute"
+        on_deny: "Global rate limit — max 60 tool calls per minute across all Supabase tools"
