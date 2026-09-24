@@ -10,7 +10,10 @@ import type {
   DebuggingOperations,
   NotebookOperations,
 } from '../platform/types.js';
-import { notebookSchema } from '../platform/types.js';
+import {
+  createNotebookOptionsSchema,
+  notebookSchema,
+} from '../platform/types.js';
 import { hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
@@ -54,6 +57,26 @@ type NotebookToolsOptions = {
   };
 };
 
+// Reuses the platform's validation, adding the descriptions shown to models.
+const createNotebookInputSchema = z.object({
+  project_id: z.string(),
+  name: createNotebookOptionsSchema.shape.name.describe(
+    'A short, descriptive name for the notebook.'
+  ),
+  description: createNotebookOptionsSchema.shape.description.describe(
+    'What the notebook is for.'
+  ),
+  content: createNotebookOptionsSchema.shape.content.describe(
+    'Ordered markdown, database, and log cells. Omit cell ids; the server assigns them. Omit database_identifier to use the primary database.'
+  ),
+});
+
+const createNotebookOutputSchema = notebookSchema.pick({
+  id: true,
+  name: true,
+  updated_at: true,
+});
+
 const listNotebooksInputSchema = z.object({
   project_id: z.string(),
 });
@@ -92,6 +115,19 @@ const runNotebookOutputSchema = z.object({
 });
 
 export const notebookToolDefs = {
+  create_notebook: {
+    description:
+      'Creates a saved notebook shared with everyone who has access to the Supabase project. Use for investigations or dashboards the user wants to revisit. Saves markdown, database SQL, and log SQL cells without executing queries. Cell ids are assigned by the server. Use get_notebook and run_notebook to run the saved notebook; run_notebook can only run log cells whose time range is 24 hours or less.',
+    parameters: createNotebookInputSchema,
+    outputSchema: createNotebookOutputSchema,
+    annotations: {
+      title: 'Create notebook',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+  },
   list_notebooks: {
     description:
       'Lists the notebooks in a Supabase project. Notebook bodies are omitted — use get_notebook to read a specific notebook.',
@@ -214,8 +250,26 @@ export function getNotebookTools({
   confirmation,
 }: NotebookToolsOptions) {
   const project_id = projectId;
+  const createNotebook = notebooks.createNotebook?.bind(notebooks);
 
   return {
+    ...(createNotebook && {
+      create_notebook: injectableTool({
+        ...notebookToolDefs.create_notebook,
+        inject: { project_id },
+        execute: async ({ project_id, ...options }) => {
+          if (readOnly) {
+            throw new Error('Cannot create notebook in read-only mode.');
+          }
+
+          const { id, name, updated_at } = await createNotebook(
+            project_id,
+            options
+          );
+          return { id, name, updated_at };
+        },
+      }),
+    }),
     list_notebooks: injectableTool({
       ...notebookToolDefs.list_notebooks,
       inject: { project_id },

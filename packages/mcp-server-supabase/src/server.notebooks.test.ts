@@ -1369,3 +1369,386 @@ describe('run_notebook', () => {
     });
   });
 });
+
+describe('create_notebook', () => {
+  const chart = {
+    type: 'bar',
+    x_column: 'day',
+    y_series: [{ column: 'total' }],
+    scale: 'linear',
+    cumulative: false,
+    show_labels: true,
+  };
+
+  const content = {
+    cells: [
+      { type: 'markdown', text: '# Weekly review' },
+      {
+        type: 'database',
+        sql: 'select 1 as total',
+        row_limit: 25,
+        title: 'Total',
+        view: 'chart',
+        chart,
+      },
+      {
+        type: 'log',
+        sql: "select timestamp, event_message from logs where source = 'auth_logs'",
+        time_range: { type: 'relative', unit: 'day', amount: 7 },
+      },
+    ],
+  };
+  const proposal = {
+    name: 'Weekly review',
+    description: 'Saved investigation',
+    content,
+  };
+
+  test('creates through the v2 API, assigns ids, and round-trips all cells without executing SQL', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
+    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+    const { callTool } = await setup({ platform, features: ['notebooks'] });
+    const { project } = await createProjectFixture();
+    let sentBody: unknown;
+    harness.mockServer!.use(
+      http.post(
+        `${API_URL}/v2/projects/:ref/notebooks`,
+        async ({ request }) => {
+          sentBody = await request.clone().json();
+          // Fall through to the shared API mock, which persists the notebook.
+        }
+      )
+    );
+
+    const created = await callTool({
+      name: 'create_notebook',
+      arguments: { project_id: project.id, ...proposal },
+    });
+    expect(sentBody).toEqual({
+      data: { type: 'notebook', attributes: proposal },
+    });
+    expect(created).toEqual({
+      id: expect.any(String),
+      name: proposal.name,
+      updated_at: expect.any(String),
+    });
+    const listed = await callTool({
+      name: 'list_notebooks',
+      arguments: { project_id: project.id },
+    });
+    expect(listed.notebooks).toContainEqual(expect.objectContaining(created));
+    const fetched = await callTool({
+      name: 'get_notebook',
+      arguments: { project_id: project.id, notebook_id: created.id },
+    });
+    expect(fetched.description).toBe(proposal.description);
+    expect(fetched.content.schema_version).toBe(1);
+    const cells = parseCellResults(fetched.content.cells);
+    expect(cells).toEqual(
+      content.cells.map((cell) => ({ ...cell, id: expect.any(String) }))
+    );
+    expect(new Set(cells.map((cell: { id: string }) => cell.id)).size).toBe(3);
+    expect(executeSql).not.toHaveBeenCalled();
+    expect(queryLogs).not.toHaveBeenCalled();
+  });
+
+  test('project-scoped creation uses the configured project and can be run separately', async () => {
+    const { project } = await createProjectFixture();
+    const { project: other } = await createProjectFixture();
+    const { callTool, client } = await setup({
+      projectId: project.id,
+      features: RUN_FEATURES,
+    });
+    const { tools } = await client.listTools();
+    const tool = tools.find((tool) => tool.name === 'create_notebook');
+    expect(tool?.inputSchema.properties).not.toHaveProperty('project_id');
+    expect(tool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    });
+    await expect(
+      callTool({
+        name: 'create_notebook',
+        arguments: { project_id: other.id, ...proposal },
+      })
+    ).rejects.toThrow('project_id');
+    const created = await callTool({
+      name: 'create_notebook',
+      arguments: {
+        name: 'One',
+        content: {
+          cells: [{ type: 'database', sql: 'select 1 as one', row_limit: 100 }],
+        },
+      },
+    });
+    expect(project.notebooks.has(created.id)).toBe(true);
+    expect(other.notebooks.size).toBe(0);
+    const fetched = await callTool({
+      name: 'get_notebook',
+      arguments: { notebook_id: created.id },
+    });
+    const run = await callTool({
+      name: 'run_notebook',
+      arguments: {
+        notebook_id: created.id,
+        expected_updated_at: fetched.updated_at,
+      },
+    });
+    expect(parseCellResults(run.cells)).toEqual([
+      expect.objectContaining({ status: 'success', rows: [{ one: 1 }] }),
+    ]);
+  });
+
+  test('read-only mode hides creation and rejects direct calls', async () => {
+    const { client, callTool } = await setup({
+      features: ['notebooks'],
+      readOnly: true,
+    });
+    const { project } = await createProjectFixture();
+    expect(
+      (await client.listTools()).tools.map((tool) => tool.name)
+    ).not.toContain('create_notebook');
+    await expect(
+      callTool({
+        name: 'create_notebook',
+        arguments: { project_id: project.id, ...proposal },
+      })
+    ).rejects.toThrow('Cannot create notebook in read-only mode.');
+    expect(project.notebooks.size).toBe(0);
+  });
+
+  test.each([
+    [{ type: 'markdown', id: 'invented', text: 'hello' }, []],
+    [{ type: 'database', sql: 'select 1', row_limit: 100, id: 'invented' }, []],
+    [{ type: 'database', sql: 'select 1' }, ['row_limit']],
+    [{ type: 'database', sql: 'select 1', row_limit: -5 }, ['row_limit']],
+    [{ type: 'database', sql: 'select 1', row_limit: 1.5 }, ['row_limit']],
+    [{ type: 'database', sql: '  \n ', row_limit: 100 }, ['sql']],
+    [
+      {
+        type: 'database',
+        sql: 'select 1',
+        row_limit: 100,
+        database_identifier: '',
+      },
+      ['database_identifier'],
+    ],
+    [
+      {
+        type: 'database',
+        sql: 'select 1',
+        row_limit: 100,
+        chart: { ...chart, colour: 'red' },
+      },
+      ['chart'],
+    ],
+    [
+      {
+        type: 'database',
+        sql: 'select 1',
+        row_limit: 100,
+        chart: { ...chart, y_series: [{ column: 'total', label: 'Total' }] },
+      },
+      ['chart', 'y_series', 0],
+    ],
+    [{ type: 'unknown', text: 'hello' }, ['type']],
+    [
+      {
+        type: 'log',
+        sql: 'select 1',
+        time_range: { type: 'relative', unit: 'day', amount: 0 },
+      },
+      ['time_range', 'amount'],
+    ],
+    [
+      {
+        type: 'log',
+        sql: 'select 1',
+        time_range: { type: 'relative', unit: 'day', amount: 1.5 },
+      },
+      ['time_range', 'amount'],
+    ],
+    [
+      {
+        type: 'log',
+        sql: 'select 1',
+        time_range: { type: 'relative', unit: 'day', amount: 1, start: 'x' },
+      },
+      ['time_range'],
+    ],
+    [
+      {
+        type: 'log',
+        sql: 'select 1',
+        time_range: {
+          type: 'absolute',
+          start: 'invalid',
+          end: '2026-09-24T00:00:00Z',
+        },
+      },
+      ['time_range', 'start'],
+    ],
+    [
+      {
+        type: 'log',
+        sql: 'select 1',
+        time_range: {
+          type: 'absolute',
+          start: '2026-09-24T00:00:00Z',
+          end: '2026-09-23T00:00:00Z',
+        },
+      },
+      ['time_range', 'end'],
+    ],
+  ] as const)(
+    'rejects invalid cell input before saving: %j',
+    async (cell, path) => {
+      const { callTool } = await setup({ features: ['notebooks'] });
+      const { project } = await createProjectFixture();
+      const issues = await callTool({
+        name: 'create_notebook',
+        arguments: {
+          project_id: project.id,
+          name: 'Invalid',
+          content: { cells: [cell] },
+        },
+      }).then(
+        () => {
+          throw new Error('expected invalid input');
+        },
+        (error: Error) => JSON.parse(error.message)
+      );
+      expect(issues).toContainEqual(
+        expect.objectContaining({ path: ['content', 'cells', 0, ...path] })
+      );
+      expect(project.notebooks.size).toBe(0);
+    }
+  );
+
+  test.each(['', '  \n '])(
+    'rejects a blank name before saving: %j',
+    async (name) => {
+      const { callTool } = await setup({ features: ['notebooks'] });
+      const { project } = await createProjectFixture();
+      await expect(
+        callTool({
+          name: 'create_notebook',
+          arguments: { project_id: project.id, name, content: { cells: [] } },
+        })
+      ).rejects.toThrow('"name"');
+      expect(project.notebooks.size).toBe(0);
+    }
+  );
+
+  test('trims the name and SQL it saves', async () => {
+    const { callTool } = await setup({ features: ['notebooks'] });
+    const { project } = await createProjectFixture();
+    const created = await callTool({
+      name: 'create_notebook',
+      arguments: {
+        project_id: project.id,
+        name: '  Signups \n',
+        content: {
+          cells: [{ type: 'database', sql: '\n  select 1;\n', row_limit: 100 }],
+        },
+      },
+    });
+    expect(created.name).toBe('Signups');
+    expect(project.notebooks.get(created.id)?.content.cells).toEqual([
+      expect.objectContaining({ sql: 'select 1;' }),
+    ]);
+  });
+
+  test('preserves absolute log windows and explicit database targets', async () => {
+    const { callTool } = await setup({ features: ['notebooks'] });
+    const { project } = await createProjectFixture();
+    const cells = [
+      {
+        type: 'database',
+        database_identifier: project.id,
+        sql: 'select 1',
+        row_limit: 100,
+      },
+      {
+        type: 'log',
+        sql: 'select timestamp from logs',
+        time_range: {
+          type: 'absolute',
+          start: '2026-09-23T00:00:00+10:00',
+          end: '2026-09-24T00:00:00+10:00',
+        },
+      },
+    ];
+    const created = await callTool({
+      name: 'create_notebook',
+      arguments: {
+        project_id: project.id,
+        name: 'Explicit sources',
+        content: { cells },
+      },
+    });
+    expect(project.notebooks.get(created.id)?.content.cells).toEqual(
+      cells.map((cell) => ({ ...cell, id: expect.any(String) }))
+    );
+  });
+
+  test.each([
+    [
+      401,
+      { message: 'Unauthorized' },
+      'Unauthorized. Please provide a valid access token',
+    ],
+    [
+      403,
+      {
+        error: {
+          code: 'forbidden',
+          message: 'Insufficient notebook permissions',
+        },
+      },
+      'Insufficient notebook permissions',
+    ],
+    [500, {}, 'Failed to create notebook'],
+  ])('surfaces API errors (%s)', async (status, body, message) => {
+    const { callTool } = await setup({ features: ['notebooks'] });
+    harness.mockServer!.use(
+      http.post(`${API_URL}/v2/projects/:ref/notebooks`, () =>
+        HttpResponse.json(body, { status })
+      )
+    );
+    await expect(
+      callTool({
+        name: 'create_notebook',
+        arguments: { project_id: 'test-project', ...proposal },
+      })
+    ).rejects.toThrow(message);
+  });
+
+  test.each([false, true])(
+    'creates immediately without running queries (form support: %s)',
+    async (formCapable) => {
+      const { client, platform } = await setupModern({
+        features: ['notebooks'],
+        clientCapabilities: formCapable ? FORM_CAPABLE : {},
+        elicitationAction: formCapable ? 'decline' : undefined,
+      });
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+      const { project } = await createProjectFixture();
+      const result = await callModernTool(client, {
+        name: 'create_notebook',
+        arguments: { project_id: project.id, ...proposal },
+      });
+      expect(isInputRequiredResult(result)).toBe(false);
+      expect(result).not.toHaveProperty('isError', true);
+      expect(project.notebooks.size).toBe(1);
+      expect(executeSql).not.toHaveBeenCalled();
+      expect(queryLogs).not.toHaveBeenCalled();
+    }
+  );
+});
