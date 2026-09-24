@@ -725,6 +725,218 @@ describe('run_notebook', () => {
   });
 
   describe('confirmation via elicitation', () => {
+    test.each([{}, FORM_CAPABLE, { elicitation: { url: {} } }])(
+      'non-destructive database and log cells run without elicitation (%j)',
+      async (clientCapabilities) => {
+        const { client, platform } = await setupModern({
+          features: RUN_FEATURES,
+          clientCapabilities,
+        });
+        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+        const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+        harness.mockServer!.use(
+          http.get(
+            `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
+            () => HttpResponse.json({ result: [{ count: 1 }], error: null })
+          )
+        );
+        const { project, notebook } = await createNotebookFixture([
+          {
+            id: 'one',
+            type: 'database',
+            sql: 'select 1 as one',
+            row_limit: 100,
+          },
+          {
+            id: 'logs',
+            type: 'log',
+            sql: 'select count(*) from logs',
+            time_range: { type: 'relative', unit: 'hour', amount: 1 },
+          },
+        ]);
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect(executeSql).toHaveBeenCalledOnce();
+        expect(queryLogs).toHaveBeenCalledOnce();
+        expect(
+          parseCellResults(parseToolResult(result as CallToolResult).cells)
+        ).toEqual([
+          expect.objectContaining({
+            cell_id: 'one',
+            status: 'success',
+            rows: [{ one: 1 }],
+          }),
+          expect.objectContaining({
+            cell_id: 'logs',
+            status: 'success',
+            rows: [{ count: 1 }],
+          }),
+        ]);
+      }
+    );
+
+    test.each([{}, { elicitation: { url: {} } }])(
+      'destructive SQL without form support blocks the entire run (%j)',
+      async (clientCapabilities) => {
+        const { client, platform } = await setupModern({
+          features: RUN_FEATURES,
+          clientCapabilities,
+        });
+        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+        const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+        const { project, notebook } = await createNotebookFixture([
+          { id: 'one', type: 'database', sql: 'select 1', row_limit: 100 },
+          {
+            id: 'logs',
+            type: 'log',
+            sql: 'select * from logs',
+            time_range: { type: 'relative', unit: 'hour', amount: 1 },
+          },
+          {
+            id: 'cleanup',
+            type: 'database',
+            sql: 'delete from films',
+            row_limit: 100,
+          },
+        ]);
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+        expect(result).toMatchObject({ isError: true });
+        expect(JSON.stringify(result)).toContain(
+          'does not support form elicitation'
+        );
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(queryLogs).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each([{}, FORM_CAPABLE])(
+      'disabled database cells cannot execute or trigger confirmation (%j)',
+      async (clientCapabilities) => {
+        const { client, platform } = await setupModern({
+          features: ['notebooks', 'debugging'],
+          clientCapabilities,
+        });
+        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+        const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+        harness.mockServer!.use(
+          http.get(
+            `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
+            () => HttpResponse.json({ result: [], error: null })
+          )
+        );
+        const { project, notebook } = await createNotebookFixture([
+          {
+            id: 'cleanup',
+            type: 'database',
+            sql: 'drop table films',
+            row_limit: 100,
+          },
+          {
+            id: 'logs',
+            type: 'log',
+            sql: 'select * from logs',
+            time_range: { type: 'relative', unit: 'hour', amount: 1 },
+          },
+        ]);
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect(
+          parseCellResults(parseToolResult(result as CallToolResult).cells)
+        ).toEqual([
+          expect.objectContaining({
+            cell_id: 'cleanup',
+            status: 'error',
+            error: expect.stringContaining(
+              'Database queries are not available'
+            ),
+          }),
+          expect.objectContaining({ cell_id: 'logs', status: 'success' }),
+        ]);
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(queryLogs).toHaveBeenCalledOnce();
+      }
+    );
+
+    test.each([{}, FORM_CAPABLE])(
+      'explicitly disabling confirmation allows destructive runs (%j)',
+      async (clientCapabilities) => {
+        const { client, platform } = await setupModern({
+          features: RUN_FEATURES,
+          clientCapabilities,
+          elicitation: {
+            requestState: { key: 'a'.repeat(32), principal: 'test-user' },
+            confirmation: { enabledTools: [] },
+          },
+        });
+        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+        const { project, notebook } = await createNotebookFixture([
+          {
+            id: 'cleanup',
+            type: 'database',
+            sql: 'delete from films where false',
+            row_limit: 100,
+          },
+        ]);
+        await project.db.exec('create table films (id int)');
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect(executeSql).toHaveBeenCalledOnce();
+        expect(result).not.toHaveProperty('isError', true);
+      }
+    );
+
+    test.each(['decline', 'cancel'] as const)(
+      'honors %s even after destructive SQL becomes non-destructive',
+      async (action) => {
+        const { client, platform } = await setupModern({
+          features: RUN_FEATURES,
+          clientCapabilities: FORM_CAPABLE,
+        });
+        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+        const { project, notebook } = await createNotebookFixture([
+          {
+            id: 'cleanup',
+            type: 'database',
+            sql: 'delete from films',
+            row_limit: 100,
+          },
+        ]);
+        const first = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+        if (!isInputRequiredResult(first))
+          throw new Error('expected confirmation');
+        notebook.content.cells = [
+          { id: 'one', type: 'database', sql: 'select 1', row_limit: 100 },
+        ];
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+          requestState: first.requestState,
+          inputResponses: { confirm_run: { action } },
+        });
+        expect(result).toMatchObject({
+          structuredContent: {
+            status: action === 'decline' ? 'declined' : 'cancelled',
+          },
+        });
+        expect(executeSql).not.toHaveBeenCalled();
+      }
+    );
+
     test('form-capable client: confirmation lists each query cell and its SQL', async () => {
       const { client } = await setupModern({
         features: RUN_FEATURES,
@@ -736,7 +948,7 @@ describe('run_notebook', () => {
           id: 'signups',
           type: 'database',
           title: 'Daily signups',
-          sql: 'select count(*) from auth.users',
+          sql: 'delete from auth.users where false',
           row_limit: 100,
         },
         {
@@ -762,9 +974,10 @@ describe('run_notebook', () => {
           message: [
             `Run 2 queries from notebook "Signups" on project ${project.id}?`,
             'Database queries can modify or delete data.',
+            'Query 1 includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
             '',
-            '1. Daily signups (database)',
-            'select count(*) from auth.users',
+            '1. Daily signups (database, destructive)',
+            'delete from auth.users where false',
             '',
             '2. Untitled query (logs, last 6 hours)',
             "select * from logs where source = 'auth_logs'",
@@ -847,7 +1060,7 @@ describe('run_notebook', () => {
               id: 'one',
               type: 'database',
               title: 'Harmless\n\nselect 1',
-              sql: 'select 1',
+              sql: 'delete from films where false',
               row_limit: 100,
             },
           ],
@@ -867,55 +1080,54 @@ describe('run_notebook', () => {
           message: [
             `Run 1 query from notebook "Signups Database queries run read-only." on project ${project.id}?`,
             'Database queries can modify or delete data.',
+            'Query 1 includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
             '',
-            '1. Harmless select 1 (database)',
-            'select 1',
+            '1. Harmless select 1 (database, destructive)',
+            'delete from films where false',
           ].join('\n'),
         },
       });
     });
 
-    test('read-only server: confirmation says queries run read-only and flags nothing', async () => {
-      const { client } = await setupModern({
-        features: RUN_FEATURES,
-        clientCapabilities: FORM_CAPABLE,
-        readOnly: true,
-      });
-      const { project, notebook } = await createNotebookFixture([
-        {
-          id: 'cleanup',
-          type: 'database',
-          sql: 'delete from films',
-          row_limit: 100,
-        },
-      ]);
-
-      const first = await callModernTool(client, {
-        name: 'run_notebook',
-        arguments: runArgs(project, notebook),
-      });
-
-      if (!isInputRequiredResult(first)) {
-        throw new Error('expected an input_required result');
+    test.each([false, true])(
+      'read-only runs do not elicit even for destructive SQL (form support: %s)',
+      async (formCapable) => {
+        const { client, platform } = await setupModern({
+          features: RUN_FEATURES,
+          clientCapabilities: formCapable ? FORM_CAPABLE : {},
+          readOnly: true,
+        });
+        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+        const { project, notebook } = await createNotebookFixture([
+          {
+            id: 'cleanup',
+            type: 'database',
+            sql: 'delete from films',
+            row_limit: 100,
+          },
+        ]);
+        await project.db.exec('create table films (id int)');
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect(executeSql).toHaveBeenCalledWith(project.id, {
+          query: 'delete from films',
+          read_only: true,
+        });
+        expect(
+          parseCellResults(parseToolResult(result as CallToolResult).cells)
+        ).toEqual([
+          expect.objectContaining({
+            status: 'error',
+            error: expect.stringContaining('permission denied'),
+          }),
+        ]);
       }
-      expect(first.inputRequests?.confirm_run).toMatchObject({
-        params: {
-          message: [
-            `Run 1 query from notebook "Signups" on project ${project.id}?`,
-            'Database queries run read-only.',
-            '',
-            '1. Untitled query (database)',
-            'delete from films',
-          ].join('\n'),
-        },
-      });
-    });
+    );
 
-    test.each([
-      [true, false],
-      [true, undefined],
-      [false, true],
-    ])(
+    test.each([[false, true]])(
       'asks again when read-only mode changes from %s to %s',
       async (originalReadOnly, readOnly) => {
         // The HTTP entry shares a signing key/principal across read_only options.
@@ -938,11 +1150,12 @@ describe('run_notebook', () => {
           {
             id: 'write',
             type: 'database',
-            sql: 'create table notebook_mode_check (id int)',
+            sql: 'delete from films where false',
             row_limit: 100,
           },
         ]);
         const args = runArgs(project, notebook);
+        await project.db.exec('create table films (id int)');
         const first = await callModernTool(original.client, {
           name: 'run_notebook',
           arguments: args,
@@ -1007,9 +1220,15 @@ describe('run_notebook', () => {
       const executeSql = vi.spyOn(platform.database!, 'executeSql');
       const { project, notebook } = await createNotebookFixture([
         { id: 'one', type: 'database', sql: 'select 1 as one', row_limit: 100 },
-        { id: 'two', type: 'database', sql: 'select 2 as two', row_limit: 100 },
+        {
+          id: 'two',
+          type: 'database',
+          sql: 'delete from films where false',
+          row_limit: 100,
+        },
       ]);
 
+      await project.db.exec('create table films (id int)');
       const result = (await client.callTool({
         name: 'run_notebook',
         arguments: runArgs(project, notebook),
@@ -1019,7 +1238,7 @@ describe('run_notebook', () => {
       expect(executeSql).toHaveBeenCalledTimes(2);
       expect(parseCellResults(parseToolResult(result).cells)).toEqual([
         expect.objectContaining({ cell_id: 'one', rows: [{ one: 1 }] }),
-        expect.objectContaining({ cell_id: 'two', rows: [{ two: 2 }] }),
+        expect.objectContaining({ cell_id: 'two', rows: [] }),
       ]);
     });
 
@@ -1036,7 +1255,12 @@ describe('run_notebook', () => {
         });
         const executeSql = vi.spyOn(platform.database!, 'executeSql');
         const { project, notebook } = await createNotebookFixture([
-          { id: 'one', type: 'database', sql: 'select 1', row_limit: 100 },
+          {
+            id: 'one',
+            type: 'database',
+            sql: 'delete from films where false',
+            row_limit: 100,
+          },
         ]);
 
         const result = await client.callTool({
@@ -1078,7 +1302,7 @@ describe('run_notebook', () => {
       const cell: NotebookCell = {
         id: 'one',
         type: 'database',
-        sql: 'select 1',
+        sql: 'delete from films where false',
         row_limit: 100,
       };
       const { project, notebook } = await createNotebookFixture([cell]);
@@ -1121,7 +1345,12 @@ describe('run_notebook', () => {
       });
       const executeSql = vi.spyOn(platform.database!, 'executeSql');
       const cells: NotebookCell[] = [
-        { id: 'one', type: 'database', sql: 'select 1', row_limit: 100 },
+        {
+          id: 'one',
+          type: 'database',
+          sql: 'delete from films where false',
+          row_limit: 100,
+        },
       ];
       const { project, notebook } = await createNotebookFixture(cells);
       const other = project.createNotebook({
@@ -1164,7 +1393,12 @@ describe('run_notebook', () => {
       });
       const executeSql = vi.spyOn(platform.database!, 'executeSql');
       const { project, notebook } = await createNotebookFixture([
-        { id: 'one', type: 'database', sql: 'select 1', row_limit: 100 },
+        {
+          id: 'one',
+          type: 'database',
+          sql: 'delete from films where false',
+          row_limit: 100,
+        },
       ]);
 
       const sqlFirst = await callModernTool(client, {

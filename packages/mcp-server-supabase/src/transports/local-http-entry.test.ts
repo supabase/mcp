@@ -24,6 +24,7 @@ import {
   API_URL,
   createOrganization,
   createProject,
+  createProjectFixture,
   MCP_CLIENT_NAME,
   MCP_CLIENT_VERSION,
   mockBranches,
@@ -868,6 +869,81 @@ describe('startLocalHttpEntry', () => {
     const again = await client.listTools();
     expect(again.tools).toEqual(tools);
   });
+
+  test.each([
+    { form: false, destructive: false, skip: '', outcome: 'run' },
+    { form: true, destructive: false, skip: '', outcome: 'run' },
+    { form: false, destructive: true, skip: '', outcome: 'error' },
+    { form: true, destructive: true, skip: '', outcome: 'confirm' },
+    { form: false, destructive: true, skip: 'run_notebook', outcome: 'run' },
+    { form: true, destructive: true, skip: 'run_notebook', outcome: 'run' },
+  ])(
+    'notebook run confirmation over HTTP: %j',
+    async ({ form, destructive, skip, outcome }) => {
+      const { project } = await createProjectFixture();
+      await project.db.exec('create table films (id int)');
+      const notebook = project.createNotebook({
+        name: 'HTTP execution',
+        content: {
+          schema_version: 1,
+          cells: [
+            {
+              id: 'first',
+              type: 'database',
+              sql: 'create table notebook_probe (id int)',
+              row_limit: 100,
+            },
+            {
+              id: 'last',
+              type: 'database',
+              sql: destructive ? 'drop table films' : 'select 1',
+              row_limit: 100,
+            },
+          ],
+        },
+      });
+      const client = await connect(
+        { pin: MODERN_PROTOCOL_VERSION },
+        `project_ref=${project.id}&features=notebooks,database&skip_elicitations=${skip}`,
+        {
+          capabilities: form ? { elicitation: { form: {} } } : {},
+          inputRequired: { autoFulfill: false },
+        }
+      );
+      const result = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'run_notebook',
+            arguments: {
+              notebook_id: notebook.id,
+              expected_updated_at: notebook.attributes.updated_at,
+            },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+      expect(isInputRequiredResult(result)).toBe(outcome === 'confirm');
+      if (!isInputRequiredResult(result)) {
+        expect(Boolean(result.isError)).toBe(outcome === 'error');
+        if (outcome === 'error')
+          expect(JSON.stringify(result)).toContain(
+            'does not support form elicitation'
+          );
+      }
+      expect(
+        (
+          await project.db.query(
+            "select to_regclass('public.notebook_probe') as name"
+          )
+        ).rows
+      ).toEqual([{ name: outcome === 'run' ? 'notebook_probe' : null }]);
+      expect(
+        (await project.db.query("select to_regclass('public.films') as name"))
+          .rows
+      ).toEqual([{ name: outcome === 'run' && destructive ? null : 'films' }]);
+    }
+  );
 
   test.each(['', ' , '])(
     'keeps elicitation defaults for blank CSV %j',

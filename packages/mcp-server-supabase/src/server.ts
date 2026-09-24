@@ -82,9 +82,10 @@ export type SupabaseMcpServerOptions = {
       ttlSeconds?: number;
     };
     /**
-     * Form confirmation for the listed cost, destructive SQL and notebook run
-     * tools. Clients without form capability keep the existing SQL and
-     * notebook run behavior and legacy `get_cost` -> `confirm_cost` ->
+     * Form confirmation for the listed cost, destructive SQL and notebook
+     * tools. Clients without form capability run raw SQL without a prompt,
+     * but cannot run destructive notebook cells when confirmation is enabled.
+     * Cost tools keep the legacy `get_cost` -> `confirm_cost` ->
      * `confirm_cost_id` flow.
      */
     confirmation?: {
