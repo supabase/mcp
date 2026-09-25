@@ -9,7 +9,7 @@ export default defineConfig({
     coverage: {
       reporter: ['text', 'lcov'],
       include: ['src/**/*.{ts,tsx}'],
-      exclude: [...configDefaults.coverage.exclude!, 'src/transports/stdio.ts'],
+      exclude: [...configDefaults.coverage.exclude!, 'src/cli.ts'],
     },
   },
 });

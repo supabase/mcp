@@ -48,6 +48,6 @@ export async function getNextProjectCost(
 /**
  * Gets the cost for a database branch.
  */
-export function getBranchCost(): Cost {
+export function getBranchCost(): BranchCost {
   return { type: 'branch', recurrence: 'hourly', amount: BRANCH_COST_HOURLY };
 }

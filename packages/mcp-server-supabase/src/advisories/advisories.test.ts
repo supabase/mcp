@@ -5,9 +5,9 @@ import { type Advisory, selectAdvisory } from './schema.js';
 describe('buildRlsDisabledAdvisory', () => {
   test('returns advisory when tables have RLS disabled', () => {
     const tables = [
-      { name: 'public.users', rls_enabled: false },
-      { name: 'public.posts', rls_enabled: true },
-      { name: 'public.comments', rls_enabled: false },
+      { schema: 'public', name: 'users', rls_enabled: false },
+      { schema: 'public', name: 'posts', rls_enabled: true },
+      { schema: 'public', name: 'comments', rls_enabled: false },
     ];
 
     const advisory = buildRlsDisabledAdvisory(tables);
@@ -21,16 +21,16 @@ describe('buildRlsDisabledAdvisory', () => {
     expect(advisory!.message).not.toContain('public.posts');
     expect(advisory!.message).toContain('2 table(s)');
     expect(advisory!.remediation_sql).toBe(
-      'ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;\n' +
-        'ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;'
+      'ALTER TABLE "public"."users" ENABLE ROW LEVEL SECURITY;\n' +
+        'ALTER TABLE "public"."comments" ENABLE ROW LEVEL SECURITY;'
     );
     expect(advisory!.doc_url).toContain('row-level-security');
   });
 
   test('returns null when all tables have RLS enabled', () => {
     const tables = [
-      { name: 'public.users', rls_enabled: true },
-      { name: 'public.posts', rls_enabled: true },
+      { schema: 'public', name: 'users', rls_enabled: true },
+      { schema: 'public', name: 'posts', rls_enabled: true },
     ];
 
     expect(buildRlsDisabledAdvisory(tables)).toBeNull();
@@ -42,11 +42,11 @@ describe('buildRlsDisabledAdvisory', () => {
 
   test('ignores system schema tables with RLS disabled', () => {
     const tables = [
-      { name: 'auth.users', rls_enabled: false },
-      { name: 'storage.objects', rls_enabled: false },
-      { name: 'pg_catalog.pg_class', rls_enabled: false },
-      { name: 'extensions.http', rls_enabled: false },
-      { name: 'vault.secrets', rls_enabled: false },
+      { schema: 'auth', name: 'users', rls_enabled: false },
+      { schema: 'storage', name: 'objects', rls_enabled: false },
+      { schema: 'pg_catalog', name: 'pg_class', rls_enabled: false },
+      { schema: 'extensions', name: 'http', rls_enabled: false },
+      { schema: 'vault', name: 'secrets', rls_enabled: false },
     ];
 
     expect(buildRlsDisabledAdvisory(tables)).toBeNull();
@@ -54,9 +54,9 @@ describe('buildRlsDisabledAdvisory', () => {
 
   test('only reports user-schema tables when mixed with system schemas', () => {
     const tables = [
-      { name: 'auth.users', rls_enabled: false },
-      { name: 'public.profiles', rls_enabled: false },
-      { name: 'storage.objects', rls_enabled: false },
+      { schema: 'auth', name: 'users', rls_enabled: false },
+      { schema: 'public', name: 'profiles', rls_enabled: false },
+      { schema: 'storage', name: 'objects', rls_enabled: false },
     ];
 
     const advisory = buildRlsDisabledAdvisory(tables);
@@ -66,14 +66,14 @@ describe('buildRlsDisabledAdvisory', () => {
     expect(advisory!.message).toContain('public.profiles');
     expect(advisory!.message).not.toContain('auth.users');
     expect(advisory!.remediation_sql).toBe(
-      'ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;'
+      'ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;'
     );
   });
 
   test('handles custom user schemas', () => {
     const tables = [
-      { name: 'myapp.orders', rls_enabled: false },
-      { name: 'api.products', rls_enabled: false },
+      { schema: 'myapp', name: 'orders', rls_enabled: false },
+      { schema: 'api', name: 'products', rls_enabled: false },
     ];
 
     const advisory = buildRlsDisabledAdvisory(tables);
@@ -81,6 +81,34 @@ describe('buildRlsDisabledAdvisory', () => {
     expect(advisory).not.toBeNull();
     expect(advisory!.message).toContain('myapp.orders');
     expect(advisory!.message).toContain('api.products');
+  });
+
+  test('quotes identifiers containing special characters in remediation SQL', () => {
+    const tables = [
+      {
+        schema: 'public',
+        name: 'foo"; DROP TABLE bar; --',
+        rls_enabled: false,
+      },
+    ];
+
+    const advisory = buildRlsDisabledAdvisory(tables);
+
+    expect(advisory).not.toBeNull();
+    expect(advisory!.remediation_sql).toBe(
+      'ALTER TABLE "public"."foo""; DROP TABLE bar; --" ENABLE ROW LEVEL SECURITY;'
+    );
+  });
+
+  test('quotes a schema name containing a literal dot', () => {
+    const tables = [{ schema: 'my.app', name: 'hobbies', rls_enabled: false }];
+
+    const advisory = buildRlsDisabledAdvisory(tables);
+
+    expect(advisory).not.toBeNull();
+    expect(advisory!.remediation_sql).toBe(
+      'ALTER TABLE "my.app"."hobbies" ENABLE ROW LEVEL SECURITY;'
+    );
   });
 });
 

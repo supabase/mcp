@@ -1,13 +1,16 @@
-import { Server } from '@modelcontextprotocol/server';
+import { isCallToolResult, Server } from '@modelcontextprotocol/server';
 import type {
+  CallToolResult,
   ClientCapabilities,
   Implementation,
+  InputRequiredResult,
   ListResourcesResult,
   ListResourceTemplatesResult,
   ListToolsResult,
   Tool as McpTool,
   ReadResourceResult,
   ServerCapabilities,
+  ServerContext,
 } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 
@@ -52,7 +55,20 @@ export type Tool<
   outputSchema: OutputSchema;
   /** If true, excludes the tool from `tools/list` while keeping it callable via `tools/call`. */
   hidden?: boolean;
-  execute(params: z.infer<Params>): Promise<z.infer<OutputSchema>>;
+  /**
+   * Executes the tool. `ctx` is the SDK's per-request `ServerContext`
+   * (elicitation, multi-round-trip `requestState`, HTTP info, etc.) — most
+   * tools ignore it.
+   *
+   * Returning an `InputRequiredResult` or a direct `CallToolResult` is
+   * passed straight to the client instead of being JSON-wrapped; any other
+   * value is wrapped as today (`{ content: [{ type: 'text', text:
+   * JSON.stringify(value) }] }`).
+   */
+  execute(
+    params: z.infer<Params>,
+    ctx: ServerContext
+  ): Promise<z.infer<OutputSchema> | InputRequiredResult | CallToolResult>;
 };
 
 /**
@@ -256,7 +272,23 @@ export type McpServerOptions = {
    * asks for the list of tools or invokes a tool. This allows for dynamic tools
    * that can change after the server has started.
    */
-  tools?: Prop<Record<string, Tool>>;
+  tools?:
+    | Record<string, Tool>
+    | ((
+        ctx?: ServerContext
+      ) => Record<string, Tool> | Promise<Record<string, Tool>>);
+
+  /**
+   * Multi-round-trip `requestState` integrity hook (protocol revision
+   * 2026-07-28), passed straight through to the underlying SDK `Server`.
+   *
+   * Configure this with `createRequestStateCodec`'s `verify` to
+   * authenticate `requestState` a tool mints via `inputRequired(...)`.
+   * Leaving it unset keeps the SDK's passthrough behavior.
+   */
+  requestState?: {
+    verify?: (state: string, ctx: ServerContext) => unknown | Promise<unknown>;
+  };
 };
 
 /**
@@ -285,6 +317,7 @@ export function createMcpServer(options: McpServerOptions) {
     {
       capabilities,
       instructions: options.instructions,
+      requestState: options.requestState,
     }
   );
 
@@ -298,13 +331,13 @@ export function createMcpServer(options: McpServerOptions) {
       : options.resources;
   }
 
-  async function getTools() {
+  async function getTools(ctx?: ServerContext) {
     if (!options.tools) {
       throw new Error('tools not available');
     }
 
     return typeof options.tools === 'function'
-      ? await options.tools()
+      ? await options.tools(ctx)
       : options.tools;
   }
 
@@ -440,8 +473,8 @@ export function createMcpServer(options: McpServerOptions) {
   if (options.tools) {
     server.setRequestHandler(
       'tools/list',
-      async (): Promise<ListToolsResult> => {
-        const tools = await getTools();
+      async (_request, ctx): Promise<ListToolsResult> => {
+        const tools = await getTools(ctx);
 
         return {
           tools: await Promise.all(
@@ -469,9 +502,9 @@ export function createMcpServer(options: McpServerOptions) {
       }
     );
 
-    server.setRequestHandler('tools/call', async (request) => {
+    server.setRequestHandler('tools/call', async (request, ctx) => {
       try {
-        const tools = await getTools();
+        const tools = await getTools(ctx);
         const toolName = request.params.name;
 
         if (!(toolName in tools)) {
@@ -490,7 +523,7 @@ export function createMcpServer(options: McpServerOptions) {
         const executeWithCallback = async (tool: Tool) => {
           // Wrap success or error in a result value
           const res = await tool
-            .execute(args)
+            .execute(args, ctx)
             .then((data: unknown) => ({ success: true as const, data }))
             .catch((error) => ({ success: false as const, error }));
 
@@ -515,6 +548,12 @@ export function createMcpServer(options: McpServerOptions) {
 
         const result = await executeWithCallback(tool);
 
+        // An InputRequiredResult or a direct CallToolResult is already
+        // shaped for the wire; pass it through instead of JSON-wrapping it.
+        if (isInputRequiredResult(result) || isCallToolResult(result)) {
+          return result;
+        }
+
         const content =
           result != null
             ? [{ type: 'text' as const, text: JSON.stringify(result) }]
@@ -538,6 +577,14 @@ export function createMcpServer(options: McpServerOptions) {
   }
 
   return server;
+}
+
+function isInputRequiredResult(value: unknown): value is InputRequiredResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { resultType?: unknown }).resultType === 'input_required'
+  );
 }
 
 function enumerateError(error: unknown) {

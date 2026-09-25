@@ -1,15 +1,36 @@
+import {
+  inputRequired,
+  type RequestStateCodec,
+  type ServerContext,
+} from '@modelcontextprotocol/server';
 import { tool } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
 import type { BranchingOperations } from '../platform/types.js';
 import { branchSchema } from '../platform/types.js';
 import { getBranchCost } from '../pricing.js';
 import { hashObject } from '../util.js';
+import {
+  actionOnlyElicitationSchema,
+  branchCostStateSchema,
+  checkConfirmationState,
+  isFormCapable,
+  type ElicitationState,
+} from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
 
 type BranchingToolsOptions = {
   branching: BranchingOperations;
   projectId?: string;
   readOnly?: boolean;
+  /**
+   * Enables confirmation via elicitation inside `create_branch` for clients
+   * that declare per-request form capability (see `isFormCapable`). Absent,
+   * `create_branch` keeps requiring `confirm_cost_id` from `confirm_cost`
+   * unchanged.
+   */
+  confirmation?: {
+    codec: RequestStateCodec<ElicitationState>;
+  };
 };
 
 const createBranchInputSchema = z.object({
@@ -23,6 +44,15 @@ const createBranchInputSchema = z.object({
           : undefined,
     })
     .describe('The cost confirmation ID. Call `confirm_cost` first.'),
+});
+
+const createBranchInputSchemaWithElicitation = createBranchInputSchema.extend({
+  confirm_cost_id: z
+    .string()
+    .optional()
+    .describe(
+      'The cost confirmation ID. Only required for clients without per-request form-elicitation capability; those clients must call `confirm_cost` first. Form-capable clients are asked to confirm the cost inline when creating the branch.'
+    ),
 });
 
 const createBranchOutputSchema = branchSchema;
@@ -155,16 +185,79 @@ export function getBranchingTools({
   branching,
   projectId,
   readOnly,
+  confirmation,
 }: BranchingToolsOptions) {
   const project_id = projectId;
 
   return {
     create_branch: injectableTool({
       ...branchingToolDefs.create_branch,
+      parameters: confirmation
+        ? createBranchInputSchemaWithElicitation
+        : createBranchInputSchema,
       inject: { project_id },
-      execute: async ({ project_id, name, confirm_cost_id }) => {
+      execute: async (
+        {
+          project_id,
+          name,
+          confirm_cost_id,
+        }: z.infer<typeof createBranchInputSchemaWithElicitation>,
+        ctx: ServerContext
+      ) => {
         if (readOnly) {
           throw new Error('Cannot create a branch in read-only mode.');
+        }
+
+        if (confirmation && isFormCapable(ctx)) {
+          const { codec } = confirmation;
+          const cost = getBranchCost();
+          const costSuffix = { hourly: '/hr' }[cost.recurrence];
+
+          const askForConfirmation = async () =>
+            inputRequired({
+              inputRequests: {
+                confirm_cost: inputRequired.elicit({
+                  mode: 'form',
+                  message: [
+                    `Preview branch: $${cost.amount}${costSuffix} until deleted (~$${(cost.amount * 24 * 30).toFixed(2)} per 30 days).`,
+                    'Auto-pauses on inactivity.',
+                    'Standard rate, before plan allowances or exemptions.',
+                  ].join('\n'),
+                  requestedSchema: actionOnlyElicitationSchema,
+                }),
+              },
+              requestState: await codec.mint(
+                { tool: 'create_branch', project_id, name, cost },
+                ctx
+              ),
+            });
+
+          const confirmationState = await checkConfirmationState({
+            ctx,
+            tool: 'create_branch',
+            schema: branchCostStateSchema,
+            requestKey: 'confirm_cost',
+            askForConfirmation,
+            argsMatch: (state) =>
+              state.project_id === project_id && state.name === name,
+            payloadMatch: (state) =>
+              state.cost.type === cost.type &&
+              state.cost.recurrence === cost.recurrence &&
+              state.cost.amount === cost.amount,
+            declinedText: 'Branch creation was declined.',
+            cancelledText: 'Branch creation was cancelled.',
+          });
+
+          switch (confirmationState.kind) {
+            case 'reprompt':
+            case 'terminal':
+              return confirmationState.result;
+            case 'proceed':
+              return await branching.createBranch(
+                confirmationState.state.project_id,
+                { name: confirmationState.state.name }
+              );
+          }
         }
 
         const cost = getBranchCost();

@@ -1,6 +1,18 @@
+import {
+  inputRequired,
+  type RequestStateCodec,
+  type ServerContext,
+} from '@modelcontextprotocol/server';
 import { tool } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
+import {
+  actionOnlyElicitationSchema,
+  checkConfirmationState,
+  isFormCapable,
+  projectCostStateSchema,
+  type ElicitationState,
+} from './confirmation.js';
 import type { AccountOperations } from '../platform/types.js';
 import { organizationSchema, projectSchema } from '../platform/types.js';
 import { getBranchCost, getNextProjectCost } from '../pricing.js';
@@ -10,6 +22,15 @@ import { hashObject } from '../util.js';
 type AccountToolsOptions = {
   account: AccountOperations;
   readOnly?: boolean;
+  /**
+   * Enables confirmation via elicitation inside `create_project` for clients
+   * that declare per-request form capability (see `isFormCapable`). Absent,
+   * `create_project` keeps requiring `confirm_cost_id` from `confirm_cost`
+   * unchanged.
+   */
+  confirmation?: {
+    codec: RequestStateCodec<ElicitationState>;
+  };
 };
 
 const listOrganizationsInputSchema = z.object({});
@@ -82,6 +103,17 @@ const createProjectInputSchema = z.object({
 });
 
 const createProjectOutputSchema = projectSchema;
+
+const createProjectInputSchemaWithElicitation = createProjectInputSchema.extend(
+  {
+    confirm_cost_id: z
+      .string()
+      .optional()
+      .describe(
+        'The cost confirmation ID. Only required for clients without per-request form-elicitation capability; those clients must call `confirm_cost` first. Form-capable clients are asked to confirm the cost inline when creating the project.'
+      ),
+  }
+);
 
 const pauseProjectInputSchema = z.object({
   project_id: z.string(),
@@ -215,7 +247,11 @@ export const accountToolDefs = {
   },
 } as const satisfies ToolDefs;
 
-export function getAccountTools({ account, readOnly }: AccountToolsOptions) {
+export function getAccountTools({
+  account,
+  readOnly,
+  confirmation,
+}: AccountToolsOptions) {
   return {
     list_organizations: tool({
       ...accountToolDefs.list_organizations,
@@ -262,9 +298,85 @@ export function getAccountTools({ account, readOnly }: AccountToolsOptions) {
     }),
     create_project: tool({
       ...accountToolDefs.create_project,
-      execute: async ({ name, region, organization_id, confirm_cost_id }) => {
+      parameters: confirmation
+        ? createProjectInputSchemaWithElicitation
+        : createProjectInputSchema,
+      execute: async (
+        {
+          name,
+          region,
+          organization_id,
+          confirm_cost_id,
+        }: z.infer<typeof createProjectInputSchemaWithElicitation>,
+        ctx: ServerContext
+      ) => {
         if (readOnly) {
           throw new Error('Cannot create a project in read-only mode.');
+        }
+
+        if (confirmation && isFormCapable(ctx)) {
+          const { codec } = confirmation;
+          const cost = await getNextProjectCost(account, organization_id);
+          const state = ctx.mcpReq.requestState<unknown>();
+          if (!state && cost.amount === 0) {
+            return await account.createProject({
+              name,
+              region,
+              organization_id,
+            });
+          }
+
+          const costSuffix = cost.recurrence === 'monthly' ? '/month' : '/hr';
+
+          const askForConfirmation = async () =>
+            inputRequired({
+              inputRequests: {
+                confirm_cost: inputRequired.elicit({
+                  mode: 'form',
+                  message: [
+                    `Project: $${cost.amount}${costSuffix} until deleted.`,
+                    'Billed hourly while running; paused projects are not billed.',
+                    'Standard rate, before plan allowances or exemptions.',
+                  ].join('\n'),
+                  requestedSchema: actionOnlyElicitationSchema,
+                }),
+              },
+              requestState: await codec.mint(
+                { tool: 'create_project', name, region, organization_id, cost },
+                ctx
+              ),
+            });
+
+          const confirmationState = await checkConfirmationState({
+            ctx,
+            tool: 'create_project',
+            schema: projectCostStateSchema,
+            requestKey: 'confirm_cost',
+            askForConfirmation,
+            argsMatch: (state) =>
+              state.name === name &&
+              state.region === region &&
+              state.organization_id === organization_id,
+            payloadMatch: (state) =>
+              cost.amount === 0 ||
+              (state.cost.type === cost.type &&
+                state.cost.recurrence === cost.recurrence &&
+                state.cost.amount === cost.amount),
+            declinedText: 'Project creation was declined.',
+            cancelledText: 'Project creation was cancelled.',
+          });
+
+          switch (confirmationState.kind) {
+            case 'reprompt':
+            case 'terminal':
+              return confirmationState.result;
+            case 'proceed':
+              return await account.createProject({
+                name: confirmationState.state.name,
+                region: confirmationState.state.region,
+                organization_id: confirmationState.state.organization_id,
+              });
+          }
         }
 
         const cost = await getNextProjectCost(account, organization_id);

@@ -128,6 +128,93 @@ const getAdvisorsOutputSchema = z.object({
   result: z.unknown(),
 });
 
+/** Fields the API repeats verbatim on every finding of the same lint. */
+const SHARED_LINT_FIELDS: readonly string[] = [
+  'name',
+  'title',
+  'level',
+  'facing',
+  'categories',
+  'description',
+  'remediation',
+];
+
+/**
+ * `cache_key` is mainly used for Studio's advisor UI, for selecting individual
+ * lints via the `id` query param. Not meaningful for MCP clients.
+ * https://github.com/supabase/supabase/blob/d5ee11bea0cba0149d16715aabb088d03c10be36/apps/studio/pages/project/%5Bref%5D/advisors/security.tsx#L64
+ */
+const DROPPED_LINT_FIELDS: readonly string[] = ['cache_key'];
+
+type AdvisorLint = Record<string, unknown>;
+
+type GroupedAdvisorLint = {
+  count: number;
+  findings: AdvisorLint[];
+} & AdvisorLint;
+
+function isAdvisorLintArray(value: unknown): value is AdvisorLint[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => typeof item === 'object' && item !== null)
+  );
+}
+
+/**
+ * Collapses a flat lint list into one entry per distinct lint, with the
+ * per-object findings underneath. Keyed on every shared field, so findings only
+ * merge when all of them match.
+ */
+export function groupAdvisorLints(lints: AdvisorLint[]): GroupedAdvisorLint[] {
+  const groups = new Map<string, GroupedAdvisorLint>();
+
+  for (const lint of lints) {
+    const shared: AdvisorLint = {};
+    const finding: AdvisorLint = {};
+
+    for (const [key, value] of Object.entries(lint)) {
+      if (DROPPED_LINT_FIELDS.includes(key)) {
+        continue;
+      }
+      if (SHARED_LINT_FIELDS.includes(key)) {
+        shared[key] = value;
+      } else {
+        finding[key] = value;
+      }
+    }
+
+    const key = JSON.stringify(shared);
+
+    const group = groups.get(key);
+    if (group) {
+      group.count += 1;
+      group.findings.push(finding);
+    } else {
+      groups.set(key, { ...shared, count: 1, findings: [finding] });
+    }
+  }
+
+  return Array.from(groups.values());
+}
+
+/**
+ * Groups the lints in an advisors response and leaves the rest of the payload
+ * alone. An unrecognised shape passes through, so an API change degrades to the
+ * ungrouped response instead of throwing.
+ */
+export function groupAdvisorsResult(result: unknown): unknown {
+  if (typeof result !== 'object' || result === null || !('lints' in result)) {
+    return result;
+  }
+
+  const { lints } = result as { lints: unknown };
+  if (!isAdvisorLintArray(lints)) {
+    return result;
+  }
+
+  return { ...result, lints: groupAdvisorLints(lints) };
+}
+
 export const debuggingToolDefs = {
   get_logs: {
     description:
@@ -270,7 +357,7 @@ export function getDebuggingTools({
           default:
             throw new Error(`Unknown advisor type: ${type}`);
         }
-        return { result };
+        return { result: groupAdvisorsResult(result) };
       },
     }),
   };

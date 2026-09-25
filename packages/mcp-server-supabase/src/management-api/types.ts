@@ -120,8 +120,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * [Beta] Diffs a database branch
+         * Diffs a database branch
          * @description Diffs the specified database branch
+         *
+         *     This endpoint is currently in its **Beta** stage.
          */
         get: operations["v1-diff-a-branch"];
         put?: never;
@@ -160,7 +162,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** [Beta] Gets the list of available regions that can be used for a new project */
+        /**
+         * Gets the list of available regions that can be used for a new project
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         get: operations["v1-get-available-regions"];
         put?: never;
         post?: never;
@@ -198,7 +205,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** [Beta] Authorize user through oauth */
+        /**
+         * Authorize user through oauth
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         get: operations["v1-authorize-user"];
         put?: never;
         post?: never;
@@ -218,8 +230,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * [Beta] Exchange auth code for user's access and refresh token
+         * Exchange auth code for user's access and refresh token
          * @description Supports `authorization_code`, `refresh_token`, and `urn:ietf:params:oauth:grant-type:jwt-bearer` grant types. The `jwt-bearer` grant type (IDJAG — identity-directed JWT assertion) is in beta and available on Team and Enterprise plans only.
+         *
+         *     This endpoint is currently in its **Beta** stage.
          */
         post: operations["v1-exchange-oauth-token"];
         delete?: never;
@@ -237,7 +251,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Revoke oauth app authorization and it's corresponding tokens */
+        /**
+         * Revoke oauth app authorization and it's corresponding tokens
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-revoke-token"];
         delete?: never;
         options?: never;
@@ -510,11 +529,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** [Beta] Gets project's custom hostname config */
+        /**
+         * Gets project's custom hostname config
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         get: operations["v1-get-hostname-config"];
         put?: never;
         post?: never;
-        /** [Beta] Deletes a project's custom hostname configuration */
+        /**
+         * Deletes a project's custom hostname configuration
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         delete: operations["v1-Delete hostname config"];
         options?: never;
         head?: never;
@@ -530,7 +559,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Updates project's custom hostname configuration */
+        /**
+         * Updates project's custom hostname configuration
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-update-hostname-config"];
         delete?: never;
         options?: never;
@@ -547,7 +581,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Attempts to verify the DNS configuration for project's custom hostname configuration */
+        /**
+         * Attempts to verify the DNS configuration for project's custom hostname configuration
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-verify-dns-config"];
         delete?: never;
         options?: never;
@@ -564,7 +603,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Activates a custom hostname for a project. */
+        /**
+         * Activates a custom hostname for a project.
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-activate-custom-hostname"];
         delete?: never;
         options?: never;
@@ -579,9 +623,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** [Beta] Get project's temporary access configuration. */
+        /**
+         * Get project's temporary access configuration.
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         get: operations["v1-get-jit-access-config"];
-        /** [Beta] Update project's temporary access configuration. */
+        /**
+         * Update project's temporary access configuration.
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         put: operations["v1-update-jit-access-config"];
         post?: never;
         delete?: never;
@@ -599,7 +653,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Gets project's network bans */
+        /**
+         * Gets project's network bans
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-list-all-network-bans"];
         delete?: never;
         options?: never;
@@ -616,7 +675,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Gets project's network bans with additional information about which databases they affect */
+        /**
+         * Gets project's network bans with additional information about which databases they affect
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-list-all-network-bans-enriched"];
         delete?: never;
         options?: never;
@@ -634,7 +698,12 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** [Beta] Remove network bans. */
+        /**
+         * Remove network bans.
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         delete: operations["v1-delete-network-bans"];
         options?: never;
         head?: never;
@@ -648,14 +717,24 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** [Beta] Gets project's network restrictions */
+        /**
+         * Gets project's network restrictions
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         get: operations["v1-get-network-restrictions"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** [Alpha] Updates project's network restrictions by adding or removing CIDRs */
+        /**
+         * Updates project's network restrictions by adding or removing CIDRs
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
         patch: operations["v1-patch-network-restrictions"];
         trace?: never;
     };
@@ -668,7 +747,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Updates project's network restrictions */
+        /**
+         * Updates project's network restrictions
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-update-network-restrictions"];
         delete?: never;
         options?: never;
@@ -683,9 +767,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** [Beta] Gets project's pgsodium config */
+        /**
+         * Gets project's pgsodium config
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         get: operations["v1-get-pgsodium-config"];
-        /** [Beta] Updates project's pgsodium config. Updating the root_key can cause all data encrypted with the older key to become inaccessible. */
+        /**
+         * Updates project's pgsodium config. Updating the root_key can cause all data encrypted with the older key to become inaccessible.
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         put: operations["v1-update-pgsodium-config"];
         post?: never;
         delete?: never;
@@ -766,9 +860,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** [Beta] Get project's SSL enforcement configuration. */
+        /**
+         * Get project's SSL enforcement configuration.
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         get: operations["v1-get-ssl-enforcement-config"];
-        /** [Beta] Update project's SSL enforcement configuration. */
+        /**
+         * Update project's SSL enforcement configuration.
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         put: operations["v1-update-ssl-enforcement-config"];
         post?: never;
         delete?: never;
@@ -804,11 +908,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** [Beta] Gets current vanity subdomain config */
+        /**
+         * Gets current vanity subdomain config
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         get: operations["v1-get-vanity-subdomain-config"];
         put?: never;
         post?: never;
-        /** [Beta] Deletes a project's vanity subdomain configuration */
+        /**
+         * Deletes a project's vanity subdomain configuration
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         delete: operations["v1-deactivate-vanity-subdomain-config"];
         options?: never;
         head?: never;
@@ -824,7 +938,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Checks vanity subdomain availability */
+        /**
+         * Checks vanity subdomain availability
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-check-vanity-subdomain-availability"];
         delete?: never;
         options?: never;
@@ -841,7 +960,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Activates a vanity subdomain for a project. */
+        /**
+         * Activates a vanity subdomain for a project.
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-activate-vanity-subdomain-config"];
         delete?: never;
         options?: never;
@@ -858,7 +982,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Upgrades the project's Postgres version */
+        /**
+         * Upgrades the project's Postgres version
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-upgrade-postgres-version"];
         delete?: never;
         options?: never;
@@ -873,7 +1002,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** [Beta] Returns the project's eligibility for upgrades */
+        /**
+         * Returns the project's eligibility for upgrades
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         get: operations["v1-get-postgres-upgrade-eligibility"];
         put?: never;
         post?: never;
@@ -890,7 +1024,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** [Beta] Gets the latest status of the project's upgrade */
+        /**
+         * Gets the latest status of the project's upgrade
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         get: operations["v1-get-postgres-upgrade-status"];
         put?: never;
         post?: never;
@@ -943,7 +1082,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Set up a read replica */
+        /**
+         * Set up a read replica
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-setup-a-read-replica"];
         delete?: never;
         options?: never;
@@ -960,7 +1104,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Remove a read replica */
+        /**
+         * Remove a read replica
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-remove-a-read-replica"];
         delete?: never;
         options?: never;
@@ -1235,7 +1384,6 @@ export interface paths {
         };
         /**
          * Gets project performance advisors.
-         * @deprecated
          * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
          */
         get: operations["v1-get-performance-advisors"];
@@ -1256,7 +1404,6 @@ export interface paths {
         };
         /**
          * Gets project security advisors.
-         * @deprecated
          * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
          */
         get: operations["v1-get-security-advisors"];
@@ -1405,9 +1552,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Create a login role for CLI with temporary password */
+        /**
+         * Create a login role for CLI with temporary password
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-create-login-role"];
-        /** [Beta] Delete existing login roles used by CLI */
+        /**
+         * Delete existing login roles used by CLI
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         delete: operations["v1-delete-login-roles"];
         options?: never;
         head?: never;
@@ -1461,7 +1618,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Run sql query */
+        /**
+         * Run sql query
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-run-a-query"];
         delete?: never;
         options?: never;
@@ -1479,8 +1641,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * [Beta] Run a sql query as supabase_read_only_user
+         * Run a sql query as supabase_read_only_user
          * @description All entity references must be schema qualified.
+         *
+         *     This endpoint is currently in its **Beta** stage.
          */
         post: operations["v1-read-only-query"];
         delete?: never;
@@ -1498,7 +1662,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** [Beta] Enables Database Webhooks on the project */
+        /**
+         * Enables Database Webhooks on the project
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
         post: operations["v1-enable-database-webhook"];
         delete?: never;
         options?: never;
@@ -1515,7 +1684,6 @@ export interface paths {
         };
         /**
          * Gets database metadata for the given project.
-         * @deprecated
          * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
          */
         get: operations["v1-get-database-metadata"];
@@ -2206,7 +2374,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        BranchDetailResponse: {
+        BranchDetailResponse_Output: {
             ref: string;
             postgres_version: string;
             postgres_engine: string;
@@ -2244,7 +2412,7 @@ export interface components {
              */
             notify_url?: string;
         };
-        BranchResponse: {
+        BranchResponse_Output: {
             /** Format: uuid */
             id: string;
             name: string;
@@ -2280,7 +2448,7 @@ export interface components {
             /** @enum {string} */
             preview_project_status?: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
         };
-        BranchDeleteResponse: {
+        BranchDeleteResponse_Output: {
             /** @enum {string} */
             message: "ok";
         };
@@ -2290,16 +2458,16 @@ export interface components {
         BranchActionBody: {
             migration_version?: string;
         };
-        BranchUpdateResponse: {
+        BranchUpdateResponse_Output: {
             workflow_run_id: string;
             /** @enum {string} */
             message: "ok";
         };
-        BranchRestoreResponse: {
+        BranchRestoreResponse_Output: {
             /** @enum {string} */
             message: "Branch restoration initiated";
         };
-        V1ProjectWithDatabaseResponse: {
+        V1ProjectWithDatabaseResponse_Output: {
             /**
              * @deprecated
              * @description Deprecated: Use `ref` instead.
@@ -2412,7 +2580,7 @@ export interface components {
             /** @description [Experimental] Whether to enable high availability for the project. */
             high_availability?: boolean;
         };
-        V1ProjectResponse: {
+        V1ProjectResponse_Output: {
             /**
              * @deprecated
              * @description Deprecated: Use `ref` instead.
@@ -2442,7 +2610,7 @@ export interface components {
             /** @enum {string} */
             status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
         };
-        RegionsInfo: {
+        RegionsInfo_Output: {
             recommendations: {
                 smartGroup: {
                     name: string;
@@ -2484,7 +2652,7 @@ export interface components {
                 }[];
             };
         };
-        OrganizationResponseV1: {
+        OrganizationResponseV1_Output: {
             /**
              * @deprecated
              * @description Deprecated: Use `slug` instead.
@@ -2531,7 +2699,7 @@ export interface components {
             resource?: string;
             scope?: string;
         };
-        OAuthTokenResponse: {
+        OAuthTokenResponse_Output: {
             access_token: string;
             /** @description The `urn:ietf:params:oauth:grant-type:jwt-bearer` grant type issues access tokens only, no refresh token is returned and the token cannot be revoked via `/v1/oauth/revoke`. */
             refresh_token?: string;
@@ -2550,7 +2718,7 @@ export interface components {
             client_secret: string;
             refresh_token: string;
         };
-        SnippetList: {
+        SnippetList_Output: {
             data: {
                 id: string;
                 inserted_at: string;
@@ -2577,7 +2745,7 @@ export interface components {
             }[];
             cursor?: string;
         };
-        SnippetResponse: {
+        SnippetResponse_Output: {
             id: string;
             inserted_at: string;
             updated_at: string;
@@ -2606,16 +2774,16 @@ export interface components {
                  * @description Deprecated: Rely on root-level favorite property instead.
                  */
                 favorite?: boolean;
-                schema_version: string;
+                schema_version?: string;
                 sql: string;
             };
         };
-        V1ProfileResponse: {
+        V1ProfileResponse_Output: {
             gotrue_id: string;
             primary_email: string;
             username: string;
         };
-        ListActionRunResponse: {
+        ListActionRunResponse_Output: {
             id: string;
             branch_id: string;
             run_steps: {
@@ -2632,7 +2800,7 @@ export interface components {
             created_at: string;
             updated_at: string;
         }[];
-        ActionRunResponse: {
+        ActionRunResponse_Output: {
             id: string;
             branch_id: string;
             run_steps: {
@@ -2671,11 +2839,11 @@ export interface components {
             /** @enum {string} */
             deploy?: "CREATED" | "DEAD" | "EXITED" | "PAUSED" | "REMOVING" | "RESTARTING" | "RUNNING";
         };
-        UpdateRunStatusResponse: {
+        UpdateRunStatusResponse_Output: {
             /** @enum {string} */
             message: "ok";
         };
-        ApiKeyResponse: {
+        ApiKeyResponse_Output: {
             api_key?: string | null;
             id?: string | null;
             /** @enum {string|null} */
@@ -2692,7 +2860,7 @@ export interface components {
             /** Format: date-time */
             updated_at?: string | null;
         };
-        LegacyApiKeysResponse: {
+        LegacyApiKeysResponse_Output: {
             enabled: boolean;
         };
         /** @example {
@@ -2756,36 +2924,36 @@ export interface components {
             notify_url?: string;
         };
         /** @description Any JSON-serializable value */
-        UpdateCustomHostnameResponseJsonValue: unknown;
-        UpdateCustomHostnameResponse: {
+        JsonValue_Output: unknown;
+        UpdateCustomHostnameResponse_Output: {
             /** @enum {string} */
             status: "1_not_started" | "2_initiated" | "3_challenge_verified" | "4_origin_setup_completed" | "5_services_reconfigured";
-            custom_hostname: string;
+            custom_hostname?: string;
             data: {
                 success: boolean;
-                errors: components["schemas"]["UpdateCustomHostnameResponseJsonValue"][];
-                messages: components["schemas"]["UpdateCustomHostnameResponseJsonValue"][];
+                errors: components["schemas"]["JsonValue_Output"][];
+                messages: components["schemas"]["JsonValue_Output"][];
                 result: {
                     id: string;
                     hostname: string;
-                    ssl: {
-                        status: string;
-                        validation_records: {
-                            txt_name: string;
-                            txt_value: string;
+                    ssl?: {
+                        status?: string;
+                        validation_records?: {
+                            txt_name?: string;
+                            txt_value?: string;
                         }[];
                         validation_errors?: {
                             message: string;
                         }[];
                     };
-                    ownership_verification: {
-                        type: string;
-                        name: string;
-                        value: string;
+                    ownership_verification?: {
+                        type?: string;
+                        name?: string;
+                        value?: string;
                     };
-                    custom_origin_server: string;
+                    custom_origin_server?: string;
                     verification_errors?: string[];
-                    status: string;
+                    status?: string;
                 };
             };
         };
@@ -2802,10 +2970,10 @@ export interface components {
             /** @enum {string} */
             state: "enabled" | "disabled";
         };
-        NetworkBanResponse: {
+        NetworkBanResponse_Output: {
             banned_ipv4_addresses: string[];
         };
-        NetworkBanResponseEnriched: {
+        NetworkBanResponseEnriched_Output: {
             banned_ipv4_addresses: {
                 banned_address: string;
                 identifier: string;
@@ -2828,7 +2996,7 @@ export interface components {
             requester_ip: boolean;
             identifier?: string;
         };
-        NetworkRestrictionsResponse: {
+        NetworkRestrictionsResponse_Output: {
             /** @enum {string} */
             entitlement: "disallowed" | "allowed";
             /**
@@ -2902,7 +3070,7 @@ export interface components {
                 dbAllowedCidrsV6?: string[];
             };
         };
-        NetworkRestrictionsV2Response: {
+        NetworkRestrictionsV2Response_Output: {
             /** @enum {string} */
             entitlement: "disallowed" | "allowed";
             /** @description At any given point in time, this is the config that the user has requested be applied to their project. The `status` field indicates if it has been applied to the project, or is pending. When an updated config is received, the applied config is moved to `old_config`. */
@@ -2931,7 +3099,7 @@ export interface components {
         /** @example {
          *       "root_key": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
          *     } */
-        PgsodiumConfigResponse: {
+        PgsodiumConfigResponse_Output: {
             /** @description The pgsodium root key: 32 bytes, hex-encoded (64 characters). */
             root_key: string;
         };
@@ -2942,7 +3110,7 @@ export interface components {
             /** @description The pgsodium root key: 32 bytes, hex-encoded (64 characters). */
             root_key: string;
         };
-        PostgrestConfigWithJWTSecretResponse: {
+        PostgrestConfigWithJWTSecretResponse_Output: {
             db_schema: string;
             max_rows: number;
             db_extra_search_path: string;
@@ -2964,7 +3132,7 @@ export interface components {
             db_pool?: number;
             db_pool_acquisition_timeout?: number;
         };
-        V1PostgrestConfigResponse: {
+        V1PostgrestConfigResponse_Output: {
             db_schema: string;
             max_rows: number;
             db_extra_search_path: string;
@@ -2973,7 +3141,7 @@ export interface components {
             /** @description If `null`, the value is automatically configured to 10. */
             db_pool_acquisition_timeout: number | null;
         };
-        V1ProjectRefResponse: {
+        V1ProjectRefResponse_Output: {
             id: number;
             ref: string;
             name: string;
@@ -2984,7 +3152,7 @@ export interface components {
         V1UpdateProjectBody: {
             name: string;
         };
-        SecretResponse: {
+        SecretResponse_Output: {
             name: string;
             value: string;
             updated_at?: string;
@@ -3008,7 +3176,7 @@ export interface components {
          *       "OPENAI_API_KEY"
          *     ] */
         DeleteSecretsBody: string[];
-        SslEnforcementResponse: {
+        SslEnforcementResponse_Output: {
             currentConfig: {
                 database: boolean;
             };
@@ -3024,10 +3192,10 @@ export interface components {
                 database: boolean;
             };
         };
-        TypescriptResponse: {
+        TypescriptResponse_Output: {
             types: string;
         };
-        VanitySubdomainConfigResponse: {
+        VanitySubdomainConfigResponse_Output: {
             /** @enum {string} */
             status: "not-used" | "custom-domain-used" | "active";
             custom_domain?: string;
@@ -3054,10 +3222,10 @@ export interface components {
         VanitySubdomainBody: {
             vanity_subdomain: string;
         };
-        SubdomainAvailabilityResponse: {
+        SubdomainAvailabilityResponse_Output: {
             available: boolean;
         };
-        ActivateVanitySubdomainResponse: {
+        ActivateVanitySubdomainResponse_Output: {
             custom_domain: string;
         };
         /** @example {
@@ -3069,10 +3237,10 @@ export interface components {
             /** @enum {string} */
             release_channel?: "internal" | "alpha" | "beta" | "ga" | "withdrawn" | "preview";
         };
-        ProjectUpgradeInitiateResponse: {
+        ProjectUpgradeInitiateResponse_Output: {
             tracking_id: string;
         };
-        ProjectUpgradeEligibilityResponse: {
+        ProjectUpgradeEligibilityResponse_Output: {
             eligible: boolean;
             current_app_version: string;
             /** @enum {string} */
@@ -3159,13 +3327,16 @@ export interface components {
             } | {
                 /** @enum {string} */
                 type: "operator_estimator_gate";
+            } | {
+                /** @enum {string} */
+                type: "btree_gist_nan_reindex";
             })[];
         };
-        DatabaseUpgradeStatusResponse: {
+        DatabaseUpgradeStatusResponse_Output: {
             databaseUpgradeStatus: {
                 initiated_at: string;
                 latest_status_at: string;
-                target_version: number;
+                target_version: string;
                 /** @enum {string} */
                 error?: "1_upgraded_instance_launch_failed" | "2_volume_detachchment_from_upgraded_instance_failed" | "3_volume_attachment_to_original_instance_failed" | "4_data_upgrade_initiation_failed" | "5_data_upgrade_completion_failed" | "6_volume_detachchment_from_original_instance_failed" | "7_volume_attachment_to_upgraded_instance_failed" | "8_upgrade_completion_failed" | "9_post_physical_backup_failed";
                 /** @enum {string} */
@@ -3173,7 +3344,7 @@ export interface components {
                 status: number;
             } | null;
         };
-        ReadOnlyStatusResponse: {
+        ReadOnlyStatusResponse_Output: {
             enabled: boolean;
             override_enabled: boolean;
             override_active_until: string;
@@ -3194,7 +3365,7 @@ export interface components {
         RemoveReadReplicaBody: {
             database_identifier: string;
         };
-        V1ServiceHealthResponse: {
+        V1ServiceHealthResponse_Output: {
             /** @enum {string} */
             name: "auth" | "db" | "db_postgres_user" | "pooler" | "realtime" | "rest" | "storage" | "pg_bouncer";
             /**
@@ -3223,7 +3394,7 @@ export interface components {
             };
             error?: string;
         };
-        SigningKeyResponse: {
+        SigningKeyResponse_Output: {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
@@ -3314,7 +3485,7 @@ export interface components {
                 k: string;
             };
         };
-        SigningKeysResponse: {
+        SigningKeysResponse_Output: {
             keys: {
                 /** Format: uuid */
                 id: string;
@@ -3336,7 +3507,7 @@ export interface components {
             /** @enum {string} */
             status: "in_use" | "previously_used" | "revoked" | "standby";
         };
-        AuthConfigResponse: {
+        AuthConfigResponse_Output: {
             api_max_request_duration: number | null;
             db_max_pool_size: number | null;
             /** @enum {string|null} */
@@ -3536,6 +3707,7 @@ export interface components {
             security_captcha_secret: string | null;
             security_manual_linking_enabled: boolean | null;
             security_refresh_token_reuse_interval: number | null;
+            security_update_password_require_current_password: boolean | null;
             security_update_password_require_reauthentication: boolean | null;
             sessions_inactivity_timeout: number | null;
             sessions_single_per_user: boolean | null;
@@ -3645,7 +3817,9 @@ export interface components {
             /** @enum {string|null} */
             security_captcha_provider?: "turnstile" | "hcaptcha" | null;
             security_captcha_secret?: string | null;
+            /** @description Session timebox in hours. Maximum 8760 hours (1 year). */
             sessions_timebox?: number | null;
+            /** @description Session inactivity timeout in hours. Maximum 8760 hours (1 year). */
             sessions_inactivity_timeout?: number | null;
             sessions_single_per_user?: boolean | null;
             sessions_tags?: string | null;
@@ -3664,6 +3838,9 @@ export interface components {
             password_required_characters?: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:0123456789" | "abcdefghijklmnopqrstuvwxyz:ABCDEFGHIJKLMNOPQRSTUVWXYZ:0123456789" | "abcdefghijklmnopqrstuvwxyz:ABCDEFGHIJKLMNOPQRSTUVWXYZ:0123456789:!@#$%^&*()_+-=[]{};'\\\\:\"|<>?,./`~" | "" | null;
             security_manual_linking_enabled?: boolean | null;
             security_update_password_require_reauthentication?: boolean | null;
+            /** @description Require the user's current password when updating their password. */
+            security_update_password_require_current_password?: boolean | null;
+            /** @description Refresh token reuse interval in seconds. Maximum 300 seconds (5 minutes). */
             security_refresh_token_reuse_interval?: number | null;
             mailer_otp_exp?: number;
             mailer_otp_length?: number | null;
@@ -3837,7 +4014,7 @@ export interface components {
             jwks_url?: string;
             custom_jwks?: unknown;
         };
-        ThirdPartyAuth: {
+        ThirdPartyAuth_Output: {
             /** Format: uuid */
             id: string;
             type: string;
@@ -3849,7 +4026,7 @@ export interface components {
             updated_at: string;
             resolved_at?: string | null;
         };
-        GetProjectAvailableRestoreVersionsResponse: {
+        GetProjectAvailableRestoreVersionsResponse_Output: {
             available_versions: {
                 version: string;
                 /** @enum {string} */
@@ -3858,9 +4035,7 @@ export interface components {
                 postgres_engine: "13" | "14" | "15" | "17" | "17-oriole";
             }[];
         };
-        /** @description Any JSON-serializable value */
-        ListProjectAddonsResponseJsonValue: unknown;
-        ListProjectAddonsResponse: {
+        ListProjectAddonsResponse_Output: {
             selected_addons: {
                 /** @enum {string} */
                 type: "custom_domain" | "compute_instance" | "pitr" | "ipv4" | "auth_mfa_phone" | "auth_mfa_web_authn" | "log_drain" | "etl_pipeline";
@@ -3875,7 +4050,7 @@ export interface components {
                         interval: "monthly" | "hourly";
                         amount: number;
                     };
-                    meta?: components["schemas"]["ListProjectAddonsResponseJsonValue"];
+                    meta?: components["schemas"]["JsonValue_Output"];
                 };
             }[];
             available_addons: {
@@ -3893,7 +4068,7 @@ export interface components {
                         interval: "monthly" | "hourly";
                         amount: number;
                     };
-                    meta?: components["schemas"]["ListProjectAddonsResponseJsonValue"];
+                    meta?: components["schemas"]["JsonValue_Output"];
                 }[];
             }[];
         };
@@ -3906,14 +4081,14 @@ export interface components {
             /** @enum {string} */
             addon_type: "custom_domain" | "compute_instance" | "pitr" | "ipv4" | "auth_mfa_phone" | "auth_mfa_web_authn" | "log_drain" | "etl_pipeline";
         };
-        ProjectClaimTokenResponse: {
+        ProjectClaimTokenResponse_Output: {
             token_alias: string;
             expires_at: string;
             created_at: string;
             /** Format: uuid */
             created_by: string;
         };
-        CreateProjectClaimTokenResponse: {
+        CreateProjectClaimTokenResponse_Output: {
             token: string;
             token_alias: string;
             expires_at: string;
@@ -3921,10 +4096,10 @@ export interface components {
             /** Format: uuid */
             created_by: string;
         };
-        V1ProjectAdvisorsResponse: {
-            lints: ({
+        V1ProjectAdvisorsResponse_Output: {
+            lints: {
                 /** @enum {string} */
-                name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_service_error_rate_high" | "project_not_active" | "advisor_check_unavailable";
+                name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "project_not_active" | "advisor_check_unavailable";
                 title: string;
                 /** @enum {string} */
                 level: "ERROR" | "WARN" | "INFO";
@@ -3942,17 +4117,13 @@ export interface components {
                     type?: "table" | "view" | "materialized view" | "foreign table" | "auth" | "function" | "extension" | "compliance" | "health";
                     fkey_name?: string;
                     fkey_columns?: number[];
-                } & {
-                    [key: string]: unknown;
                 };
                 cache_key: string;
                 /** Format: date-time */
                 observed_at?: string;
-            } & {
-                [key: string]: unknown;
-            })[];
+            }[];
         };
-        AnalyticsResponse: {
+        AnalyticsResponse_Output: {
             result?: unknown[];
             error?: string | {
                 code: number;
@@ -3967,7 +4138,7 @@ export interface components {
                 status: string;
             };
         };
-        V1GetUsageApiCountResponse: {
+        V1GetUsageApiCountResponse_Output: {
             result?: {
                 /** Format: date-time */
                 timestamp: string;
@@ -3989,7 +4160,7 @@ export interface components {
                 status: string;
             };
         };
-        V1GetUsageApiRequestsCountResponse: {
+        V1GetUsageApiRequestsCountResponse_Output: {
             result?: {
                 count: number;
             }[];
@@ -4012,17 +4183,17 @@ export interface components {
         CreateRoleBody: {
             read_only: boolean;
         };
-        CreateRoleResponse: {
+        CreateRoleResponse_Output: {
             role: string;
             password: string;
             /** Format: int64 */
             ttl_seconds: number;
         };
-        DeleteRolesResponse: {
+        DeleteRolesResponse_Output: {
             /** @enum {string} */
             message: "ok";
         };
-        V1ListMigrationsResponse: {
+        V1ListMigrationsResponse_Output: {
             version: string;
             name?: string;
         }[];
@@ -4046,7 +4217,7 @@ export interface components {
             name?: string;
             rollback?: string;
         };
-        V1GetMigrationResponse: {
+        V1GetMigrationResponse_Output: {
             version: string;
             name?: string;
             statements?: string[];
@@ -4078,17 +4249,13 @@ export interface components {
             query: string;
             parameters?: unknown[];
         };
-        GetProjectDbMetadataResponse: {
-            databases: ({
+        GetProjectDbMetadataResponse_Output: {
+            databases: {
                 name: string;
-                schemas: ({
+                schemas: {
                     name: string;
-                } & {
-                    [key: string]: unknown;
-                })[];
-            } & {
-                [key: string]: unknown;
-            })[];
+                }[];
+            }[];
         };
         /** @example {
          *       "password": "correct-horse-battery-staple"
@@ -4096,10 +4263,10 @@ export interface components {
         V1UpdatePasswordBody: {
             password: string;
         };
-        V1UpdatePasswordResponse: {
+        V1UpdatePasswordResponse_Output: {
             message: string;
         };
-        JitAccessResponse: {
+        JitAccessResponse_Output: {
             /** Format: uuid */
             user_id?: string;
             user_roles: {
@@ -4126,9 +4293,10 @@ export interface components {
             role: string;
             rhost: string;
         };
-        JitAuthorizeAccessResponse: {
+        JitAuthorizeAccessResponse_Output: {
             /** Format: uuid */
-            user_id: string;
+            user_id?: string;
+            act?: string;
             user_role: {
                 role: string;
                 expires_at?: number;
@@ -4145,7 +4313,7 @@ export interface components {
                 branches_only?: boolean;
             };
         };
-        JitListAccessResponse: {
+        JitListAccessResponse_Output: {
             items: ({
                 /** Format: uuid */
                 user_id: string;
@@ -4262,7 +4430,7 @@ export interface components {
                 branches_only?: boolean;
             }[];
         };
-        InviteExternalUserJitResponse: {
+        InviteExternalUserJitResponse_Output: {
             /** Format: email */
             email: string;
             /** Format: uuid */
@@ -4292,7 +4460,7 @@ export interface components {
             email: string;
             token: string;
         };
-        FunctionResponse: {
+        FunctionResponse_Output: {
             id: string;
             slug: string;
             name: string;
@@ -4347,7 +4515,7 @@ export interface components {
             import_map_path?: string;
             ezbr_sha256?: string;
         }[];
-        BulkUpdateFunctionResponse: {
+        BulkUpdateFunctionResponse_Output: {
             functions: {
                 id: string;
                 slug: string;
@@ -4386,7 +4554,7 @@ export interface components {
                 name?: string;
             };
         };
-        DeployFunctionResponse: {
+        DeployFunctionResponse_Output: {
             id: string;
             slug: string;
             name: string;
@@ -4403,7 +4571,7 @@ export interface components {
             import_map_path?: string;
             ezbr_sha256?: string;
         };
-        FunctionSlugResponse: {
+        FunctionSlugResponse_Output: {
             id: string;
             slug: string;
             name: string;
@@ -4431,7 +4599,7 @@ export interface components {
             body?: string;
             verify_jwt?: boolean;
         };
-        V1StorageBucketResponse: {
+        V1StorageBucketResponse_Output: {
             id: string;
             name: string;
             owner: string;
@@ -4439,7 +4607,7 @@ export interface components {
             updated_at: string;
             public: boolean;
         };
-        DiskResponse: {
+        DiskResponse_Output: {
             attributes: {
                 iops: number;
                 size_gb: number;
@@ -4476,7 +4644,7 @@ export interface components {
                 type: "io2";
             };
         };
-        DiskUtilMetricsResponse: {
+        DiskUtilMetricsResponse_Output: {
             timestamp: string;
             metrics: {
                 fs_size_bytes: number;
@@ -4484,7 +4652,7 @@ export interface components {
                 fs_used_bytes: number;
             };
         };
-        DiskAutoscaleConfig: {
+        DiskAutoscaleConfig_Output: {
             /** @description Growth percentage for disk autoscaling */
             growth_percent: number | null;
             /** @description Minimum increment size for disk autoscaling in GB */
@@ -4492,7 +4660,7 @@ export interface components {
             /** @description Maximum limit the disk size will grow to in GB */
             max_size_gb: number | null;
         };
-        StorageConfigResponse: {
+        StorageConfigResponse_Output: {
             /** Format: int64 */
             fileSizeLimit: number;
             features: {
@@ -4520,13 +4688,13 @@ export interface components {
             capabilities: {
                 list_v2: boolean;
                 iceberg_catalog: boolean;
+                object_versioning: boolean;
             };
             external: {
                 /** @enum {string} */
                 upstreamTarget: "main" | "canary";
             };
-            migrationVersion: string;
-            databasePoolMode: string;
+            migrationVersion: string | null;
         };
         /** @example {
          *       "fileSizeLimit": 10485760,
@@ -4566,7 +4734,7 @@ export interface components {
                 upstreamTarget: "main" | "canary";
             };
         };
-        V1PgbouncerConfigResponse: {
+        V1PgbouncerConfigResponse_Output: {
             default_pool_size?: number;
             ignore_startup_parameters?: string;
             max_client_conn?: number;
@@ -4578,7 +4746,7 @@ export interface components {
             query_wait_timeout?: number;
             reserve_pool_size?: number;
         };
-        SupavisorConfigResponse: {
+        SupavisorConfigResponse_Output: {
             identifier: string;
             /** @enum {string} */
             database_type: "PRIMARY" | "READ_REPLICA";
@@ -4607,11 +4775,11 @@ export interface components {
              */
             pool_mode?: "transaction" | "session";
         };
-        UpdateSupavisorConfigResponse: {
+        UpdateSupavisorConfigResponse_Output: {
             default_pool_size: number | null;
             pool_mode: string;
         };
-        PostgresConfigResponse: {
+        PostgresConfigResponse_Output: {
             effective_cache_size?: string;
             logical_decoding_work_mem?: string;
             "cron.log_statement"?: boolean;
@@ -4710,7 +4878,7 @@ export interface components {
             hot_standby_feedback?: boolean;
             restart_database?: boolean;
         };
-        RealtimeConfigResponse: {
+        RealtimeConfigResponse_Output: {
             /** @description Whether to only allow private channels */
             private_only: boolean | null;
             /** @description Sets connection pool size for Realtime Authorization */
@@ -4801,15 +4969,15 @@ export interface components {
                     [key: string]: {
                         name?: string;
                         names?: string[];
-                        default?: Record<string, never> | number | string | boolean;
                         array?: boolean;
+                        default?: Record<string, never> | number | string | boolean;
                     };
                 };
             };
             /** @enum {string} */
             name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
         };
-        CreateProviderResponse: {
+        CreateProviderResponse_Output: {
             id: string;
             saml?: {
                 entity_id: string;
@@ -4820,8 +4988,8 @@ export interface components {
                         [key: string]: {
                             name?: string;
                             names?: string[];
-                            default?: Record<string, never> | number | string | boolean;
                             array?: boolean;
+                            default?: Record<string, never> | number | string | boolean;
                         };
                     };
                 };
@@ -4836,7 +5004,7 @@ export interface components {
             created_at?: string;
             updated_at?: string;
         };
-        ListProvidersResponse: {
+        ListProvidersResponse_Output: {
             items: {
                 id: string;
                 saml?: {
@@ -4848,8 +5016,8 @@ export interface components {
                             [key: string]: {
                                 name?: string;
                                 names?: string[];
-                                default?: Record<string, never> | number | string | boolean;
                                 array?: boolean;
+                                default?: Record<string, never> | number | string | boolean;
                             };
                         };
                     };
@@ -4865,7 +5033,7 @@ export interface components {
                 updated_at?: string;
             }[];
         };
-        GetProviderResponse: {
+        GetProviderResponse_Output: {
             id: string;
             saml?: {
                 entity_id: string;
@@ -4876,8 +5044,8 @@ export interface components {
                         [key: string]: {
                             name?: string;
                             names?: string[];
-                            default?: Record<string, never> | number | string | boolean;
                             array?: boolean;
+                            default?: Record<string, never> | number | string | boolean;
                         };
                     };
                 };
@@ -4908,15 +5076,15 @@ export interface components {
                     [key: string]: {
                         name?: string;
                         names?: string[];
-                        default?: Record<string, never> | number | string | boolean;
                         array?: boolean;
+                        default?: Record<string, never> | number | string | boolean;
                     };
                 };
             };
             /** @enum {string} */
             name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
         };
-        UpdateProviderResponse: {
+        UpdateProviderResponse_Output: {
             id: string;
             saml?: {
                 entity_id: string;
@@ -4927,8 +5095,8 @@ export interface components {
                         [key: string]: {
                             name?: string;
                             names?: string[];
-                            default?: Record<string, never> | number | string | boolean;
                             array?: boolean;
+                            default?: Record<string, never> | number | string | boolean;
                         };
                     };
                 };
@@ -4943,7 +5111,7 @@ export interface components {
             created_at?: string;
             updated_at?: string;
         };
-        DeleteProviderResponse: {
+        DeleteProviderResponse_Output: {
             id: string;
             saml?: {
                 entity_id: string;
@@ -4954,8 +5122,8 @@ export interface components {
                         [key: string]: {
                             name?: string;
                             names?: string[];
-                            default?: Record<string, never> | number | string | boolean;
                             array?: boolean;
+                            default?: Record<string, never> | number | string | boolean;
                         };
                     };
                 };
@@ -4970,7 +5138,7 @@ export interface components {
             created_at?: string;
             updated_at?: string;
         };
-        V1BackupsResponse: {
+        V1BackupsResponse_Output: {
             region: string;
             walg_enabled: boolean;
             pitr_enabled: boolean;
@@ -5012,7 +5180,7 @@ export interface components {
         V1RestoreBackupBody: {
             id: number;
         };
-        V1BackupScheduleResponse: {
+        V1BackupScheduleResponse_Output: {
             /**
              * @description Time of day to schedule daily backups, in UTC. Format: HH:MM:SS.
              * @example 04:00:00
@@ -5041,7 +5209,7 @@ export interface components {
         V1UndoBody: {
             name: string;
         };
-        V1ListEntitlementsResponse: {
+        V1ListEntitlementsResponse_Output: {
             entitlements: {
                 feature: {
                     /** @enum {string} */
@@ -5065,15 +5233,15 @@ export interface components {
                 };
             }[];
         };
-        V1OrganizationMemberResponse: {
+        V1OrganizationMemberResponse_Output: {
             user_id: string;
             user_name: string;
             email?: string;
-            role_name: string;
+            role_name?: string;
             mfa_enabled: boolean;
             avatar_url: string | null;
         };
-        V1OrganizationSlugResponse: {
+        V1OrganizationSlugResponse_Output: {
             id: string;
             name: string;
             /** @enum {string} */
@@ -5081,7 +5249,7 @@ export interface components {
             opt_in_tags: ("AI_SQL_GENERATOR_OPT_IN" | "AI_DATA_GENERATOR_OPT_IN" | "AI_LOG_GENERATOR_OPT_IN")[];
             allowed_release_channels: ("internal" | "alpha" | "beta" | "ga" | "withdrawn" | "preview")[];
         };
-        OrganizationProjectClaimResponse: {
+        OrganizationProjectClaimResponse_Output: {
             project: {
                 ref: string;
                 name: string;
@@ -5114,7 +5282,7 @@ export interface components {
             /** Format: uuid */
             created_by: string;
         };
-        OrganizationProjectsResponse: {
+        OrganizationProjectsResponse_Output: {
             projects: {
                 ref: string;
                 name: string;
@@ -5176,8 +5344,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BranchDetailResponse"];
+                    "application/json": components["schemas"]["BranchDetailResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to retrieve database branch */
             500: {
@@ -5208,8 +5397,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BranchDeleteResponse"];
+                    "application/json": components["schemas"]["BranchDeleteResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to delete database branch */
             500: {
@@ -5241,8 +5451,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BranchResponse"];
+                    "application/json": components["schemas"]["BranchResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to update database branch */
             500: {
@@ -5274,8 +5505,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BranchUpdateResponse"];
+                    "application/json": components["schemas"]["BranchUpdateResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to push database branch */
             500: {
@@ -5307,8 +5559,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BranchUpdateResponse"];
+                    "application/json": components["schemas"]["BranchUpdateResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to merge database branch */
             500: {
@@ -5340,8 +5613,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BranchUpdateResponse"];
+                    "application/json": components["schemas"]["BranchUpdateResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to reset database branch */
             500: {
@@ -5364,13 +5658,34 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BranchRestoreResponse"];
+                    "application/json": components["schemas"]["BranchRestoreResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to restore database branch */
             500: {
@@ -5410,6 +5725,27 @@ export interface operations {
                     "text/plain": string;
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Failed to diff database branch */
             500: {
                 headers: {
@@ -5433,7 +5769,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ProjectWithDatabaseResponse"][];
+                    "application/json": components["schemas"]["V1ProjectWithDatabaseResponse_Output"][];
                 };
             };
             /** @description Unauthorized */
@@ -5477,7 +5813,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ProjectResponse"];
+                    "application/json": components["schemas"]["V1ProjectResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -5524,7 +5860,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RegionsInfo"];
+                    "application/json": components["schemas"]["RegionsInfo_Output"];
                 };
             };
         };
@@ -5543,7 +5879,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrganizationResponseV1"][];
+                    "application/json": components["schemas"]["OrganizationResponseV1_Output"][];
                 };
             };
             /** @description Unauthorized */
@@ -5594,7 +5930,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrganizationResponseV1"];
+                    "application/json": components["schemas"]["OrganizationResponseV1_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -5656,6 +5992,27 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     "v1-exchange-oauth-token": {
@@ -5676,8 +6033,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OAuthTokenResponse"];
+                    "application/json": components["schemas"]["OAuthTokenResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -5695,6 +6073,27 @@ export interface operations {
         };
         responses: {
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5771,7 +6170,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SnippetList"];
+                    "application/json": components["schemas"]["SnippetList_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -5820,7 +6219,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SnippetResponse"];
+                    "application/json": components["schemas"]["SnippetResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -5867,7 +6266,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ProfileResponse"];
+                    "application/json": components["schemas"]["V1ProfileResponse_Output"];
                 };
             };
         };
@@ -5892,7 +6291,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ListActionRunResponse"];
+                    "application/json": components["schemas"]["ListActionRunResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -5994,7 +6393,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ActionRunResponse"];
+                    "application/json": components["schemas"]["ActionRunResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6050,7 +6449,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UpdateRunStatusResponse"];
+                    "application/json": components["schemas"]["UpdateRunStatusResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6159,7 +6558,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiKeyResponse"][];
+                    "application/json": components["schemas"]["ApiKeyResponse_Output"][];
                 };
             };
             /** @description Unauthorized */
@@ -6213,7 +6612,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiKeyResponse"];
+                    "application/json": components["schemas"]["ApiKeyResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6256,7 +6655,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LegacyApiKeysResponse"];
+                    "application/json": components["schemas"]["LegacyApiKeysResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6306,7 +6705,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LegacyApiKeysResponse"];
+                    "application/json": components["schemas"]["LegacyApiKeysResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6357,7 +6756,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiKeyResponse"];
+                    "application/json": components["schemas"]["ApiKeyResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6407,7 +6806,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiKeyResponse"];
+                    "application/json": components["schemas"]["ApiKeyResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6462,7 +6861,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiKeyResponse"];
+                    "application/json": components["schemas"]["ApiKeyResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6505,8 +6904,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BranchResponse"][];
+                    "application/json": components["schemas"]["BranchResponse_Output"][];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to retrieve database branches */
             500: {
@@ -6538,8 +6958,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BranchResponse"];
+                    "application/json": components["schemas"]["BranchResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to create database branch */
             500: {
@@ -6616,8 +7057,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BranchResponse"];
+                    "application/json": components["schemas"]["BranchResponse_Output"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Failed to fetch database branch */
             500: {
@@ -6645,7 +7107,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UpdateCustomHostnameResponse"];
+                    "application/json": components["schemas"]["UpdateCustomHostnameResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6750,7 +7212,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UpdateCustomHostnameResponse"];
+                    "application/json": components["schemas"]["UpdateCustomHostnameResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6800,7 +7262,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UpdateCustomHostnameResponse"];
+                    "application/json": components["schemas"]["UpdateCustomHostnameResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6850,7 +7312,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UpdateCustomHostnameResponse"];
+                    "application/json": components["schemas"]["UpdateCustomHostnameResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -6908,7 +7370,7 @@ export interface operations {
                         /** @constant */
                         state: "unavailable";
                         /** @enum {string} */
-                        unavailableReason: "postgres_upgrade_required" | "ssl_enforcement_required" | "temporarily_unavailable";
+                        unavailableReason: "platform_unsupported" | "postgres_upgrade_required" | "ssl_enforcement_required" | "temporarily_unavailable";
                     };
                 };
             };
@@ -6971,7 +7433,7 @@ export interface operations {
                         /** @constant */
                         state: "unavailable";
                         /** @enum {string} */
-                        unavailableReason: "postgres_upgrade_required" | "ssl_enforcement_required" | "temporarily_unavailable";
+                        unavailableReason: "platform_unsupported" | "postgres_upgrade_required" | "ssl_enforcement_required" | "temporarily_unavailable";
                     };
                 };
             };
@@ -7022,7 +7484,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NetworkBanResponse"];
+                    "application/json": components["schemas"]["NetworkBanResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7072,7 +7534,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NetworkBanResponseEnriched"];
+                    "application/json": components["schemas"]["NetworkBanResponseEnriched_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7174,7 +7636,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NetworkRestrictionsResponse"];
+                    "application/json": components["schemas"]["NetworkRestrictionsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7228,7 +7690,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NetworkRestrictionsV2Response"];
+                    "application/json": components["schemas"]["NetworkRestrictionsV2Response_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7282,7 +7744,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NetworkRestrictionsResponse"];
+                    "application/json": components["schemas"]["NetworkRestrictionsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7332,7 +7794,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PgsodiumConfigResponse"];
+                    "application/json": components["schemas"]["PgsodiumConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7386,7 +7848,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PgsodiumConfigResponse"];
+                    "application/json": components["schemas"]["PgsodiumConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7436,7 +7898,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PostgrestConfigWithJWTSecretResponse"];
+                    "application/json": components["schemas"]["PostgrestConfigWithJWTSecretResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7490,7 +7952,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1PostgrestConfigResponse"];
+                    "application/json": components["schemas"]["V1PostgrestConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7540,7 +8002,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ProjectWithDatabaseResponse"];
+                    "application/json": components["schemas"]["V1ProjectWithDatabaseResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7590,7 +8052,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ProjectRefResponse"];
+                    "application/json": components["schemas"]["V1ProjectRefResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7637,7 +8099,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ProjectRefResponse"];
+                    "application/json": components["schemas"]["V1ProjectRefResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7687,7 +8149,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SecretResponse"][];
+                    "application/json": components["schemas"]["SecretResponse_Output"][];
                 };
             };
             /** @description Unauthorized */
@@ -7841,7 +8303,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SslEnforcementResponse"];
+                    "application/json": components["schemas"]["SslEnforcementResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7895,7 +8357,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SslEnforcementResponse"];
+                    "application/json": components["schemas"]["SslEnforcementResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7947,7 +8409,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TypescriptResponse"];
+                    "application/json": components["schemas"]["TypescriptResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -7997,7 +8459,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VanitySubdomainConfigResponse"];
+                    "application/json": components["schemas"]["VanitySubdomainConfigResponse_Output"];
                 };
             };
             /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
@@ -8108,7 +8570,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SubdomainAvailabilityResponse"];
+                    "application/json": components["schemas"]["SubdomainAvailabilityResponse_Output"];
                 };
             };
             /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
@@ -8171,7 +8633,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ActivateVanitySubdomainResponse"];
+                    "application/json": components["schemas"]["ActivateVanitySubdomainResponse_Output"];
                 };
             };
             /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
@@ -8234,7 +8696,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectUpgradeInitiateResponse"];
+                    "application/json": components["schemas"]["ProjectUpgradeInitiateResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8284,7 +8746,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectUpgradeEligibilityResponse"];
+                    "application/json": components["schemas"]["ProjectUpgradeEligibilityResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8336,7 +8798,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DatabaseUpgradeStatusResponse"];
+                    "application/json": components["schemas"]["DatabaseUpgradeStatusResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8386,7 +8848,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReadOnlyStatusResponse"];
+                    "application/json": components["schemas"]["ReadOnlyStatusResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8601,7 +9063,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ServiceHealthResponse"][];
+                    "application/json": components["schemas"]["V1ServiceHealthResponse_Output"][];
                 };
             };
             /** @description Unauthorized */
@@ -8651,7 +9113,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SigningKeyResponse"];
+                    "application/json": components["schemas"]["SigningKeyResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8694,7 +9156,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SigningKeyResponse"];
+                    "application/json": components["schemas"]["SigningKeyResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8737,7 +9199,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SigningKeysResponse"];
+                    "application/json": components["schemas"]["SigningKeysResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8784,7 +9246,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SigningKeyResponse"];
+                    "application/json": components["schemas"]["SigningKeyResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8828,7 +9290,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SigningKeyResponse"];
+                    "application/json": components["schemas"]["SigningKeyResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8872,7 +9334,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SigningKeyResponse"];
+                    "application/json": components["schemas"]["SigningKeyResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8920,7 +9382,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SigningKeyResponse"];
+                    "application/json": components["schemas"]["SigningKeyResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -8963,7 +9425,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuthConfigResponse"];
+                    "application/json": components["schemas"]["AuthConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9017,7 +9479,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuthConfigResponse"];
+                    "application/json": components["schemas"]["AuthConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9067,7 +9529,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ThirdPartyAuth"][];
+                    "application/json": components["schemas"]["ThirdPartyAuth_Output"][];
                 };
             };
             /** @description Unauthorized */
@@ -9114,7 +9576,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ThirdPartyAuth"];
+                    "application/json": components["schemas"]["ThirdPartyAuth_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9158,7 +9620,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ThirdPartyAuth"];
+                    "application/json": components["schemas"]["ThirdPartyAuth_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9202,7 +9664,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ThirdPartyAuth"];
+                    "application/json": components["schemas"]["ThirdPartyAuth_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9327,7 +9789,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GetProjectAvailableRestoreVersionsResponse"];
+                    "application/json": components["schemas"]["GetProjectAvailableRestoreVersionsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9452,7 +9914,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ListProjectAddonsResponse"];
+                    "application/json": components["schemas"]["ListProjectAddonsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9603,7 +10065,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectClaimTokenResponse"];
+                    "application/json": components["schemas"]["ProjectClaimTokenResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9646,7 +10108,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CreateProjectClaimTokenResponse"];
+                    "application/json": components["schemas"]["CreateProjectClaimTokenResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9730,7 +10192,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ProjectAdvisorsResponse"];
+                    "application/json": components["schemas"]["V1ProjectAdvisorsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9775,7 +10237,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ProjectAdvisorsResponse"];
+                    "application/json": components["schemas"]["V1ProjectAdvisorsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9823,7 +10285,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AnalyticsResponse"];
+                    "application/json": components["schemas"]["AnalyticsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9878,7 +10340,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AnalyticsResponse"];
+                    "application/json": components["schemas"]["AnalyticsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9930,7 +10392,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1GetUsageApiCountResponse"];
+                    "application/json": components["schemas"]["V1GetUsageApiCountResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -9980,7 +10442,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1GetUsageApiRequestsCountResponse"];
+                    "application/json": components["schemas"]["V1GetUsageApiRequestsCountResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10033,7 +10495,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AnalyticsResponse"];
+                    "application/json": components["schemas"]["AnalyticsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10146,7 +10608,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CreateRoleResponse"];
+                    "application/json": components["schemas"]["CreateRoleResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10196,7 +10658,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeleteRolesResponse"];
+                    "application/json": components["schemas"]["DeleteRolesResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10246,7 +10708,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ListMigrationsResponse"];
+                    "application/json": components["schemas"]["V1ListMigrationsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10458,7 +10920,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1GetMigrationResponse"];
+                    "application/json": components["schemas"]["V1GetMigrationResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10713,7 +11175,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GetProjectDbMetadataResponse"];
+                    "application/json": components["schemas"]["GetProjectDbMetadataResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10760,7 +11222,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1UpdatePasswordResponse"];
+                    "application/json": components["schemas"]["V1UpdatePasswordResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10810,7 +11272,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JitAccessResponse"];
+                    "application/json": components["schemas"]["JitAccessResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10864,7 +11326,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JitAccessResponse"];
+                    "application/json": components["schemas"]["JitAccessResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10918,7 +11380,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JitAuthorizeAccessResponse"];
+                    "application/json": components["schemas"]["JitAuthorizeAccessResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -10968,7 +11430,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JitListAccessResponse"];
+                    "application/json": components["schemas"]["JitListAccessResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -11022,7 +11484,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InviteExternalUserJitResponse"];
+                    "application/json": components["schemas"]["InviteExternalUserJitResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -11076,7 +11538,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JitAccessResponse"];
+                    "application/json": components["schemas"]["JitAccessResponse_Output"];
                 };
             };
             /** @description Failed to accept invitation */
@@ -11256,7 +11718,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FunctionResponse"][];
+                    "application/json": components["schemas"]["FunctionResponse_Output"][];
                 };
             };
             /** @description Unauthorized */
@@ -11310,7 +11772,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BulkUpdateFunctionResponse"];
+                    "application/json": components["schemas"]["BulkUpdateFunctionResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -11380,7 +11842,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FunctionResponse"];
+                    "application/json": components["schemas"]["FunctionResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -11444,7 +11906,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeployFunctionResponse"];
+                    "application/json": components["schemas"]["DeployFunctionResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -11503,7 +11965,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FunctionSlugResponse"];
+                    "application/json": components["schemas"]["FunctionSlugResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -11618,7 +12080,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FunctionResponse"];
+                    "application/json": components["schemas"]["FunctionSlugResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -11720,7 +12182,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1StorageBucketResponse"][];
+                    "application/json": components["schemas"]["V1StorageBucketResponse_Output"][];
                 };
             };
             /** @description Unauthorized */
@@ -11770,7 +12232,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DiskResponse"];
+                    "application/json": components["schemas"]["DiskResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -11872,7 +12334,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DiskUtilMetricsResponse"];
+                    "application/json": components["schemas"]["DiskUtilMetricsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -11922,7 +12384,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DiskAutoscaleConfig"];
+                    "application/json": components["schemas"]["DiskAutoscaleConfig_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -11972,7 +12434,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StorageConfigResponse"];
+                    "application/json": components["schemas"]["StorageConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12074,7 +12536,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1PgbouncerConfigResponse"];
+                    "application/json": components["schemas"]["V1PgbouncerConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12124,7 +12586,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SupavisorConfigResponse"][];
+                    "application/json": components["schemas"]["SupavisorConfigResponse_Output"][];
                 };
             };
             /** @description Unauthorized */
@@ -12178,7 +12640,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UpdateSupavisorConfigResponse"];
+                    "application/json": components["schemas"]["UpdateSupavisorConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12228,7 +12690,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PostgresConfigResponse"];
+                    "application/json": components["schemas"]["PostgresConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12282,7 +12744,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PostgresConfigResponse"];
+                    "application/json": components["schemas"]["PostgresConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12333,7 +12795,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RealtimeConfigResponse"];
+                    "application/json": components["schemas"]["RealtimeConfigResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12470,7 +12932,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ListProvidersResponse"];
+                    "application/json": components["schemas"]["ListProvidersResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12524,7 +12986,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CreateProviderResponse"];
+                    "application/json": components["schemas"]["CreateProviderResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12575,7 +13037,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GetProviderResponse"];
+                    "application/json": components["schemas"]["GetProviderResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12630,7 +13092,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UpdateProviderResponse"];
+                    "application/json": components["schemas"]["UpdateProviderResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12681,7 +13143,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeleteProviderResponse"];
+                    "application/json": components["schemas"]["DeleteProviderResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12731,7 +13193,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1BackupsResponse"];
+                    "application/json": components["schemas"]["V1BackupsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -12970,7 +13432,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1BackupScheduleResponse"];
+                    "application/json": components["schemas"]["V1BackupScheduleResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -13040,7 +13502,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1BackupScheduleResponse"];
+                    "application/json": components["schemas"]["V1BackupScheduleResponse_Output"];
                 };
             };
             /** @description Invalid schedule_for format */
@@ -13158,7 +13620,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1ListEntitlementsResponse"];
+                    "application/json": components["schemas"]["V1ListEntitlementsResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -13201,8 +13663,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1OrganizationMemberResponse"][];
+                    "application/json": components["schemas"]["V1OrganizationMemberResponse_Output"][];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -13223,7 +13706,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["V1OrganizationSlugResponse"];
+                    "application/json": components["schemas"]["V1OrganizationSlugResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -13267,7 +13750,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrganizationProjectClaimResponse"];
+                    "application/json": components["schemas"]["OrganizationProjectClaimResponse_Output"];
                 };
             };
             /** @description Unauthorized */
@@ -13365,7 +13848,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrganizationProjectsResponse"];
+                    "application/json": components["schemas"]["OrganizationProjectsResponse_Output"];
                 };
             };
             /** @description Unauthorized */

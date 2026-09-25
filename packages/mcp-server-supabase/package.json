@@ -1,7 +1,7 @@
 {
   "name": "@supabase/mcp-server-supabase",
   "mcpName": "com.supabase/mcp",
-  "version": "0.11.0",
+  "version": "0.13.0",
   "description": "MCP server for interacting with Supabase",
   "license": "Apache-2.0",
   "repository": {
@@ -32,7 +32,7 @@
     "dist/**/*"
   ],
   "bin": {
-    "mcp-server-supabase": "./dist/transports/stdio.js"
+    "mcp-server-supabase": "./dist/cli.js"
   },
   "exports": {
     ".": {
@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@mjackson/multipart-parser": "^0.10.1",
+    "@modelcontextprotocol/node": "catalog:",
     "@supabase/mcp-utils": "workspace:^",
     "common-tags": "^1.8.2",
     "gqlmin": "^0.3.1",

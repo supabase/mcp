@@ -296,6 +296,42 @@ describe('tools', () => {
       );
     }
   });
+
+  test('tool result shaped like ordinary data with a content array is JSON-wrapped, not passed through raw', async () => {
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      tools: {
+        report: tool({
+          description:
+            'Returns business data that happens to have a content field',
+          parameters: z.object({}),
+          outputSchema: z.object({
+            title: z.string(),
+            content: z.array(z.object({ label: z.string() })),
+          }),
+          execute: async () => {
+            return {
+              title: 'Report',
+              content: [{ label: 'first' }, { label: 'second' }],
+            };
+          },
+        }),
+      },
+    });
+
+    const { callTool } = await setup({ server });
+
+    const result = await callTool({
+      name: 'report',
+      arguments: {},
+    });
+
+    expect(result).toEqual({
+      title: 'Report',
+      content: [{ label: 'first' }, { label: 'second' }],
+    });
+  });
 });
 
 describe('resources helper', () => {
