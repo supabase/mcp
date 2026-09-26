@@ -2092,7 +2092,7 @@ export interface components {
                      * @example developer
                      * @enum {string}
                      */
-                    role: "owner" | "administrator" | "developer" | "read-only";
+                    role: "owner" | "administrator" | "developer" | "read-only" | "no-access";
                     /** @description The projects to assign a project-scoped role for. If omitted, assigns an org-wide role. */
                     projects?: {
                         /**
@@ -2161,11 +2161,11 @@ export interface components {
                      */
                     email: string;
                     /**
-                     * @description Role name to assign. Must be on a Team or Enterprise plan to use the read-only role.
+                     * @description Role name to assign. Must be on an Enterprise plan to use the read-only or no-access roles. no-access grants no project visibility until project-scoped roles are assigned separately.
                      * @example developer
                      * @enum {string}
                      */
-                    role: "owner" | "administrator" | "developer" | "read-only";
+                    role: "owner" | "administrator" | "developer" | "read-only" | "no-access";
                     /**
                      * @description The projects to limit a user to. If omitted, user will have org-wide access with the provided role.
                      * @example {
