@@ -58,4 +58,20 @@ describe('matchUriTemplate', () => {
 
     expect(result).toBeUndefined();
   });
+
+  test('should not match when a URI segment is empty', () => {
+    const templates = ['my-scheme:///schemas/{schema}'];
+
+    expect(
+      matchUriTemplate('my-scheme:///schemas/', templates)
+    ).toBeUndefined();
+  });
+
+  test('should not skip literal segments after an empty segment', () => {
+    const templates = ['my-scheme:///users/{userId}/posts'];
+
+    expect(
+      matchUriTemplate('my-scheme:///users//comments', templates)
+    ).toBeUndefined();
+  });
 });
