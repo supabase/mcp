@@ -385,12 +385,16 @@ export function getDatabaseTools({
   confirmation,
 }: DatabaseOperationToolsOptions) {
   const project_id = projectId;
-  const classifySql = async (sql: string, ctx: ServerContext) =>
-    toSqlConfirmationReason(
-      await (confirmation?.classifier ?? regexClassifier)(sql, {
-        signal: ctx.mcpReq.signal,
-      })
+  const classifySql = async (sql: string, ctx: ServerContext) => {
+    const { signal } = ctx.mcpReq;
+    const classification = await (confirmation?.classifier ?? regexClassifier)(
+      sql,
+      { signal }
     );
+    // A cancelled request must not go on to run the SQL.
+    signal.throwIfAborted();
+    return toSqlConfirmationReason(classification);
+  };
 
   const databaseOperationTools = {
     list_tables: injectableTool({

@@ -238,6 +238,7 @@ test.each(tools)(
     const ctx = {
       mcpReq: {
         requestState: () => undefined,
+        signal: new AbortController().signal,
         envelope: {
           [PROTOCOL_VERSION_META_KEY]: '2026-07-28',
           [CLIENT_CAPABILITIES_META_KEY]: form,

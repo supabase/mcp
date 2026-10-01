@@ -17,6 +17,7 @@ import type {
   InputRequiredResult,
 } from '@modelcontextprotocol/client';
 import { HttpResponse, http } from 'msw';
+import { setImmediate } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const harness = createServerHarness();
@@ -2150,6 +2151,36 @@ describe('tools', () => {
         ).toHaveBeenCalledOnce();
         // Main's binding: an accepted bound resend is not classified again.
         expect(classifier).toHaveBeenCalledOnce();
+      }
+    );
+
+    test.each(SQL_TOOLS)(
+      '%s does not run the SQL when the request aborts during classification',
+      async (tool) => {
+        let entered = false;
+        let classified = false;
+        const { call, executeSql, applyMigration } = await setupWithClassifier(
+          async (_sql, { signal }) => {
+            entered = true;
+            // Executor form: the package's lib target predates withResolvers.
+            await new Promise((resolve) =>
+              signal.addEventListener('abort', resolve, { once: true })
+            );
+            classified = true;
+            return undefined;
+          }
+        );
+        const controller = new AbortController();
+
+        const request = call(tool, 'select 1', controller.signal);
+        await vi.waitFor(() => expect(entered).toBe(true));
+        controller.abort();
+        await expect(request).rejects.toThrow();
+        await vi.waitFor(() => expect(classified).toBe(true));
+        // The rest of the handler runs on microtasks, which drain first.
+        await setImmediate();
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
       }
     );
   });
