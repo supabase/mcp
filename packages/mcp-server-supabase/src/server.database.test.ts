@@ -1375,7 +1375,13 @@ describe('tools', () => {
           classify.mockImplementation(() => {
             throw new Error('classification unavailable');
           });
-          for (const action of [undefined, 'decline', 'cancel'] as const) {
+          for (const [action, expected] of [
+            // No answer keeps classification failure precedence.
+            [undefined, { isError: true }],
+            // A decline or cancel returns before classifying.
+            ['decline', { structuredContent: { status: 'declined' } }],
+            ['cancel', { structuredContent: { status: 'cancelled' } }],
+          ] as const) {
             const unaccepted = await callModernTool(client, {
               name: tool,
               arguments: args,
@@ -1386,8 +1392,7 @@ describe('tools', () => {
                 },
               }),
             });
-            // Non-acceptance retains classification failure precedence.
-            expect(unaccepted).toMatchObject({ isError: true });
+            expect(unaccepted).toMatchObject(expected);
             expect(executeSql).not.toHaveBeenCalled();
             expect(applyMigration).not.toHaveBeenCalled();
           }
@@ -2113,10 +2118,47 @@ describe('tools', () => {
         }
         const second = await resend(tool, 'select 1', first, action);
 
-        expect(classifier).toHaveBeenCalledTimes(2);
+        // A decline or cancel returns before the resend is classified.
+        expect(classifier).toHaveBeenCalledTimes(action === undefined ? 2 : 1);
         expect(executeSql).not.toHaveBeenCalled();
         expect(applyMigration).not.toHaveBeenCalled();
         expect(second).toMatchObject(expected);
+      }
+    );
+
+    test.each(
+      forEachTool([
+        ['decline', 'rejects', { structuredContent: { status: 'declined' } }],
+        ['decline', 'crashed', { structuredContent: { status: 'declined' } }],
+        ['cancel', 'rejects', { structuredContent: { status: 'cancelled' } }],
+        ['cancel', 'crashed', { structuredContent: { status: 'cancelled' } }],
+      ] as const)
+    )(
+      '%s returns a %s resend without classifying when the classifier %s',
+      async (tool, action, failure, expected) => {
+        const classifier = vi
+          .fn<SqlConfirmationClassifier>()
+          .mockResolvedValueOnce('destructive');
+        if (failure === 'rejects') {
+          classifier.mockRejectedValue(new Error('classifier worker exited'));
+        } else {
+          classifier.mockResolvedValue({ failure: 'crashed' });
+        }
+        const { call, resend, executeSql, applyMigration } =
+          await setupWithClassifier(classifier);
+
+        const first = await call(tool, 'select 1');
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected an issued SQL confirmation');
+        }
+        classifier.mockClear();
+        const second = await resend(tool, 'select 1', first, action);
+
+        expect(classifier).not.toHaveBeenCalled();
+        expect(second).toMatchObject(expected);
+        expect((second as CallToolResult).isError).not.toBe(true);
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
       }
     );
 

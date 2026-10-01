@@ -164,14 +164,18 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
       : undefined,
   });
 
+  // A decline or cancel ends the request before classifying, so a classifier
+  // failure can't hide the user's answer.
+  const classify =
+    confirmationState.kind === 'reprompt' ||
+    confirmationState.kind === 'terminal';
   // Once this server has issued a confirmation for this exact SQL, only an
   // accepted resend runs it, whatever the classifier says now.
-  const reason =
-    confirmationState.kind === 'proceed'
-      ? undefined
-      : ((await classifySql(query, ctx)) ??
-        (hasMatchingConfirmationState(options) ? 'reconfirm' : undefined));
-  if (confirmationState.kind !== 'proceed' && !reason) {
+  const reason = classify
+    ? ((await classifySql(query, ctx)) ??
+      (hasMatchingConfirmationState(options) ? 'reconfirm' : undefined))
+    : undefined;
+  if (classify && !reason) {
     record?.({
       kind: 'confirmation_decision',
       feature: 'destructive_sql',
@@ -205,7 +209,10 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
     });
     return result;
   }
-  if (confirmationState.kind === 'terminal') {
+  if (
+    confirmationState.kind === 'terminal' ||
+    confirmationState.kind === 'answered'
+  ) {
     return confirmationState.result;
   }
 }
