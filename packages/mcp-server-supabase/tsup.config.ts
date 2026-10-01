@@ -7,6 +7,7 @@ export default defineConfig([
       'src/cli.ts',
       'src/platform/index.ts',
       'src/platform/api-platform.ts',
+      'src/sql-confirmation.ts',
     ],
     format: ['cjs', 'esm'],
     outDir: 'dist',

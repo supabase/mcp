@@ -33,7 +33,12 @@ import {
   isFormCapable,
   observeOperation,
 } from './confirmation.js';
-import { isDestructiveSql } from './destructive-sql.js';
+import {
+  regexClassifier,
+  type SqlClassificationFailureKind,
+  type SqlConfirmationClassifier,
+  type SqlConfirmationReason,
+} from '../sql-confirmation.js';
 import {
   injectableTool,
   type ToolDefs,
@@ -47,16 +52,98 @@ type DatabaseOperationToolsOptions = {
   confirmation?: {
     codec: RequestStateCodec<ElicitationState>;
     enabledTools: readonly ('execute_sql' | 'apply_migration')[];
+    /** Defaults to `regexClassifier`. */
+    classifier?: SqlConfirmationClassifier;
   };
 };
+
+// Why a SQL call needs confirmation, as shown in the prompt. Adds `oversized`
+// to the classifier's reasons so SQL over the size cap gets its own wording.
+type SqlConfirmationPromptReason = SqlConfirmationReason | 'oversized';
+
+const SQL_CONFIRMATION_REASONS: Record<SqlConfirmationReason, true> = {
+  destructive: true,
+  'do-heuristic': true,
+  unclassified: true,
+};
+
+// D10: over the size cap asks for confirmation; any other failure stops the
+// call.
+const SQL_CLASSIFICATION_FAILURE_OUTCOMES: Record<
+  SqlClassificationFailureKind,
+  'confirm' | 'error'
+> = {
+  oversized: 'confirm',
+  unavailable: 'error',
+  timeout: 'error',
+  crashed: 'error',
+};
+
+function isKnownKey<T extends string>(
+  record: Record<T, unknown>,
+  value: unknown
+): value is T {
+  return typeof value === 'string' && Object.hasOwn(record, value);
+}
+
+// Maps a classifier result to the confirmation reason. The result can come
+// from another process, so it is checked at runtime: only `undefined` skips
+// confirmation, and any result outside the contract stops the call, so SQL
+// never runs unconfirmed.
+function toSqlConfirmationReason(
+  classification: unknown
+): SqlConfirmationPromptReason | undefined {
+  if (classification === undefined) return undefined;
+  if (isKnownKey(SQL_CONFIRMATION_REASONS, classification)) {
+    return classification;
+  }
+  if (
+    typeof classification === 'object' &&
+    classification !== null &&
+    !Array.isArray(classification) &&
+    Object.keys(classification).length === 1 &&
+    'failure' in classification &&
+    isKnownKey(SQL_CLASSIFICATION_FAILURE_OUTCOMES, classification.failure)
+  ) {
+    const { failure } = classification;
+    if (SQL_CLASSIFICATION_FAILURE_OUTCOMES[failure] === 'confirm') {
+      return 'oversized';
+    }
+    throw new Error(
+      `Could not check the SQL for destructive operations (classifier ${failure}).`
+    );
+  }
+  throw new Error(
+    'Could not check the SQL for destructive operations (classifier returned an invalid result).'
+  );
+}
+
+function sqlConfirmationFirstLine(reason: SqlConfirmationPromptReason) {
+  switch (reason) {
+    case 'destructive':
+      return 'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).';
+    case 'do-heuristic':
+      return 'This SQL contains a DO block whose body contains text suggesting potentially destructive operations.';
+    case 'unclassified':
+      return 'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.';
+    case 'oversized':
+      return 'Could not check for destructive operations because the SQL is too large to check. Approving will allow an attempt to execute the original SQL.';
+  }
+}
 
 async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
   query: string,
   options: ConfirmationStateOptions<S> & {
-    askForConfirmation: () => Promise<InputRequiredResult>;
+    classifySql: (
+      sql: string,
+      ctx: ServerContext
+    ) => Promise<SqlConfirmationPromptReason | undefined>;
+    askForConfirmation: (
+      reason: SqlConfirmationPromptReason
+    ) => Promise<InputRequiredResult>;
   }
 ): Promise<CallToolResult | InputRequiredResult | undefined> {
-  const { observation, askForConfirmation } = options;
+  const { ctx, observation, classifySql, askForConfirmation } = options;
   const record = observation?.record;
   // State facts and outcome count only when the inspected decision applies.
   const stagedFacts: ObservationFact[] | undefined = observation
@@ -75,7 +162,11 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
       : undefined,
   });
 
-  if (confirmationState.kind !== 'proceed' && !isDestructiveSql(query)) {
+  const reason =
+    confirmationState.kind === 'proceed'
+      ? undefined
+      : await classifySql(query, ctx);
+  if (confirmationState.kind !== 'proceed' && !reason) {
     record?.({
       kind: 'confirmation_decision',
       feature: 'destructive_sql',
@@ -99,8 +190,8 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
       record(fact);
     }
   }
-  if (confirmationState.kind === 'reprompt') {
-    const result = await askForConfirmation();
+  if (confirmationState.kind === 'reprompt' && reason) {
+    const result = await askForConfirmation(reason);
     record?.({
       kind: 'input_required',
       feature: 'destructive_sql',
@@ -289,6 +380,12 @@ export function getDatabaseTools({
   confirmation,
 }: DatabaseOperationToolsOptions) {
   const project_id = projectId;
+  const classifySql = async (sql: string, ctx: ServerContext) =>
+    toSqlConfirmationReason(
+      await (confirmation?.classifier ?? regexClassifier)(sql, {
+        signal: ctx.mcpReq.signal,
+      })
+    );
 
   const databaseOperationTools = {
     list_tables: injectableTool({
@@ -495,13 +592,15 @@ export function getDatabaseTools({
             ctx.mcpReq.requestState() === undefined
               ? undefined
               : await hashObject({ query });
-          const askForConfirmation = async () =>
+          const askForConfirmation = async (
+            reason: SqlConfirmationPromptReason
+          ) =>
             inputRequired({
               inputRequests: {
                 confirm_destructive: inputRequired.elicit({
                   mode: 'form',
                   message: [
-                    'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
+                    sqlConfirmationFirstLine(reason),
                     'It may permanently remove data, tables, schemas or other objects.',
                     `Apply the migration to project ${project_id}?`,
                   ].join('\n'),
@@ -532,6 +631,7 @@ export function getDatabaseTools({
               state.queryHash === queryHash,
             declinedText: 'Migration was declined.',
             observation,
+            classifySql,
             askForConfirmation,
           });
 
@@ -585,13 +685,15 @@ export function getDatabaseTools({
             ctx.mcpReq.requestState() === undefined
               ? undefined
               : await hashObject({ query });
-          const askForConfirmation = async () =>
+          const askForConfirmation = async (
+            reason: SqlConfirmationPromptReason
+          ) =>
             inputRequired({
               inputRequests: {
                 confirm_destructive: inputRequired.elicit({
                   mode: 'form',
                   message: [
-                    'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
+                    sqlConfirmationFirstLine(reason),
                     'It may permanently remove data, tables, schemas or other objects.',
                     `Run it on project ${project_id}?`,
                   ].join('\n'),
@@ -619,6 +721,7 @@ export function getDatabaseTools({
               state.project_id === project_id && state.queryHash === queryHash,
             declinedText: 'SQL execution was declined.',
             observation,
+            classifySql,
             askForConfirmation,
           });
 

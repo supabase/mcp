@@ -21,6 +21,7 @@ import { APPS_EXTENSIONS, appsEnabled } from './apps/index.js';
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getResources } from './resources/index.js';
+import type { SqlConfirmationClassifier } from './sql-confirmation.js';
 import { getAccountTools } from './tools/account-tools.js';
 import { getBranchingTools } from './tools/branching-tools.js';
 import {
@@ -137,6 +138,18 @@ export type SupabaseMcpServerOptions = {
       enabledTools: readonly ElicitationToolName[];
       /** How long a confirmation `requestState` stays valid, in seconds. Defaults to 600. */
       ttlSeconds?: number;
+      /**
+       * Classifies `execute_sql` and `apply_migration` SQL for destructive
+       * SQL confirmation. Defaults to `regexClassifier`. Swap in another
+       * classifier, for example `withFallback(parser, regexClassifier)` so a
+       * parser that cannot load falls back to the regex.
+       *
+       * Only `undefined` skips confirmation. `oversized` asks for
+       * confirmation; `unavailable`, `timeout`, `crashed`, a rejection, or any
+       * result outside `SqlConfirmationClassification` fails the tool call
+       * without running the SQL. See `SqlConfirmationClassifier`.
+       */
+      classifier?: SqlConfirmationClassifier;
     };
     /**
      * URL-mode secret collection for `create_edge_function_secret`. Requires
@@ -359,6 +372,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
                       (tool): tool is 'execute_sql' | 'apply_migration' =>
                         tool === 'execute_sql' || tool === 'apply_migration'
                     ),
+                    classifier: elicitation?.confirmation?.classifier,
                   }
                 : undefined,
           })
