@@ -333,6 +333,20 @@ export async function checkConfirmationState<S extends ConfirmationState>(
   return { kind: 'reprompt', result };
 }
 
+/**
+ * Whether the request carries SDK-verified state that was issued for `tool`
+ * and the current arguments, whatever the input response says.
+ */
+export function hasMatchingConfirmationState<S extends ConfirmationState>({
+  ctx,
+  tool,
+  schema,
+  argsMatch,
+}: Pick<ConfirmationStateOptions<S>, 'ctx' | 'tool' | 'schema' | 'argsMatch'>) {
+  const parsed = schema.safeParse(ctx.mcpReq.requestState<unknown>());
+  return parsed.success && parsed.data.tool === tool && argsMatch(parsed.data);
+}
+
 /** Inspect SDK-verified state without issuing a new confirmation. */
 export function inspectConfirmationState<S extends ConfirmationState>(
   options: ConfirmationStateOptions<S>

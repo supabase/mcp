@@ -190,7 +190,7 @@ describe.each(tools)('%s SQL observations', (name) => {
     { action: 'cancel', fails: false },
     { action: 'decline', fails: true },
   ] as const)(
-    'discards staged $action when classification changes (fails=$fails)',
+    'does not run SQL for staged $action when classification changes (fails=$fails)',
     async ({ action, fails }) => {
       const h = await setup();
       const first = issued(await h.call(name));
@@ -206,21 +206,16 @@ describe.each(tools)('%s SQL observations', (name) => {
         expect((result as CallToolResult).isError).toBe(true);
         expect(JSON.stringify(result)).toContain('PRIVATE_CLASSIFIER_ERROR');
         assertAttempt(h.attempts[1], name, [], 'tool_error');
-        expect(h.operation(name)).not.toHaveBeenCalled();
       } else {
         expect((result as CallToolResult).isError).not.toBe(true);
         assertAttempt(
           h.attempts[1],
           name,
-          [
-            decision('bypass', 'not_destructive'),
-            started,
-            finished('returned'),
-          ],
-          'completed'
+          [decision('inline', 'eligible'), response(action)],
+          action === 'decline' ? 'declined' : 'cancelled'
         );
-        expect(h.operation(name)).toHaveBeenCalledOnce();
       }
+      expect(h.operation(name)).not.toHaveBeenCalled();
     }
   );
 });

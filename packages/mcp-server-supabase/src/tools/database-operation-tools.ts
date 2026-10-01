@@ -27,6 +27,7 @@ import {
   applyMigrationStateSchema,
   type ConfirmationStateOptions,
   type DestructiveSqlState,
+  hasMatchingConfirmationState,
   inspectConfirmationState,
   type ElicitationState,
   executeSqlStateSchema,
@@ -59,8 +60,13 @@ type DatabaseOperationToolsOptions = {
 };
 
 // Why a SQL call needs confirmation, as shown in the prompt. Adds `oversized`
-// to the classifier's reasons so SQL over the size cap gets its own wording.
-type SqlConfirmationPromptReason = SqlConfirmationReason | 'oversized';
+// to the classifier's reasons so SQL over the size cap gets its own wording,
+// and `reconfirm` for a resend of a confirmation this server already issued
+// that the classifier no longer flags.
+type SqlConfirmationPromptReason =
+  | SqlConfirmationReason
+  | 'oversized'
+  | 'reconfirm';
 
 const SQL_CONFIRMATION_REASONS: Record<SqlConfirmationReason, true> = {
   destructive: true,
@@ -122,6 +128,8 @@ function sqlConfirmationFirstLine(reason: SqlConfirmationPromptReason) {
       return 'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.';
     case 'oversized':
       return 'Could not check for destructive operations because the SQL is too large to check. Approving will allow an attempt to execute the original SQL.';
+    case 'reconfirm':
+      return 'This SQL was flagged for confirmation earlier and still needs your approval.';
   }
 }
 
@@ -156,10 +164,13 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
       : undefined,
   });
 
+  // Once this server has issued a confirmation for this exact SQL, only an
+  // accepted resend runs it, whatever the classifier says now.
   const reason =
     confirmationState.kind === 'proceed'
       ? undefined
-      : await classifySql(query, ctx);
+      : ((await classifySql(query, ctx)) ??
+        (hasMatchingConfirmationState(options) ? 'reconfirm' : undefined));
   if (confirmationState.kind !== 'proceed' && !reason) {
     record?.({
       kind: 'confirmation_decision',

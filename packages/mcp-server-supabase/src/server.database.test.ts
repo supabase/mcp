@@ -1836,7 +1836,28 @@ describe('tools', () => {
           },
           { allowInputRequired: true, signal }
         ) as Promise<CallToolResult | InputRequiredResult>;
-      return { call, executeSql, applyMigration };
+      const resend = (
+        tool: SqlTool,
+        query: string,
+        first: InputRequiredResult,
+        action?: 'accept' | 'decline' | 'cancel'
+      ) =>
+        callModernTool(client, {
+          name: tool,
+          arguments: {
+            project_id: 'test-project',
+            query,
+            ...(tool === 'apply_migration' && { name: 'classified' }),
+          },
+          requestState: first.requestState,
+          ...(action && {
+            inputResponses: {
+              confirm_destructive:
+                action === 'accept' ? { action, content: {} } : { action },
+            },
+          }),
+        }) as Promise<CallToolResult | InputRequiredResult>;
+      return { call, resend, executeSql, applyMigration };
     }
 
     const forEachTool = <T extends readonly unknown[]>(cases: readonly T[]) =>
@@ -2050,6 +2071,51 @@ describe('tools', () => {
         await vi.waitFor(() => expect(classifierSignal?.aborted).toBe(true));
         expect(executeSql).not.toHaveBeenCalled();
         expect(applyMigration).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each(
+      forEachTool([
+        [
+          'no answer',
+          undefined,
+          {
+            inputRequests: {
+              confirm_destructive: {
+                params: {
+                  message: expect.stringContaining(
+                    'This SQL was flagged for confirmation earlier and still needs your approval.\n'
+                  ),
+                },
+              },
+            },
+          },
+        ],
+        ['decline', 'decline', { structuredContent: { status: 'declined' } }],
+        ['cancel', 'cancel', { structuredContent: { status: 'cancelled' } }],
+      ] as const)
+    )(
+      '%s keeps asking on a %s resend when the classifier no longer flags the SQL',
+      async (tool, _label, action, expected) => {
+        // For example the AST flags it, then on the resend the pool sheds and
+        // the regex fallback finds nothing.
+        const classifier = vi
+          .fn<SqlConfirmationClassifier>()
+          .mockResolvedValueOnce('destructive')
+          .mockResolvedValue(undefined);
+        const { call, resend, executeSql, applyMigration } =
+          await setupWithClassifier(classifier);
+
+        const first = await call(tool, 'select 1');
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected an issued SQL confirmation');
+        }
+        const second = await resend(tool, 'select 1', first, action);
+
+        expect(classifier).toHaveBeenCalledTimes(2);
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+        expect(second).toMatchObject(expected);
       }
     );
   });
