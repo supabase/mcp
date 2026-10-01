@@ -2118,5 +2118,39 @@ describe('tools', () => {
         expect(second).toMatchObject(expected);
       }
     );
+
+    test.each(
+      forEachTool([
+        ['destructive'],
+        ['do-heuristic'],
+        ['unclassified'],
+        [{ failure: 'oversized' }],
+      ] as const)
+    )(
+      '%s runs once on an accepted bound resend after a %j prompt',
+      async (tool, classification) => {
+        const classifier = vi.fn<SqlConfirmationClassifier>(
+          async () => classification
+        );
+        const { call, resend, executeSql, applyMigration } =
+          await setupWithClassifier(classifier);
+
+        const first = await call(tool, 'select 1');
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected an issued SQL confirmation');
+        }
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+
+        const accepted = await resend(tool, 'select 1', first, 'accept');
+        expect(isInputRequiredResult(accepted)).toBe(false);
+        expect((accepted as CallToolResult).isError).not.toBe(true);
+        expect(
+          tool === 'execute_sql' ? executeSql : applyMigration
+        ).toHaveBeenCalledOnce();
+        // Main's binding: an accepted bound resend is not classified again.
+        expect(classifier).toHaveBeenCalledOnce();
+      }
+    );
   });
 });
