@@ -24,7 +24,9 @@ export type SqlConfirmationReason =
  * - `oversized`: the SQL is over the classifier's size cap. The tool asks for
  *   confirmation and says the SQL was too large to check.
  * - `unavailable`, `timeout`, `crashed`: the classifier could not answer.
- *   The tool call fails with an error and the SQL does not run.
+ *   The tool call fails with an error and the SQL does not run. `unavailable`
+ *   covers both a classifier that cannot load and a pool that sheds the
+ *   request, so `withFallback` falls back on both.
  */
 export type SqlClassificationFailureKind =
   | 'oversized'
@@ -35,6 +37,35 @@ export type SqlClassificationFailureKind =
 export type SqlClassificationFailure = {
   failure: SqlClassificationFailureKind;
 };
+
+const SQL_CLASSIFICATION_FAILURE_KINDS: Record<
+  SqlClassificationFailureKind,
+  true
+> = {
+  oversized: true,
+  unavailable: true,
+  timeout: true,
+  crashed: true,
+};
+
+/**
+ * Whether `value` is exactly a `SqlClassificationFailure`: a plain object
+ * whose only own key is `failure`, with a known kind.
+ */
+export function isSqlClassificationFailure(
+  value: unknown
+): value is SqlClassificationFailure {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    Object.hasOwn(value, 'failure') &&
+    'failure' in value &&
+    typeof value.failure === 'string' &&
+    Object.hasOwn(SQL_CLASSIFICATION_FAILURE_KINDS, value.failure)
+  );
+}
 
 /**
  * `undefined` means the SQL needs no confirmation.
@@ -76,6 +107,10 @@ export interface SqlConfirmationClassifier {
  * Throw this from a classifier that cannot load or run (for example a parser
  * whose WASM module failed to load), so `withFallback` uses its fallback.
  * Without `withFallback` it fails the tool call like any other rejection.
+ *
+ * `withFallback` matches it by `name`, so it does not survive structured
+ * cloning or IPC. A classifier in another process should resolve with
+ * `{ failure: 'unavailable' }` instead.
  */
 export class SqlClassifierUnavailableError extends Error {
   constructor(message?: string, options?: ErrorOptions) {
@@ -94,11 +129,17 @@ export const regexClassifier: SqlConfirmationClassifier = async (sql) =>
 /**
  * Uses `fallback` when `primary` cannot answer: when `primary` resolves with a
  * failure whose kind is in `on` (default `['unavailable']`), or rejects with a
- * `SqlClassifierUnavailableError`. Any other result, including other failure
- * kinds, passes through, and any other rejection propagates. Both receive the
- * same `signal`.
+ * `SqlClassifierUnavailableError`. Any other valid result, including other
+ * failure kinds, passes through, and any other rejection propagates. An
+ * object that is not exactly a `SqlClassificationFailure` rejects, without
+ * the fallback. Both receive the same `signal`.
  *
  * The fallback's result is final, so a fallback failure still fails closed.
+ *
+ * `unavailable` also covers a worker pool that sheds load, so a pool wrapped
+ * here answers with the fallback under load instead of failing the call.
+ * Adding `timeout` or `crashed` to `on` goes further: those fail the call by
+ * default, and with them in `on` the fallback answers instead.
  */
 export function withFallback(
   primary: SqlConfirmationClassifier,
@@ -122,12 +163,15 @@ export function withFallback(
       }
       return await fallback(sql, options);
     }
-    if (
-      typeof classification === 'object' &&
-      classification !== null &&
-      on.includes(classification.failure)
-    ) {
-      return await fallback(sql, options);
+    if (typeof classification === 'object' && classification !== null) {
+      if (!isSqlClassificationFailure(classification)) {
+        throw new Error(
+          'Could not check the SQL for destructive operations (classifier returned an invalid result).'
+        );
+      }
+      if (on.includes(classification.failure)) {
+        return await fallback(sql, options);
+      }
     }
     return classification;
   };

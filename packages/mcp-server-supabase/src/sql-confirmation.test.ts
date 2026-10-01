@@ -149,4 +149,28 @@ describe('withFallback', () => {
 
     await expect(classify('select 1', options())).rejects.toBe(error);
   });
+
+  test.each([
+    ['an unknown kind', { failure: 'exploded' }],
+    ['extra keys', { failure: 'unavailable', reason: 'shed' }],
+    [
+      'an inherited failure',
+      Object.assign(Object.create({ failure: 'unavailable' }), { kind: 'x' }),
+    ],
+    ['no failure', {}],
+    ['an array', ['unavailable']],
+    ['a non-string kind', { failure: 1 }],
+  ])(
+    'rejects a primary result with %s without the fallback',
+    async (_label, value) => {
+      // A result that broke the type contract, for example over IPC.
+      const primary = (async () => value) as unknown as SqlConfirmationClassifier;
+      const fallback = classifierReturning(undefined);
+
+      await expect(
+        withFallback(primary, fallback)('select 1', options())
+      ).rejects.toThrow('classifier returned an invalid result');
+      expect(fallback).not.toHaveBeenCalled();
+    }
+  );
 });
