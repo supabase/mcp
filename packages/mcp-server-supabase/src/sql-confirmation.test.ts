@@ -164,7 +164,8 @@ describe('withFallback', () => {
     'rejects a primary result with %s without the fallback',
     async (_label, value) => {
       // A result that broke the type contract, for example over IPC.
-      const primary = (async () => value) as unknown as SqlConfirmationClassifier;
+      const primary = (async () =>
+        value) as unknown as SqlConfirmationClassifier;
       const fallback = classifierReturning(undefined);
 
       await expect(
