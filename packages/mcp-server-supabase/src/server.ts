@@ -1,6 +1,7 @@
 import { createRequestStateCodec } from '@modelcontextprotocol/server';
 import {
   createMcpServer,
+  type RequestObserver,
   type Tool,
   type ToolCallCallback,
 } from '@supabase/mcp-utils';
@@ -65,6 +66,14 @@ export type SupabaseMcpServerOptions = {
    * Callback for after a supabase tool is called.
    */
   onToolCall?: ToolCallCallback;
+
+  /**
+   * Optional observer invoked once per general MCP handler entry
+   * (`tools/call`, `tools/list`, `resources/list`,
+   * `resources/templates/list`, `resources/read`) and forwarded unchanged
+   * to the underlying `@supabase/mcp-utils` server.
+   */
+  observer?: RequestObserver;
 
   /**
    * Signed multi-round-trip elicitation config. `requestState` is the shared
@@ -147,6 +156,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     features,
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
     onToolCall,
+    observer,
     elicitation,
   } = options;
 
@@ -204,6 +214,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       ]);
     },
     onToolCall,
+    observer,
     requestState: elicitationCodec && {
       verify: elicitationCodec.verify,
     },

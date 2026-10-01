@@ -121,6 +121,7 @@ Start in the existing test file closest to the behavior. Keep pure-helper tests 
 | `src/server.functions.test.ts` | Edge functions and URL-mode secret collection |
 | `src/server.branching.test.ts` | Branch creation/lifecycle, listing, merge, reset, rebase and branch cost confirmation |
 | `src/server.storage.test.ts` | Storage buckets and configuration |
+| `src/observation-*.test.ts` | Observer lifecycle and bounded cost facts across tools, including isolation, replay, and privacy; feature-specific confirmation behavior stays in the account/branching suites |
 
 Keep project and branch cost-confirmation flows with their respective feature groups, including legacy fallback, modern elicitation, approval, token, retry and tamper cases. General server contracts, feature-surface checks and docs stay in core. HTTP transport behavior belongs in `src/transports/http.test.ts`. Keep integration/e2e tests in their existing locations and projects.
 

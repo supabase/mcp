@@ -1,3 +1,4 @@
+import type { ObservedTool } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
 
 export const CURRENT_ELICITATION_TOOLS = [
@@ -5,7 +6,7 @@ export const CURRENT_ELICITATION_TOOLS = [
   'create_branch',
   'execute_sql',
   'apply_migration',
-] as const;
+] as const satisfies readonly ObservedTool[];
 
 export type ElicitationToolName = (typeof CURRENT_ELICITATION_TOOLS)[number];
 
