@@ -1877,8 +1877,10 @@ describe('tools', () => {
       }
     );
 
+    // The `withFallback(parser, regexClassifier)` recipe from the `classifier`
+    // option docs in server.ts, end to end at the option.
     test.each(SQL_TOOLS)(
-      '%s falls back to the regex when the primary is unavailable',
+      '%s runs the documented withFallback(parser, regexClassifier) recipe when the parser is unavailable',
       async (tool) => {
         const { call, executeSql, applyMigration } = await setupWithClassifier(
           withFallback(
