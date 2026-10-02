@@ -305,6 +305,29 @@ export const mockManagementApi = [
   ),
 
   /**
+   * Generate TypeScript types for a project
+   */
+  http.get<{ projectId: string }>(
+    `${API_URL}/v1/projects/:projectId/types/typescript`,
+    ({ params, request }) => {
+      const project = mockProjects.get(params.projectId);
+      if (!project) {
+        return HttpResponse.json(
+          { message: 'Project not found' },
+          { status: 404 }
+        );
+      }
+      const url = new URL(request.url);
+      const includedSchemas = url.searchParams.get('included_schemas');
+      return HttpResponse.json({
+        types: includedSchemas
+          ? `export type Database = { /* schemas: ${includedSchemas} */ };`
+          : 'export type Database = { /* all schemas */ };',
+      });
+    }
+  ),
+
+  /**
    * Execute a SQL query on a project's database
    */
   http.post<
