@@ -10,7 +10,7 @@ import {
   actionOnlyElicitationSchema,
   checkConfirmationState,
   isFormCapable,
-  observeCostOperation,
+  observeOperation,
   projectCostStateSchema,
   type ElicitationState,
 } from './confirmation.js';
@@ -333,7 +333,7 @@ export function getAccountTools({
               route: 'bypass',
               reason: 'zero_cost',
             });
-            return await observeCostOperation(record, () =>
+            return await observeOperation('cost', record, () =>
               account.createProject({ name, region, organization_id })
             );
           }
@@ -373,7 +373,7 @@ export function getAccountTools({
             schema: projectCostStateSchema,
             requestKey: 'confirm_cost',
             askForConfirmation,
-            recordCost: record,
+            record,
             argsMatch: (state) =>
               state.name === name &&
               state.region === region &&
@@ -391,7 +391,7 @@ export function getAccountTools({
             case 'terminal':
               return confirmationState.result;
             case 'proceed':
-              return await observeCostOperation(record, () =>
+              return await observeOperation('cost', record, () =>
                 account.createProject({
                   name: confirmationState.state.name,
                   region: confirmationState.state.region,
@@ -415,7 +415,7 @@ export function getAccountTools({
           );
         }
 
-        return await observeCostOperation(record, () =>
+        return await observeOperation('cost', record, () =>
           account.createProject({ name, region, organization_id })
         );
       },

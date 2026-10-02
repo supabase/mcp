@@ -3,6 +3,7 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
+import type { ObservationFact } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
 import {
   advisorySchema,
@@ -24,6 +25,7 @@ import {
   type ElicitationState,
   executeSqlStateSchema,
   isFormCapable,
+  observeOperation,
 } from './confirmation.js';
 import { isDestructiveSql } from './destructive-sql.js';
 import {
@@ -388,15 +390,36 @@ export function getDatabaseTools({
     apply_migration: injectableTool({
       ...databaseToolDefs.apply_migration,
       inject: { project_id },
-      execute: async ({ project_id, name, query }, ctx: ServerContext) => {
+      execute: async (
+        { project_id, name, query },
+        ctx: ServerContext,
+        record?: (fact: ObservationFact) => void
+      ) => {
         if (readOnly) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'blocked',
+            reason: 'read_only',
+          });
           throw new Error('Cannot apply migration in read-only mode.');
         }
 
-        if (
-          confirmation?.enabledTools.includes('apply_migration') &&
-          isFormCapable(ctx)
-        ) {
+        if (!confirmation?.enabledTools.includes('apply_migration')) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'bypass',
+            reason: 'not_configured',
+          });
+        } else if (!isFormCapable(ctx)) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'bypass',
+            reason: 'capability_missing',
+          });
+        } else {
           const { codec } = confirmation;
           const queryHash =
             ctx.mcpReq.requestState() === undefined
@@ -426,6 +449,10 @@ export function getDatabaseTools({
               ),
             });
 
+          // State facts count only when the tool honors the inspected decision.
+          const stagedFacts: ObservationFact[] | undefined = record
+            ? []
+            : undefined;
           const confirmationState = inspectConfirmationState({
             ctx,
             tool: 'apply_migration',
@@ -437,16 +464,51 @@ export function getDatabaseTools({
               state.queryHash === queryHash,
             declinedText: 'Migration was declined.',
             cancelledText: 'Migration was cancelled.',
+            record: stagedFacts ? (fact) => stagedFacts.push(fact) : undefined,
           });
 
-          if (confirmationState.kind !== 'proceed' && isDestructiveSql(query)) {
-            return confirmationState.kind === 'reprompt'
-              ? await askForConfirmation()
-              : confirmationState.result;
+          if (confirmationState.kind === 'proceed' || isDestructiveSql(query)) {
+            record?.({
+              kind: 'confirmation_decision',
+              feature: 'destructive_sql',
+              route: 'inline',
+              reason: 'eligible',
+            });
+            if (record && stagedFacts) {
+              for (const fact of stagedFacts) {
+                record(fact);
+              }
+            }
+            if (confirmationState.kind === 'reprompt') {
+              const result = await askForConfirmation();
+              record?.({
+                kind: 'input_required',
+                feature: 'destructive_sql',
+                mode: 'form',
+                reason: confirmationState.reason,
+              });
+              return result;
+            }
+            if (confirmationState.kind === 'terminal') {
+              return confirmationState.result;
+            }
+          } else {
+            record?.({
+              kind: 'confirmation_decision',
+              feature: 'destructive_sql',
+              route: 'bypass',
+              reason: 'not_destructive',
+            });
           }
         }
 
-        await database.applyMigration(project_id, { name, query });
+        if (record) {
+          await observeOperation('destructive_sql', record, () =>
+            database.applyMigration(project_id, { name, query })
+          );
+        } else {
+          await database.applyMigration(project_id, { name, query });
+        }
         return { success: true };
       },
     }),
@@ -457,12 +519,33 @@ export function getDatabaseTools({
         readOnlyHint: readOnly ?? false,
       },
       inject: { project_id },
-      execute: async ({ query, project_id }, ctx: ServerContext) => {
-        if (
-          !readOnly &&
-          confirmation?.enabledTools.includes('execute_sql') &&
-          isFormCapable(ctx)
-        ) {
+      execute: async (
+        { query, project_id },
+        ctx: ServerContext,
+        record?: (fact: ObservationFact) => void
+      ) => {
+        if (readOnly) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'bypass',
+            reason: 'read_only',
+          });
+        } else if (!confirmation?.enabledTools.includes('execute_sql')) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'bypass',
+            reason: 'not_configured',
+          });
+        } else if (!isFormCapable(ctx)) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'bypass',
+            reason: 'capability_missing',
+          });
+        } else {
           const { codec } = confirmation;
           const queryHash =
             ctx.mcpReq.requestState() === undefined
@@ -491,6 +574,10 @@ export function getDatabaseTools({
               ),
             });
 
+          // State facts count only when the tool honors the inspected decision.
+          const stagedFacts: ObservationFact[] | undefined = record
+            ? []
+            : undefined;
           const confirmationState = inspectConfirmationState({
             ctx,
             tool: 'execute_sql',
@@ -500,19 +587,55 @@ export function getDatabaseTools({
               state.project_id === project_id && state.queryHash === queryHash,
             declinedText: 'SQL execution was declined.',
             cancelledText: 'SQL execution was cancelled.',
+            record: stagedFacts ? (fact) => stagedFacts.push(fact) : undefined,
           });
 
-          if (confirmationState.kind !== 'proceed' && isDestructiveSql(query)) {
-            return confirmationState.kind === 'reprompt'
-              ? await askForConfirmation()
-              : confirmationState.result;
+          if (confirmationState.kind === 'proceed' || isDestructiveSql(query)) {
+            record?.({
+              kind: 'confirmation_decision',
+              feature: 'destructive_sql',
+              route: 'inline',
+              reason: 'eligible',
+            });
+            if (record && stagedFacts) {
+              for (const fact of stagedFacts) {
+                record(fact);
+              }
+            }
+            if (confirmationState.kind === 'reprompt') {
+              const result = await askForConfirmation();
+              record?.({
+                kind: 'input_required',
+                feature: 'destructive_sql',
+                mode: 'form',
+                reason: confirmationState.reason,
+              });
+              return result;
+            }
+            if (confirmationState.kind === 'terminal') {
+              return confirmationState.result;
+            }
+          } else {
+            record?.({
+              kind: 'confirmation_decision',
+              feature: 'destructive_sql',
+              route: 'bypass',
+              reason: 'not_destructive',
+            });
           }
         }
 
-        const result = await database.executeSql(project_id, {
-          query,
-          read_only: readOnly,
-        });
+        const result = record
+          ? await observeOperation('destructive_sql', record, () =>
+              database.executeSql(project_id, {
+                query,
+                read_only: readOnly,
+              })
+            )
+          : await database.executeSql(project_id, {
+              query,
+              read_only: readOnly,
+            });
 
         return {
           result: wrapWithUntrustedDataBoundary(result),

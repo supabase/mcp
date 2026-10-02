@@ -1,5 +1,5 @@
 /**
- * Payload-free observations for MCP handler attempts and shipped cost confirmation.
+ * Payload-free observations for MCP handler attempts and cost and SQL confirmation.
  * These types do not describe transport delivery, consent, or backend commit.
  * The Supabase server's vocabulary is intentionally hosted in mcp-utils.
  */
@@ -24,7 +24,7 @@ export type ObservationContext = Readonly<{
   tool: ObservedTool;
 }>;
 
-export type ConfirmationFeature = 'cost';
+export type ConfirmationFeature = 'cost' | 'destructive_sql';
 
 export type ObservationFact =
   | Readonly<{
@@ -36,6 +36,7 @@ export type ObservationFact =
         | 'not_configured'
         | 'capability_missing'
         | 'read_only'
+        | 'not_destructive'
         | 'zero_cost';
     }>
   | Readonly<{

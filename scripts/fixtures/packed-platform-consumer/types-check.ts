@@ -146,6 +146,30 @@ type ExactSupabaseContract = Assert<Equal<SupabaseContract, UtilsContract>>;
 type ExactSupabaseOption = Assert<
   Equal<SupabaseMcpServerOptions['observer'], Utils.RequestObserver | undefined>
 >;
+
+const sqlFeature: Supabase.ConfirmationFeature = 'destructive_sql';
+const sqlFacts = [
+  {
+    kind: 'confirmation_decision',
+    feature: sqlFeature,
+    route: 'bypass',
+    reason: 'not_destructive',
+  },
+  { kind: 'operation', feature: sqlFeature, disposition: 'started' },
+  {
+    kind: 'operation',
+    feature: sqlFeature,
+    disposition: 'returned',
+    durationMs: 1,
+  },
+  {
+    kind: 'operation',
+    feature: sqlFeature,
+    disposition: 'threw',
+    durationMs: 2,
+  },
+] satisfies Utils.ObservationFact[];
+void sqlFacts;
 const observedSupabaseOptions: SupabaseMcpServerOptions = {
   ...options,
   observer,
