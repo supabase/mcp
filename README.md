@@ -155,6 +155,7 @@ The PostgREST MCP server allows you to connect your own users to your app via RE
 
 - [**Model Context Protocol**](https://modelcontextprotocol.io/introduction): Learn more about MCP and its capabilities.
 - [**From development to production**](/docs/production.md): Learn how to safely promote changes to production environments.
+- [**Observability**](/docs/observability.md): Learn about the observer API and its privacy and lifecycle contract.
 
 ## For developers
 
