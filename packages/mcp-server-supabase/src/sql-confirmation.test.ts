@@ -127,14 +127,14 @@ describe('withFallback', () => {
     expect(fallback).not.toHaveBeenCalled();
   });
 
-  test('fails closed with the fallback failure when the fallback also fails', async () => {
+  test("returns the fallback's failure as final", async () => {
     const classify = withFallback(
       classifierReturning({ failure: 'unavailable' }),
-      classifierReturning({ failure: 'unavailable' })
+      classifierReturning({ failure: 'timeout' })
     );
 
     expect(await classify('select 1', options())).toEqual({
-      failure: 'unavailable',
+      failure: 'timeout',
     });
   });
 
