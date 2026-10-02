@@ -289,6 +289,20 @@ export type McpServerOptions = {
   requestState?: {
     verify?: (state: string, ctx: ServerContext) => unknown | Promise<unknown>;
   };
+
+  /**
+   * Freshness hint for `tools/list` results, in milliseconds (a non-negative
+   * integer).
+   *
+   * Stamped as `ttlMs` on responses to requests negotiated at protocol
+   * revision 2026-07-28, always alongside `cacheScope: 'private'`: a tool
+   * list can vary by caller (credentials, configuration), so a shared
+   * intermediary must never serve one caller's list to another. The SDK
+   * applies the hint at its era-aware encode step, so responses to
+   * 2025-11-25 requests, whose `ListToolsResult` has no such fields, are
+   * unchanged.
+   */
+  toolsListTtlMs?: number;
 };
 
 /**
@@ -318,6 +332,15 @@ export function createMcpServer(options: McpServerOptions) {
       capabilities,
       instructions: options.instructions,
       requestState: options.requestState,
+      cacheHints:
+        options.toolsListTtlMs === undefined
+          ? undefined
+          : {
+              'tools/list': {
+                ttlMs: options.toolsListTtlMs,
+                cacheScope: 'private',
+              },
+            },
     }
   );
 

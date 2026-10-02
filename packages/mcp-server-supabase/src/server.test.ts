@@ -1,3 +1,4 @@
+import type { JSONRPCMessage } from '@modelcontextprotocol/client';
 import {
   contentApiMockSchema,
   createOrganization,
@@ -745,9 +746,40 @@ describe('docs tools', () => {
     });
     expect(mockContentApiSchemaLoadCount.value).toBe(1);
 
-    // Additional "tools/list" requests fetch the schema again
+    // Additional "tools/list" requests within the TTL are served from the cache
     await client.listTools();
-    expect(mockContentApiSchemaLoadCount.value).toBe(2);
+    expect(mockContentApiSchemaLoadCount.value).toBe(1);
+  });
+
+  test('schema is fetched once across independently created servers', async () => {
+    expect(mockContentApiSchemaLoadCount.value).toBe(0);
+
+    for (let i = 0; i < 3; i++) {
+      const { client } = await setup();
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name)).toContain('search_docs');
+    }
+
+    expect(mockContentApiSchemaLoadCount.value).toBe(1);
+  });
+
+  test('2025-11-25 tools/list responses carry no cache hints', async () => {
+    const sent: JSONRPCMessage[] = [];
+    const { client } = await setup({
+      versionNegotiation: { mode: 'legacy' },
+      onServerMessage: (message) => sent.push(message),
+    });
+
+    await client.listTools();
+
+    const response = sent.find(
+      (message) => 'result' in message && 'tools' in (message.result ?? {})
+    );
+    if (!response || !('result' in response)) {
+      throw new Error('tools/list response not found');
+    }
+    expect(response.result).not.toHaveProperty('ttlMs');
+    expect(response.result).not.toHaveProperty('cacheScope');
   });
 });
 
