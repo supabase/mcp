@@ -3,7 +3,8 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { type ObservationFact, tool } from '@supabase/mcp-utils';
+import { type ToolObservation, tool } from '@supabase/mcp-utils';
+import type { ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
 import {
@@ -310,10 +311,10 @@ export function getAccountTools({
           confirm_cost_id,
         }: z.infer<typeof createProjectInputSchemaWithElicitation>,
         ctx: ServerContext,
-        record?: (fact: ObservationFact) => void
+        observation?: ToolObservation<ObservationFact>
       ) => {
         if (readOnly) {
-          record?.({
+          observation?.record({
             kind: 'confirmation_decision',
             feature: 'cost',
             route: 'blocked',
@@ -327,18 +328,18 @@ export function getAccountTools({
           const cost = await getNextProjectCost(account, organization_id);
           const state = ctx.mcpReq.requestState<unknown>();
           if (!state && cost.amount === 0) {
-            record?.({
+            observation?.record({
               kind: 'confirmation_decision',
               feature: 'cost',
               route: 'bypass',
               reason: 'zero_cost',
             });
-            return await observeOperation('cost', record, () =>
+            return await observeOperation('cost', observation?.record, () =>
               account.createProject({ name, region, organization_id })
             );
           }
 
-          record?.({
+          observation?.record({
             kind: 'confirmation_decision',
             feature: 'cost',
             route: 'inline',
@@ -373,7 +374,7 @@ export function getAccountTools({
             schema: projectCostStateSchema,
             requestKey: 'confirm_cost',
             askForConfirmation,
-            record,
+            observation,
             argsMatch: (state) =>
               state.name === name &&
               state.region === region &&
@@ -391,7 +392,7 @@ export function getAccountTools({
             case 'terminal':
               return confirmationState.result;
             case 'proceed':
-              return await observeOperation('cost', record, () =>
+              return await observeOperation('cost', observation?.record, () =>
                 account.createProject({
                   name: confirmationState.state.name,
                   region: confirmationState.state.region,
@@ -402,7 +403,7 @@ export function getAccountTools({
         }
 
         const cost = await getNextProjectCost(account, organization_id);
-        record?.({
+        observation?.record({
           kind: 'confirmation_decision',
           feature: 'cost',
           route: 'legacy',
@@ -415,7 +416,7 @@ export function getAccountTools({
           );
         }
 
-        return await observeOperation('cost', record, () =>
+        return await observeOperation('cost', observation?.record, () =>
           account.createProject({ name, region, organization_id })
         );
       },

@@ -1,11 +1,17 @@
 import { createRequestStateCodec } from '@modelcontextprotocol/server';
 import {
   createMcpServer,
-  type RequestObserver,
   type Tool,
   type ToolCallCallback,
+  type ToolClassification,
 } from '@supabase/mcp-utils';
 import packageJson from '../package.json' with { type: 'json' };
+import { z } from 'zod/v4';
+import type {
+  ObservationFact,
+  ObservedTool,
+  RequestObserver,
+} from './observation.js';
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
@@ -28,7 +34,26 @@ import { getStorageTools } from './tools/storage-tools.js';
 import { writeToolSet } from './tools/tool-schemas.js';
 import type { ElicitationToolName, FeatureGroup } from './types.js';
 import { parseFeatureGroups } from './util.js';
-import { z } from 'zod/v4';
+
+const toolClassification: ToolClassification<ObservedTool> = {
+  buckets: [
+    'create_project',
+    'create_branch',
+    'execute_sql',
+    'apply_migration',
+  ],
+  classify: (name) => {
+    switch (name) {
+      case 'create_project':
+      case 'create_branch':
+      case 'execute_sql':
+      case 'apply_migration':
+        return name;
+      default:
+        return 'other';
+    }
+  },
+};
 
 const { version } = packageJson;
 
@@ -195,7 +220,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         })
       : undefined;
 
-  const server = createMcpServer({
+  const server = createMcpServer<ObservedTool, ObservationFact>({
     name: 'supabase',
     title: 'Supabase',
     version,
@@ -215,6 +240,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     },
     onToolCall,
     observer,
+    toolClassification: observer ? toolClassification : undefined,
     requestState: elicitationCodec && {
       verify: elicitationCodec.verify,
     },
@@ -230,7 +256,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         branching,
         secrets,
       } = platform;
-      const tools: Record<string, Tool> = {};
+      const tools: Record<
+        string,
+        Tool<z.ZodObject<any>, z.ZodObject<any>, ObservationFact>
+      > = {};
 
       if (enabledFeatures.has('docs')) {
         Object.assign(tools, getDocsTools({ contentApiClient }));

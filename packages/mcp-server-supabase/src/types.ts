@@ -1,5 +1,5 @@
-import type { ObservedTool } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
+import type { ObservedTool } from './observation.js';
 
 export const CURRENT_ELICITATION_TOOLS = [
   'create_project',

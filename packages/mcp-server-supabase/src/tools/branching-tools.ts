@@ -3,7 +3,8 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { type ObservationFact, tool } from '@supabase/mcp-utils';
+import { type ToolObservation, tool } from '@supabase/mcp-utils';
+import type { ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { BranchingOperations } from '../platform/types.js';
 import { branchSchema } from '../platform/types.js';
@@ -204,10 +205,10 @@ export function getBranchingTools({
           confirm_cost_id,
         }: z.infer<typeof createBranchInputSchemaWithElicitation>,
         ctx: ServerContext,
-        record?: (fact: ObservationFact) => void
+        observation?: ToolObservation<ObservationFact>
       ) => {
         if (readOnly) {
-          record?.({
+          observation?.record({
             kind: 'confirmation_decision',
             feature: 'cost',
             route: 'blocked',
@@ -219,7 +220,7 @@ export function getBranchingTools({
         if (confirmation && isFormCapable(ctx)) {
           const { codec } = confirmation;
           const cost = getBranchCost();
-          record?.({
+          observation?.record({
             kind: 'confirmation_decision',
             feature: 'cost',
             route: 'inline',
@@ -253,7 +254,7 @@ export function getBranchingTools({
             schema: branchCostStateSchema,
             requestKey: 'confirm_cost',
             askForConfirmation,
-            record,
+            observation,
             argsMatch: (state) =>
               state.project_id === project_id && state.name === name,
             payloadMatch: (state) =>
@@ -268,7 +269,7 @@ export function getBranchingTools({
             case 'terminal':
               return confirmationState.result;
             case 'proceed':
-              return await observeOperation('cost', record, () =>
+              return await observeOperation('cost', observation?.record, () =>
                 branching.createBranch(confirmationState.state.project_id, {
                   name: confirmationState.state.name,
                 })
@@ -277,7 +278,7 @@ export function getBranchingTools({
         }
 
         const cost = getBranchCost();
-        record?.({
+        observation?.record({
           kind: 'confirmation_decision',
           feature: 'cost',
           route: 'legacy',
@@ -289,7 +290,7 @@ export function getBranchingTools({
             'Cost confirmation ID does not match the expected cost of creating a branch.'
           );
         }
-        return await observeOperation('cost', record, () =>
+        return await observeOperation('cost', observation?.record, () =>
           branching.createBranch(project_id, { name })
         );
       },

@@ -4,7 +4,6 @@ import { z } from 'zod/v4';
 import type {
   ObservationContext,
   ObservationEnd,
-  ObservationFact,
   RequestObserver,
 } from './observation.js';
 import {
@@ -14,16 +13,19 @@ import {
   tool,
 } from './server.js';
 
-export function capture() {
+export type TestFact = { event: string };
+export type TestTool = Tool<z.ZodObject<any>, z.ZodObject<any>, TestFact>;
+
+export function capture<Bucket extends string = never, Fact = TestFact>() {
   const scopes: {
-    context: ObservationContext;
-    facts: ObservationFact[];
+    context: ObservationContext<Bucket>;
+    facts: Fact[];
     ends: ObservationEnd[];
   }[] = [];
-  const observer: RequestObserver = (context) => {
+  const observer: RequestObserver<Bucket, Fact> = (context) => {
     const scope = {
       context,
-      facts: [] as ObservationFact[],
+      facts: [] as Fact[],
       ends: [] as ObservationEnd[],
     };
     scopes.push(scope);
@@ -41,9 +43,11 @@ export function capture() {
 
 // Exercise the registered package handler, before the SDK's result validator.
 // This is needed for deliberately unserializable returns and error serialization.
-export function handlers(options: Partial<McpServerOptions> = {}) {
+export function handlers<Bucket extends string = never, Fact = TestFact>(
+  options: Partial<McpServerOptions<Bucket, Fact>> = {}
+) {
   const registration = vi.spyOn(Server.prototype, 'setRequestHandler');
-  createMcpServer({ name: 'test', version: '1', ...options });
+  createMcpServer<Bucket, Fact>({ name: 'test', version: '1', ...options });
   // The package uses only the two-argument registration overload.
   type Handler = (
     request: unknown,
@@ -61,8 +65,10 @@ export function handlers(options: Partial<McpServerOptions> = {}) {
   };
 }
 
-export function action(execute: Tool['execute']) {
-  return tool({
+export function action<Fact = TestFact>(
+  execute: Tool<z.ZodObject<any>, z.ZodObject<any>, Fact>['execute']
+) {
+  return tool<z.ZodObject<any>, z.ZodObject<any>, Fact>({
     description: 'test',
     parameters: z.object({}),
     outputSchema: z.looseObject({}),

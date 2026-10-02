@@ -9,8 +9,8 @@ export type {
   ConfirmationFeature,
   RequestObservation,
   RequestObserver,
-  ToolCallCallback,
-} from '@supabase/mcp-utils';
+} from './observation.js';
+export type { ToolCallCallback } from '@supabase/mcp-utils';
 export type { SupabasePlatform } from './platform/index.js';
 export {
   createSupabaseMcpServer,

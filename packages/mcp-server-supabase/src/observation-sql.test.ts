@@ -12,6 +12,7 @@ import type {
 } from '@modelcontextprotocol/server';
 import type { Tool } from '@supabase/mcp-utils';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import type { z } from 'zod/v4';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import type {
   ObservationContext,
@@ -477,7 +478,11 @@ test.each(tools)(
       database,
       confirmation: { codec, enabledTools: tools },
     });
-    const sqlTool: Tool = sqlTools[name];
+    const sqlTool: Tool<
+      z.ZodObject<any>,
+      z.ZodObject<any>,
+      ObservationFact
+    > = sqlTools[name];
     await expect(
       sqlTool.execute(
         sqlTool.parameters.parse({
@@ -486,8 +491,11 @@ test.each(tools)(
           name: 'PRIVATE_MIGRATION',
         }),
         ctx,
-        (fact) => {
-          facts.push(fact);
+        {
+          record: (fact) => {
+            facts.push(fact);
+          },
+          setOutcome: vi.fn(),
         }
       )
     ).rejects.toBe(failure);

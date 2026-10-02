@@ -3,7 +3,7 @@ import {
   type InputRequiredResult,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import type { ObservationFact } from '@supabase/mcp-utils';
+import type { ObservationFact } from '../observation.js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   actionOnlyElicitationSchema,
@@ -164,8 +164,11 @@ describe.each(producers)(
         payloadMatch: () => reason !== 'changed_quote',
         declinedText: 'Declined.',
         cancelledText: 'Cancelled.',
-        record: (fact: ObservationFact) => {
-          facts.push(fact);
+        observation: {
+          record: (fact: ObservationFact) => {
+            facts.push(fact);
+          },
+          setOutcome: vi.fn(),
         },
         askForConfirmation,
       };

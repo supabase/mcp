@@ -3,13 +3,14 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import type { ObservationFact } from '@supabase/mcp-utils';
+import type { ToolObservation, ToolOutcome } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
 import {
   advisorySchema,
   buildRlsDisabledAdvisory,
   selectAdvisory,
 } from '../advisories/index.js';
+import type { ObservationFact } from '../observation.js';
 import { listExtensionsSql, listTablesSql } from '../pg-meta/index.js';
 import {
   postgresExtensionSchema,
@@ -393,8 +394,9 @@ export function getDatabaseTools({
       execute: async (
         { project_id, name, query },
         ctx: ServerContext,
-        record?: (fact: ObservationFact) => void
+        observation?: ToolObservation<ObservationFact>
       ) => {
+        const record = observation?.record;
         if (readOnly) {
           record?.({
             kind: 'confirmation_decision',
@@ -449,10 +451,11 @@ export function getDatabaseTools({
               ),
             });
 
-          // State facts count only when the tool honors the inspected decision.
-          const stagedFacts: ObservationFact[] | undefined = record
+          // State facts and outcome count only when the inspected decision applies.
+          const stagedFacts: ObservationFact[] | undefined = observation
             ? []
             : undefined;
+          let stagedOutcome: ToolOutcome | undefined;
           const confirmationState = inspectConfirmationState({
             ctx,
             tool: 'apply_migration',
@@ -464,10 +467,20 @@ export function getDatabaseTools({
               state.queryHash === queryHash,
             declinedText: 'Migration was declined.',
             cancelledText: 'Migration was cancelled.',
-            record: stagedFacts ? (fact) => stagedFacts.push(fact) : undefined,
+            observation: stagedFacts
+              ? {
+                  record: (fact) => stagedFacts.push(fact),
+                  setOutcome: (outcome) => {
+                    stagedOutcome = outcome;
+                  },
+                }
+              : undefined,
           });
 
           if (confirmationState.kind === 'proceed' || isDestructiveSql(query)) {
+            if (stagedOutcome !== undefined) {
+              observation?.setOutcome(stagedOutcome);
+            }
             record?.({
               kind: 'confirmation_decision',
               feature: 'destructive_sql',
@@ -522,8 +535,9 @@ export function getDatabaseTools({
       execute: async (
         { query, project_id },
         ctx: ServerContext,
-        record?: (fact: ObservationFact) => void
+        observation?: ToolObservation<ObservationFact>
       ) => {
+        const record = observation?.record;
         if (readOnly) {
           record?.({
             kind: 'confirmation_decision',
@@ -574,10 +588,11 @@ export function getDatabaseTools({
               ),
             });
 
-          // State facts count only when the tool honors the inspected decision.
-          const stagedFacts: ObservationFact[] | undefined = record
+          // State facts and outcome count only when the inspected decision applies.
+          const stagedFacts: ObservationFact[] | undefined = observation
             ? []
             : undefined;
+          let stagedOutcome: ToolOutcome | undefined;
           const confirmationState = inspectConfirmationState({
             ctx,
             tool: 'execute_sql',
@@ -587,10 +602,20 @@ export function getDatabaseTools({
               state.project_id === project_id && state.queryHash === queryHash,
             declinedText: 'SQL execution was declined.',
             cancelledText: 'SQL execution was cancelled.',
-            record: stagedFacts ? (fact) => stagedFacts.push(fact) : undefined,
+            observation: stagedFacts
+              ? {
+                  record: (fact) => stagedFacts.push(fact),
+                  setOutcome: (outcome) => {
+                    stagedOutcome = outcome;
+                  },
+                }
+              : undefined,
           });
 
           if (confirmationState.kind === 'proceed' || isDestructiveSql(query)) {
+            if (stagedOutcome !== undefined) {
+              observation?.setOutcome(stagedOutcome);
+            }
             record?.({
               kind: 'confirmation_decision',
               feature: 'destructive_sql',

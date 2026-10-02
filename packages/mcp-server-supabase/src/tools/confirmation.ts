@@ -6,7 +6,8 @@ import {
   type InputRequiredResult,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import type { ConfirmationFeature, ObservationFact } from '@supabase/mcp-utils';
+import type { ToolObservation } from '@supabase/mcp-utils';
+import type { ConfirmationFeature, ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { BranchCost, Cost } from '../pricing.js';
 import { AWS_REGION_CODES } from '../regions.js';
@@ -132,15 +133,8 @@ type ConfirmationStateOptions<S extends ConfirmationState> = {
   payloadMatch?: (state: S) => boolean;
   declinedText: string;
   cancelledText: string;
-  record?: ConfirmationRecord;
+  observation?: ToolObservation<ObservationFact>;
 };
-
-type ConfirmationRecord = (
-  fact: Extract<
-    ObservationFact,
-    { kind: 'resume_validation' | 'input_response' | 'input_required' }
-  >
-) => void;
 
 type RepromptReason = 'initial' | 'missing_response' | 'changed_quote';
 
@@ -179,7 +173,7 @@ export async function checkConfirmationState<S extends ConfirmationState>(
     return decision;
   }
   const result = await options.askForConfirmation();
-  options.record?.({
+  options.observation?.record({
     kind: 'input_required',
     feature: confirmationFeature(options.tool),
     mode: 'form',
@@ -201,7 +195,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     payloadMatch,
     declinedText,
     cancelledText,
-    record,
+    observation,
   } = options;
   const raw = ctx.mcpReq.requestState<unknown>();
   if (raw === undefined) {
@@ -213,14 +207,14 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     // Schema rejection remains authoritative. A malformed same-tool payload
     // has no truthful classification in the finite observation contract.
     if (
-      record &&
+      observation &&
       raw !== null &&
       typeof raw === 'object' &&
       'tool' in raw &&
       typeof raw.tool === 'string' &&
       raw.tool !== tool
     ) {
-      record({
+      observation.record({
         kind: 'resume_validation',
         feature: confirmationFeature(tool),
         result: 'tool_mismatch',
@@ -243,7 +237,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
 
   const state = parsed.data;
   if (!argsMatch(state)) {
-    record?.({
+    observation?.record({
       kind: 'resume_validation',
       feature: confirmationFeature(tool),
       result: 'arguments_mismatch',
@@ -265,7 +259,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
 
   const response = inputResponse(ctx.mcpReq.inputResponses, requestKey);
   if (response.kind !== 'elicit') {
-    record?.({
+    observation?.record({
       kind: 'resume_validation',
       feature: confirmationFeature(tool),
       result: 'missing_response',
@@ -273,7 +267,14 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     return { kind: 'reprompt', reason: 'missing_response' };
   }
 
-  record?.({
+  observation?.setOutcome(
+    response.action === 'accept'
+      ? 'completed'
+      : response.action === 'decline'
+        ? 'declined'
+        : 'cancelled'
+  );
+  observation?.record({
     kind: 'input_response',
     feature: confirmationFeature(tool),
     action:
@@ -303,7 +304,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   }
 
   if (payloadMatch && !payloadMatch(state)) {
-    record?.({
+    observation?.record({
       kind: 'resume_validation',
       feature: confirmationFeature(tool),
       result: 'changed_quote',
@@ -311,7 +312,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     return { kind: 'reprompt', reason: 'changed_quote' };
   }
 
-  record?.({
+  observation?.record({
     kind: 'resume_validation',
     feature: confirmationFeature(tool),
     result: 'valid',
