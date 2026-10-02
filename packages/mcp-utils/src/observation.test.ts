@@ -3,20 +3,16 @@ import {
   beginObservation,
   type ObservationContext,
   type ObservationEnd,
-  type ObservationFact,
   type RequestObservation,
   type RequestObserver,
 } from './observation.js';
+import type { TestFact } from './observation-test-helpers.js';
 
 const context: ObservationContext = {
   method: 'tools/call',
-  tool: 'create_project',
+  tool: 'other',
 };
-const decline: ObservationFact = {
-  kind: 'input_response',
-  feature: 'cost',
-  action: 'decline',
-};
+const fact: TestFact = { event: 'finished' };
 const completed: ObservationEnd = { result: 'completed', durationMs: 0 };
 const failure = new Error('PRIVATE_ERROR_SENTINEL');
 
@@ -29,16 +25,21 @@ describe('safe observation scope', () => {
     const end = vi.fn(() => {
       throw failure;
     });
-    const scope = beginObservation(() => ({ record, end }), context)!;
-    scope.record(decline);
-    scope.record(decline);
-    expect(scope.consumedTerminal()).toBe('declined');
+    const scope = beginObservation<never, TestFact>(
+      () => ({ record, end }),
+      context
+    )!;
+    scope.tool.setOutcome('declined');
+    scope.tool.record(fact);
+    scope.tool.record(fact);
+    expect(scope.outcome()).toBe('declined');
     scope.end('completed');
     scope.end('handler_error');
-    scope.record({ kind: 'input_response', feature: 'cost', action: 'accept' });
-    expect(record.mock.calls).toEqual([[decline], [decline]]);
+    scope.tool.setOutcome('completed');
+    scope.tool.record({ event: 'late' });
+    expect(record.mock.calls).toEqual([[fact], [fact]]);
     expect(end.mock.calls).toEqual([[completed]]);
-    expect(scope.consumedTerminal()).toBe('declined');
+    expect(scope.outcome()).toBe('declined');
   });
 
   test.each([
@@ -73,38 +74,40 @@ describe('safe observation scope', () => {
       const sink = {
         record: hostile,
         end: hostile,
-      } as unknown as RequestObservation;
+      } as unknown as RequestObservation<TestFact>;
       const scope = beginObservation(() => sink, context)!;
-      scope.record(decline);
+      scope.tool.setOutcome('declined');
+      scope.tool.record(fact);
       scope.end('completed');
       // Let native promise adoption and its rejection handler run.
       await Promise.resolve();
       await Promise.resolve();
       expect(calls).toBe(2);
-      expect(scope.consumedTerminal()).toBe('declined');
+      expect(scope.outcome()).toBe('declined');
       expect(log).not.toHaveBeenCalled();
     }
   );
 
   test('throwing sink getters do not prevent terminal action tracking or closing', () => {
     const accesses: string[] = [];
-    const sink: RequestObservation = {
-      get record(): RequestObservation['record'] {
+    const sink: RequestObservation<TestFact> = {
+      get record(): RequestObservation<TestFact>['record'] {
         accesses.push('record');
         throw failure;
       },
-      get end(): RequestObservation['end'] {
+      get end(): RequestObservation<TestFact>['end'] {
         accesses.push('end');
         throw failure;
       },
     };
     const scope = beginObservation(() => sink, context)!;
-    scope.record(decline);
+    scope.tool.setOutcome('declined');
+    scope.tool.record(fact);
     scope.end('completed');
-    scope.record(decline);
+    scope.tool.record(fact);
     scope.end('completed');
     expect(accesses).toEqual(['record', 'end']);
-    expect(scope.consumedTerminal()).toBe('declined');
+    expect(scope.outcome()).toBe('declined');
   });
 
   test('factory throws, undefined, promises and throwing then getters disable the scope', async () => {

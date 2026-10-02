@@ -16,11 +16,11 @@ import { z } from 'zod/v4';
 
 import type { ExtractParams } from './types.js';
 import { assertValidUri, compareUris, matchUriTemplate } from './util.js';
-import { beginObservation } from './observation.js';
+import { beginObservation, snapshotToolClassification } from './observation.js';
 import type {
   ObservationEnd,
-  ObservationFact,
-  ObservedTool,
+  ToolClassification,
+  ToolObservation,
   RequestObserver,
 } from './observation.js';
 
@@ -55,6 +55,7 @@ export type Tool<
   // MCP spec restricts outputSchema to type "object" at the root level:
   // https://modelcontextprotocol.io/specification/2025-11-25/schema#tool-outputschema
   OutputSchema extends z.ZodObject<any> = z.ZodObject<any>,
+  Fact = never,
 > = {
   description: Prop<string>;
   annotations?: Annotations;
@@ -72,17 +73,14 @@ export type Tool<
    * value is wrapped as today (`{ content: [{ type: 'text', text:
    * JSON.stringify(value) }] }`).
    *
-   * The optional third `record` argument is a safe, synchronous recorder
-   * for {@link ObservationFact}s tied to this call's observation scope.
-   * It may be `undefined` (for example, when no observer is configured);
-   * it never throws back into the tool and never returns a promise the
-   * tool needs to handle.
+   * The optional observation handle records custom facts and sets an explicit
+   * outcome. Its methods isolate sink failures and become inert after settlement.
    */
-  execute(
+  execute: (
     params: z.infer<Params>,
     ctx: ServerContext,
-    record?: (fact: ObservationFact) => void
-  ): Promise<z.infer<OutputSchema> | InputRequiredResult | CallToolResult>;
+    observation?: ToolObservation<Fact>
+  ) => Promise<z.infer<OutputSchema> | InputRequiredResult | CallToolResult>;
 };
 
 /**
@@ -192,7 +190,8 @@ export function jsonResourceResponse<Uri extends string, Response>(
 export function tool<
   Params extends z.ZodObject<any>,
   OutputSchema extends z.ZodObject<any>,
->(tool: Tool<Params, OutputSchema>) {
+  Fact = never,
+>(tool: Tool<Params, OutputSchema, Fact>) {
   return tool;
 }
 
@@ -224,7 +223,7 @@ export type ToolCallCallback = (details: ToolCallDetails) => void;
 export type PropCallback<T> = () => T | Promise<T>;
 export type Prop<T> = T | PropCallback<T>;
 
-export type McpServerOptions = {
+export type McpServerOptions<Bucket extends string = never, Fact = never> = {
   /**
    * The name of the MCP server. This will be sent to the client as part of
    * the initialization process.
@@ -287,10 +286,14 @@ export type McpServerOptions = {
    * that can change after the server has started.
    */
   tools?:
-    | Record<string, Tool>
+    | Record<string, Tool<z.ZodObject<any>, z.ZodObject<any>, Fact>>
     | ((
         ctx?: ServerContext
-      ) => Record<string, Tool> | Promise<Record<string, Tool>>);
+      ) =>
+        | Record<string, Tool<z.ZodObject<any>, z.ZodObject<any>, Fact>>
+        | Promise<
+            Record<string, Tool<z.ZodObject<any>, z.ZodObject<any>, Fact>>
+          >);
 
   /**
    * Multi-round-trip `requestState` integrity hook (protocol revision
@@ -312,24 +315,9 @@ export type McpServerOptions = {
    * never awaited. Omitting it disables observation entirely: no context
    * object, clock read, or fact is ever produced.
    */
-  observer?: RequestObserver;
+  observer?: RequestObserver<Bucket, Fact>;
+  toolClassification?: ToolClassification<Bucket>;
 };
-
-/**
- * Normalizes a raw tool name to the closed {@link ObservedTool} allowlist.
- * Unlisted tools — including any not yet registered — become `'other'`.
- */
-function normalizeObservedTool(name: string): ObservedTool {
-  switch (name) {
-    case 'create_project':
-    case 'create_branch':
-    case 'execute_sql':
-    case 'apply_migration':
-      return name;
-    default:
-      return 'other';
-  }
-}
 
 /**
  * Creates an MCP server with the given options.
@@ -337,7 +325,12 @@ function normalizeObservedTool(name: string): ObservedTool {
  * Simplifies the process of creating an MCP server by providing a high-level
  * API for defining resources and tools.
  */
-export function createMcpServer(options: McpServerOptions) {
+export function createMcpServer<Bucket extends string = never, Fact = never>(
+  options: McpServerOptions<Bucket, Fact>
+) {
+  const classifyTool = options.observer
+    ? snapshotToolClassification(options.toolClassification)
+    : undefined;
   const capabilities: ServerCapabilities = {};
 
   if (options.resources) {
@@ -408,7 +401,6 @@ export function createMcpServer(options: McpServerOptions) {
         const scope = options.observer
           ? beginObservation(options.observer, {
               method: 'resources/list',
-              tool: 'not_applicable',
             })
           : undefined;
         let outcome: ObservationEnd['result'] = 'handler_error';
@@ -441,7 +433,6 @@ export function createMcpServer(options: McpServerOptions) {
         const scope = options.observer
           ? beginObservation(options.observer, {
               method: 'resources/templates/list',
-              tool: 'not_applicable',
             })
           : undefined;
         let outcome: ObservationEnd['result'] = 'handler_error';
@@ -474,7 +465,6 @@ export function createMcpServer(options: McpServerOptions) {
         const scope = options.observer
           ? beginObservation(options.observer, {
               method: 'resources/read',
-              tool: 'not_applicable',
             })
           : undefined;
         let outcome: ObservationEnd['result'] = 'handler_error';
@@ -560,7 +550,6 @@ export function createMcpServer(options: McpServerOptions) {
         const scope = options.observer
           ? beginObservation(options.observer, {
               method: 'tools/list',
-              tool: 'not_applicable',
             })
           : undefined;
         let outcome: ObservationEnd['result'] = 'handler_error';
@@ -602,12 +591,17 @@ export function createMcpServer(options: McpServerOptions) {
     );
 
     server.setRequestHandler('tools/call', async (request, ctx) => {
+      const startedAt = options.observer ? performance.now() : undefined;
       const toolName = request.params.name;
       const scope = options.observer
-        ? beginObservation(options.observer, {
-            method: 'tools/call',
-            tool: normalizeObservedTool(toolName),
-          })
+        ? beginObservation(
+            options.observer,
+            {
+              method: 'tools/call',
+              tool: classifyTool?.(toolName) ?? 'other',
+            },
+            startedAt
+          )
         : undefined;
       let outcome: ObservationEnd['result'] = 'handler_error';
 
@@ -627,10 +621,12 @@ export function createMcpServer(options: McpServerOptions) {
           .strict()
           .parse(request.params.arguments ?? {});
 
-        const executeWithCallback = async (tool: Tool) => {
+        const executeWithCallback = async (
+          tool: Tool<z.ZodObject<any>, z.ZodObject<any>, Fact>
+        ) => {
           // Wrap success or error in a result value
           const res = await tool
-            .execute(args, ctx, scope?.record)
+            .execute(args, ctx, scope?.tool)
             .then((data: unknown) => ({ success: true as const, data }))
             .catch((error) => ({ success: false as const, error }));
 
@@ -670,7 +666,7 @@ export function createMcpServer(options: McpServerOptions) {
           outcome =
             scope && result.isError === true
               ? 'tool_error'
-              : (scope?.consumedTerminal() ?? 'completed');
+              : (scope?.outcome() ?? 'completed');
           return result;
         }
 
@@ -679,7 +675,7 @@ export function createMcpServer(options: McpServerOptions) {
             ? [{ type: 'text' as const, text: JSON.stringify(result) }]
             : [];
 
-        outcome = scope?.consumedTerminal() ?? 'completed';
+        outcome = scope?.outcome() ?? 'completed';
         return {
           content,
         };

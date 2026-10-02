@@ -1,17 +1,9 @@
 import { setImmediate } from 'node:timers/promises';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import type {
-  ObservationFact,
-  RequestObservation,
-  RequestObserver,
-} from './observation.js';
-import { action, handlers } from './observation-test-helpers.js';
+import type { RequestObservation, RequestObserver } from './observation.js';
+import { action, handlers, type TestFact } from './observation-test-helpers.js';
 
-const decline: ObservationFact = {
-  kind: 'input_response',
-  feature: 'cost',
-  action: 'decline',
-};
+const fact: TestFact = { event: 'started' };
 const failure = new Error('PRIVATE_ERROR_SENTINEL');
 
 afterEach(() => vi.restoreAllMocks());
@@ -24,7 +16,7 @@ describe('observer noninterference', () => {
       const callback = vi.fn<(details: unknown) => void>(() => {
         order.push('callback');
       });
-      const observer: RequestObserver = () => {
+      const observer: RequestObserver<never, TestFact> = () => {
         if (mode === 'factory') throw failure;
         return {
           record() {
@@ -43,21 +35,13 @@ describe('observer noninterference', () => {
         observer,
         onToolCall: callback,
         tools: {
-          good: action(async (_args, _ctx, record) => {
-            record?.({
-              kind: 'operation',
-              feature: 'cost',
-              disposition: 'started',
-            });
+          good: action(async (_args, _ctx, observation) => {
+            observation?.record(fact);
             order.push('execute');
             return { privateResult: 'unchanged' };
           }),
-          bad: action(async (_args, _ctx, record) => {
-            record?.({
-              kind: 'operation',
-              feature: 'cost',
-              disposition: 'started',
-            });
+          bad: action(async (_args, _ctx, observation) => {
+            observation?.record(fact);
             order.push('execute');
             throw failure;
           }),
@@ -126,10 +110,10 @@ test.each(['factory', 'record', 'end'] as const)(
       });
       return promise;
     }
-    const observer: RequestObserver = () => {
+    const observer: RequestObserver<never, TestFact> = () => {
       // Unsupported async factory deliberately returned by a JS consumer.
       if (stage === 'factory')
-        return rejected() as unknown as RequestObservation;
+        return rejected() as unknown as RequestObservation<TestFact>;
       return {
         record() {
           if (stage === 'record') return rejected();
@@ -144,8 +128,8 @@ test.each(['factory', 'record', 'end'] as const)(
       const run = handlers({
         observer,
         tools: {
-          test: action(async (_args, _ctx, record) => {
-            record?.(decline);
+          test: action(async (_args, _ctx, observation) => {
+            observation?.record(fact);
             return { unchanged: true };
           }),
         },
