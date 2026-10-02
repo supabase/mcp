@@ -136,7 +136,6 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
     }
     assert.deepEqual(scopes[0].context, {
       method: 'tools/list',
-      tool: 'not_applicable',
     });
     assert.deepEqual(scopes[0].facts, []);
     assert.equal(scopes[0].ends[0].result, 'completed');

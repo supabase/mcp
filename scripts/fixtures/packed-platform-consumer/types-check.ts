@@ -10,7 +10,6 @@ import {
   createMcpServer,
   tool,
   type McpServerOptions,
-  type Tool,
 } from '@supabase/mcp-utils';
 import type * as Utils from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
@@ -69,48 +68,41 @@ const optionsWithElicitation: SupabaseMcpServerOptions = {
 const handlerWithElicitation = createSupabaseMcpHandler(optionsWithElicitation);
 void handlerWithElicitation.fetch;
 
-// Check published exports and their relationships, not a copy of the vocabulary.
-type UtilsContract = [
-  Utils.ObservedMethod,
-  Utils.ObservedTool,
-  Utils.ObservationContext,
-  Utils.ConfirmationFeature,
-  Utils.ObservationFact,
-  Utils.ObservationEnd,
-  Utils.RequestObservation,
-  Utils.RequestObserver,
-];
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B
-  ? 1
-  : 2
-  ? true
-  : false;
-type Assert<T extends true> = T;
-type ExactUtilsOption = Assert<
-  Equal<McpServerOptions['observer'], Utils.RequestObserver | undefined>
->;
-type ExactRecorder = Assert<
-  Equal<
-    Parameters<Tool['execute']>[2],
-    ((fact: Utils.ObservationFact) => void) | undefined
-  >
->;
+type Fact = Readonly<{ kind: 'operation'; phase: 'started' | 'finished' }>;
 
-const observer: Utils.RequestObserver = (context) => ({
-  record: async (fact) => {
-    void context.method;
-    void fact.kind;
-  },
-  end: (result) => {
-    void result.durationMs;
-  },
-});
+const observer: Utils.RequestObserver<'named', Fact> = (context) => {
+  if (context.method === 'tools/call') {
+    const bucket: 'named' | 'other' = context.tool;
+    void bucket;
+  } else {
+    // @ts-expect-error Non-call contexts have no tool field.
+    void context.tool;
+  }
+  return {
+    record: async (fact) => {
+      const phase: 'started' | 'finished' = fact.phase;
+      void phase;
+    },
+    end: (result) => {
+      void result.durationMs;
+    },
+  };
+};
 const observedTool = tool({
-  description: 'Public third-argument compatibility',
+  description: 'Typed observation controls',
   parameters: z.object({}),
   outputSchema: z.object({ ok: z.boolean() }),
-  execute: async (_params, _context, record) => {
-    record?.({ kind: 'operation', feature: 'cost', disposition: 'started' });
+  execute: async (
+    _params,
+    _context,
+    observation?: Utils.ToolObservation<Fact>
+  ) => {
+    observation?.record({ kind: 'operation', phase: 'started' });
+    observation?.setOutcome('completed');
+    // @ts-expect-error The producer cannot end the handler-owned scope.
+    observation?.end();
+    // @ts-expect-error Custom facts must match the declared contract.
+    observation?.record({ kind: 'raw', payload: 'unexpected' });
     return { ok: true };
   },
 });
@@ -124,31 +116,48 @@ const twoArguments: typeof observedTool.execute = async (
 ) => ({ ok: true });
 void oneArgument;
 void twoArguments;
-const coreOptions: McpServerOptions = {
+const coreOptions: McpServerOptions<'named', Fact> = {
   name: 'packed-observer',
   version: '0.0.0',
   observer,
+  toolClassification: {
+    buckets: ['named'],
+    classify: (name) => (name === 'observed' ? 'named' : 'other'),
+  },
   tools: { observed: observedTool },
 };
 void createMcpServer(coreOptions);
 
-type SupabaseContract = [
-  Supabase.ObservedMethod,
-  Supabase.ObservedTool,
-  Supabase.ObservationContext,
-  Supabase.ConfirmationFeature,
-  Supabase.ObservationFact,
-  Supabase.ObservationEnd,
-  Supabase.RequestObservation,
-  Supabase.RequestObserver,
-];
-type ExactSupabaseContract = Assert<Equal<SupabaseContract, UtilsContract>>;
-type ExactSupabaseOption = Assert<
-  Equal<SupabaseMcpServerOptions['observer'], Utils.RequestObserver | undefined>
->;
+const supabaseObserver: Supabase.RequestObserver = (context) => {
+  if (context.method === 'tools/call') {
+    const tool:
+      | 'create_project'
+      | 'create_branch'
+      | 'execute_sql'
+      | 'apply_migration'
+      | 'other' = context.tool;
+    void tool;
+  } else {
+    // @ts-expect-error Supabase non-call contexts have no tool field.
+    void context.tool;
+  }
+  return {
+    record: (fact) => {
+      const feature: 'cost' = fact.feature;
+      void feature;
+      if (fact.kind === 'operation' && fact.disposition !== 'started') {
+        const durationMs: number = fact.durationMs;
+        void durationMs;
+      }
+    },
+    end: (result) => {
+      void result.durationMs;
+    },
+  };
+};
 const observedSupabaseOptions: SupabaseMcpServerOptions = {
   ...options,
-  observer,
+  observer: supabaseObserver,
 };
 void createSupabaseMcpServer(observedSupabaseOptions);
 void createSupabaseMcpHandler(observedSupabaseOptions);

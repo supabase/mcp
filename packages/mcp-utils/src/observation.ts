@@ -1,9 +1,4 @@
-/**
- * Payload-free observations for MCP handler attempts and shipped cost confirmation.
- * These types do not describe transport delivery, consent, or backend commit.
- * The Supabase server's vocabulary is intentionally hosted in mcp-utils.
- */
-
+/** Observations describe handler attempts, not transport delivery or backend commit. */
 export type ObservedMethod =
   | 'tools/call'
   | 'tools/list'
@@ -11,212 +6,150 @@ export type ObservedMethod =
   | 'resources/templates/list'
   | 'resources/read';
 
-export type ObservedTool =
-  | 'create_project'
-  | 'create_branch'
-  | 'execute_sql'
-  | 'apply_migration'
-  | 'other'
-  | 'not_applicable';
+export type ObservationContext<Bucket extends string = never> =
+  | Readonly<{ method: 'tools/call'; tool: Bucket | 'other' }>
+  | Readonly<{ method: Exclude<ObservedMethod, 'tools/call'> }>;
 
-export type ObservationContext = Readonly<{
-  method: ObservedMethod;
-  tool: ObservedTool;
+export type ToolOutcome = 'completed' | 'declined' | 'cancelled';
+
+export type ToolObservation<Fact = never> = Readonly<{
+  record: (fact: Fact) => void;
+  setOutcome: (result: ToolOutcome) => void;
 }>;
 
-export type ConfirmationFeature = 'cost';
-
-export type ObservationFact =
-  | Readonly<{
-      kind: 'confirmation_decision';
-      feature: ConfirmationFeature;
-      route: 'inline' | 'legacy' | 'bypass' | 'blocked';
-      reason:
-        | 'eligible'
-        | 'not_configured'
-        | 'capability_missing'
-        | 'read_only'
-        | 'zero_cost';
-    }>
-  | Readonly<{
-      kind: 'input_required';
-      feature: ConfirmationFeature;
-      mode: 'form';
-      reason: 'initial' | 'missing_response' | 'changed_quote';
-    }>
-  | Readonly<{
-      kind: 'input_response';
-      feature: ConfirmationFeature;
-      action: 'accept' | 'decline' | 'cancel';
-    }>
-  | Readonly<{
-      kind: 'resume_validation';
-      feature: ConfirmationFeature;
-      result:
-        | 'valid'
-        | 'missing_response'
-        | 'tool_mismatch'
-        | 'arguments_mismatch'
-        | 'changed_quote';
-    }>
-  | Readonly<{
-      kind: 'operation';
-      feature: ConfirmationFeature;
-      disposition: 'started';
-    }>
-  | Readonly<{
-      kind: 'operation';
-      feature: ConfirmationFeature;
-      disposition: 'returned' | 'threw';
-      durationMs: number;
-    }>;
-
 export type ObservationEnd = Readonly<{
-  result:
-    | 'completed'
-    | 'input_required'
-    | 'declined'
-    | 'cancelled'
-    | 'tool_error'
-    | 'handler_error';
+  result: ToolOutcome | 'input_required' | 'tool_error' | 'handler_error';
   durationMs: number;
 }>;
 
-/** Host callbacks receive payload-free facts and one terminal result; failures are isolated. */
-export type RequestObservation = Readonly<{
-  record(fact: ObservationFact): void | Promise<void>;
-  end(result: ObservationEnd): void | Promise<void>;
+/** Sink failures are isolated; custom facts remain the producer's responsibility. */
+export type RequestObservation<Fact = never> = Readonly<{
+  record: (fact: Fact) => void | Promise<void>;
+  end: (result: ObservationEnd) => void | Promise<void>;
 }>;
 
-/** Synchronous factory for a handler observation; must not return a Promise or thenable. */
-export type RequestObserver = (
-  context: ObservationContext
-) => RequestObservation | undefined;
+/** Synchronous factory; promises and thenables are unsupported. */
+export type RequestObserver<Bucket extends string = never, Fact = never> = (
+  context: ObservationContext<Bucket>
+) => RequestObservation<Fact> | undefined;
 
-type ConsumedTerminal = 'declined' | 'cancelled' | undefined;
-
-/**
- * Package-internal handle wrapping a host-supplied {@link RequestObservation}
- * with failure isolation. Not part of the public contract: hosts never see
- * this type, only the plain `record`/`end` shape they implement.
- */
-export type ObservationScope = Readonly<{
-  record(fact: ObservationFact): void;
-  end(result: ObservationEnd['result']): void;
-  /**
-   * Reads the terminal disposition implied by the last consumed
-   * decline/cancel action, for handlers that otherwise return an ordinary
-   * result. Callers must apply error precedence themselves: this is only
-   * consulted on an otherwise-ordinary return, never after a thrown or
-   * `isError` result.
-   */
-  consumedTerminal(): ConsumedTerminal;
+export type ToolClassification<Bucket extends string> = Readonly<{
+  buckets: readonly Bucket[];
+  classify: (name: string) => NoInfer<Bucket> | 'other';
 }>;
 
-/**
- * Begins an observation scope for one handler entry.
- *
- * Factory and sink failures are contained and never awaited or logged.
- * Unsupported asynchronous factories are discarded, consuming their rejection.
- * Synchronous callbacks can still block; this is not a CPU sandbox.
- */
-export function beginObservation(
-  observer: RequestObserver | undefined,
-  context: ObservationContext
-): ObservationScope | undefined {
-  if (!observer) {
-    return undefined;
-  }
+/** Package-internal lifecycle controls are never passed to a tool. */
+export type ObservationScope<Fact = never> = Readonly<{
+  tool: ToolObservation<Fact>;
+  end: (result: ObservationEnd['result']) => void;
+  outcome: () => ToolOutcome;
+}>;
 
-  const startedAt = performance.now();
-  let observation: RequestObservation | undefined;
-
+/** Snapshot configuration only when the caller has enabled observation. */
+export function snapshotToolClassification<Bucket extends string>(
+  configuration: ToolClassification<Bucket> | undefined
+): ((name: string) => Bucket | 'other') | undefined {
   try {
-    observation = observer(context);
-
-    if (observation instanceof Promise || isThenable(observation)) {
-      // A synchronous factory returning a runtime Promise is unsupported.
-      // Never await it; just consume any rejection and discard the scope.
-      Promise.prototype.then.call(
-        Promise.resolve(observation),
-        undefined,
-        drop
-      );
+    if (!configuration) return undefined;
+    const { buckets, classify } = configuration;
+    if (!Array.isArray(buckets) || typeof classify !== 'function') {
       return undefined;
     }
+    const allowed = new Set<string>();
+    for (const bucket of buckets) {
+      if (typeof bucket !== 'string') return undefined;
+      allowed.add(bucket);
+    }
+    return (name) => {
+      try {
+        const bucket = classify(name);
+        if (typeof bucket === 'string') {
+          return bucket === 'other' || allowed.has(bucket) ? bucket : 'other';
+        }
+        consumeAsync(bucket);
+      } catch {
+        // Classification cannot change handler behavior or expose raw names.
+      }
+      return 'other';
+    };
   } catch {
-    // Factory failure disables this scope; it must never affect the caller.
     return undefined;
   }
-
-  if (!observation) {
-    return undefined;
-  }
-
-  let ended = false;
-  let consumedTerminal: ConsumedTerminal;
-
-  return {
-    record(fact: ObservationFact): void {
-      // Reject late facts: once ended, this scope is inert.
-      if (ended) {
-        return;
-      }
-
-      if (fact.kind === 'input_response') {
-        consumedTerminal =
-          fact.action === 'decline'
-            ? 'declined'
-            : fact.action === 'cancel'
-              ? 'cancelled'
-              : undefined;
-      }
-
-      safeCall(() => observation!.record(fact));
-    },
-    end(result: ObservationEnd['result']): void {
-      // First end wins; duplicate end is a silent no-op, not a failure.
-      if (ended) {
-        return;
-      }
-      ended = true;
-
-      const durationMs = performance.now() - startedAt;
-      safeCall(() => observation!.end({ result, durationMs }));
-    },
-    consumedTerminal(): ConsumedTerminal {
-      return consumedTerminal;
-    },
-  };
 }
 
 /**
- * Calls `action`, swallowing any synchronous throw (including a throwing
- * property getter reached while evaluating `action`) and consuming any
- * rejection from a returned thenable without ever awaiting it.
+ * Factory and sink failures are contained, never awaited or logged.
+ * Synchronous callbacks can still block; this is not a CPU sandbox.
  */
+export function beginObservation<Bucket extends string = never, Fact = never>(
+  observer: RequestObserver<Bucket, Fact> | undefined,
+  context: ObservationContext<Bucket>,
+  startedAt?: number
+): ObservationScope<Fact> | undefined {
+  if (!observer) return undefined;
+  const start = startedAt ?? performance.now();
+  let observation: RequestObservation<Fact> | undefined;
+  try {
+    observation = observer(context);
+    if (consumeAsync(observation)) return undefined;
+  } catch {
+    return undefined;
+  }
+  if (!observation) return undefined;
+
+  let ended = false;
+  let outcome: ToolOutcome = 'completed';
+  return {
+    tool: {
+      record(fact): void {
+        if (!ended) safeCall(() => observation.record(fact));
+      },
+      setOutcome(result): void {
+        if (
+          !ended &&
+          (result === 'completed' ||
+            result === 'declined' ||
+            result === 'cancelled')
+        ) {
+          outcome = result;
+        }
+      },
+    },
+    end(result): void {
+      if (ended) return;
+      ended = true;
+      const durationMs = performance.now() - start;
+      safeCall(() => observation.end({ result, durationMs }));
+    },
+    outcome: () => outcome,
+  };
+}
+
 function safeCall(action: () => void | Promise<void>): void {
   try {
-    const result = action();
-
-    if (result !== undefined) {
-      // Bypass sink-owned catch/then overrides on native promises.
-      Promise.prototype.then.call(Promise.resolve(result), undefined, drop);
-    }
+    consumeAsync(action());
   } catch {
     // Telemetry-only failure: never surface, retry, or log the raw value.
   }
 }
 
-function isThenable(value: unknown): value is PromiseLike<unknown> {
-  if (
-    value === null ||
-    (typeof value !== 'object' && typeof value !== 'function')
-  ) {
-    return false;
+/** May throw during inspection or assimilation; callers isolate those failures. */
+function consumeAsync(value: unknown): boolean {
+  if (value instanceof Promise) {
+    // Bypass native promises' hostile own then/catch getters.
+    Promise.prototype.then.call(value, undefined, drop);
+    return true;
   }
-
-  return 'then' in value && typeof value.then === 'function';
+  if (
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    'then' in value &&
+    typeof value.then === 'function'
+  ) {
+    Promise.prototype.then.call(Promise.resolve(value), undefined, drop);
+    return true;
+  }
+  return false;
 }
 
 function drop(): void {}

@@ -1,7 +1,7 @@
 import { type ServerContext } from '@modelcontextprotocol/server';
 import {
   type Annotations,
-  type ObservationFact,
+  type ToolObservation,
   type Tool,
   tool,
 } from '@supabase/mcp-utils';
@@ -29,7 +29,8 @@ export type InjectableTool<
   Params extends z.ZodObject,
   OutputSchema extends z.ZodObject,
   Injected extends Partial<z.infer<Params>> = {},
-> = Tool<Params, OutputSchema> & {
+  Fact = never,
+> = Tool<Params, OutputSchema, Fact> & {
   /**
    * Optionally injects static parameter values into the tool's
    * execute function and removes them from the parameter schema.
@@ -44,6 +45,7 @@ export function injectableTool<
   Params extends z.ZodObject,
   OutputSchema extends z.ZodObject,
   Injected extends Partial<z.infer<Params>>,
+  Fact = never,
 >({
   description,
   annotations,
@@ -52,7 +54,7 @@ export function injectableTool<
   hidden,
   inject,
   execute,
-}: InjectableTool<Params, OutputSchema, Injected>) {
+}: InjectableTool<Params, OutputSchema, Injected, Fact>) {
   // If all injected parameters are undefined, return the original tool
   if (!inject || Object.values(inject).every((value) => value === undefined)) {
     return tool({
@@ -79,9 +81,9 @@ export function injectableTool<
   const executeWithInjection = async (
     args: z.infer<typeof cleanParametersSchema>,
     ctx: ServerContext,
-    record?: (fact: ObservationFact) => void
+    observation?: ToolObservation<Fact>
   ) => {
-    return execute({ ...args, ...inject } as z.infer<Params>, ctx, record);
+    return execute({ ...args, ...inject } as z.infer<Params>, ctx, observation);
   };
 
   return tool({
