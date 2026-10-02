@@ -466,7 +466,11 @@ describe('feature groups', () => {
     const { tools } = await client.listTools();
     const toolNames = tools.map((tool) => tool.name);
 
-    expect(toolNames).toEqual(['list_notebooks', 'get_notebook']);
+    expect(toolNames).toEqual([
+      'create_notebook',
+      'list_notebooks',
+      'get_notebook',
+    ]);
   });
 
   test.each(['database', 'debugging'])(
@@ -488,6 +492,17 @@ describe('feature groups', () => {
       );
     }
   );
+
+  test('platforms without notebook creation keep their existing notebook tools', async () => {
+    const { client } = await setup({
+      features: ['notebooks'],
+      platform: { notebooks: { listNotebooks: vi.fn(), getNotebook: vi.fn() } },
+    });
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
+      'list_notebooks',
+      'get_notebook',
+    ]);
+  });
 
   test('invalid group fails', async () => {
     const setupPromise = setup({
