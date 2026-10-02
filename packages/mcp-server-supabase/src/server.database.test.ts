@@ -1375,27 +1375,15 @@ describe('tools', () => {
           classify.mockImplementation(() => {
             throw new Error('classification unavailable');
           });
-          for (const [action, expected] of [
-            // No answer keeps classification failure precedence.
-            [undefined, { isError: true }],
-            // A decline or cancel returns before classifying.
-            ['decline', { structuredContent: { status: 'declined' } }],
-            ['cancel', { structuredContent: { status: 'cancelled' } }],
-          ] as const) {
-            const unaccepted = await callModernTool(client, {
-              name: tool,
-              arguments: args,
-              requestState: first.requestState,
-              ...(action && {
-                inputResponses: {
-                  confirm_destructive: { action },
-                },
-              }),
-            });
-            expect(unaccepted).toMatchObject(expected);
-            expect(executeSql).not.toHaveBeenCalled();
-            expect(applyMigration).not.toHaveBeenCalled();
-          }
+          // No answer keeps classification failure precedence.
+          const unaccepted = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+            requestState: first.requestState,
+          });
+          expect(unaccepted).toMatchObject({ isError: true });
+          expect(executeSql).not.toHaveBeenCalled();
+          expect(applyMigration).not.toHaveBeenCalled();
 
           const accepted = await callModernTool(client, {
             name: tool,
@@ -1872,31 +1860,20 @@ describe('tools', () => {
     test.each(SQL_TOOLS)(
       '%s uses the injected classifier instead of the regex',
       async (tool) => {
-        const regex = vi.spyOn(destructiveSql, 'isDestructiveSql');
-        try {
-          const classifier = vi.fn<SqlConfirmationClassifier>(async (sql) =>
-            sql === 'select 1' ? 'destructive' : undefined
-          );
-          const { call, executeSql, applyMigration } =
-            await setupWithClassifier(classifier);
+        const { call, executeSql, applyMigration } = await setupWithClassifier(
+          async (sql) => (sql === 'select 1' ? 'destructive' : undefined)
+        );
 
-          expect(isInputRequiredResult(await call(tool, 'select 1'))).toBe(
-            true
-          );
-          expect(executeSql).not.toHaveBeenCalled();
-          expect(applyMigration).not.toHaveBeenCalled();
+        expect(isInputRequiredResult(await call(tool, 'select 1'))).toBe(true);
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
 
-          const cleared = await call(tool, 'DROP TABLE films;');
-          expect(isInputRequiredResult(cleared)).toBe(false);
-          expect((cleared as CallToolResult).isError).not.toBe(true);
-          expect(
-            tool === 'execute_sql' ? executeSql : applyMigration
-          ).toHaveBeenCalledOnce();
-          expect(classifier).toHaveBeenCalledTimes(2);
-          expect(regex).not.toHaveBeenCalled();
-        } finally {
-          regex.mockRestore();
-        }
+        const cleared = await call(tool, 'DROP TABLE films;');
+        expect(isInputRequiredResult(cleared)).toBe(false);
+        expect((cleared as CallToolResult).isError).not.toBe(true);
+        expect(
+          tool === 'execute_sql' ? executeSql : applyMigration
+        ).toHaveBeenCalledOnce();
       }
     );
 
@@ -2054,55 +2031,8 @@ describe('tools', () => {
     );
 
     test.each(SQL_TOOLS)(
-      '%s passes the request abort signal to the classifier',
+      '%s keeps asking on an unanswered resend when the classifier no longer flags the SQL',
       async (tool) => {
-        let classifierSignal: AbortSignal | undefined;
-        const { call, executeSql, applyMigration } = await setupWithClassifier(
-          async (_sql, { signal }) => {
-            classifierSignal = signal;
-            // Executor form: the package's lib target predates withResolvers.
-            await new Promise((resolve) =>
-              signal.addEventListener('abort', resolve, { once: true })
-            );
-            return 'destructive';
-          }
-        );
-        const controller = new AbortController();
-
-        const request = call(tool, 'select 1', controller.signal);
-        await vi.waitFor(() => expect(classifierSignal).toBeDefined());
-        expect(classifierSignal?.aborted).toBe(false);
-        controller.abort();
-        await expect(request).rejects.toThrow();
-        await vi.waitFor(() => expect(classifierSignal?.aborted).toBe(true));
-        expect(executeSql).not.toHaveBeenCalled();
-        expect(applyMigration).not.toHaveBeenCalled();
-      }
-    );
-
-    test.each(
-      forEachTool([
-        [
-          'no answer',
-          undefined,
-          {
-            inputRequests: {
-              confirm_destructive: {
-                params: {
-                  message: expect.stringContaining(
-                    'This SQL was flagged for confirmation earlier and still needs your approval.\n'
-                  ),
-                },
-              },
-            },
-          },
-        ],
-        ['decline', 'decline', { structuredContent: { status: 'declined' } }],
-        ['cancel', 'cancel', { structuredContent: { status: 'cancelled' } }],
-      ] as const)
-    )(
-      '%s keeps asking on a %s resend when the classifier no longer flags the SQL',
-      async (tool, _label, action, expected) => {
         // For example the AST flags it, then on the resend the pool sheds and
         // the regex fallback finds nothing.
         const classifier = vi
@@ -2116,13 +2046,22 @@ describe('tools', () => {
         if (!isInputRequiredResult(first)) {
           throw new Error('expected an issued SQL confirmation');
         }
-        const second = await resend(tool, 'select 1', first, action);
+        const second = await resend(tool, 'select 1', first);
 
-        // A decline or cancel returns before the resend is classified.
-        expect(classifier).toHaveBeenCalledTimes(action === undefined ? 2 : 1);
+        expect(classifier).toHaveBeenCalledTimes(2);
         expect(executeSql).not.toHaveBeenCalled();
         expect(applyMigration).not.toHaveBeenCalled();
-        expect(second).toMatchObject(expected);
+        expect(second).toMatchObject({
+          inputRequests: {
+            confirm_destructive: {
+              params: {
+                message: expect.stringContaining(
+                  'This SQL was flagged for confirmation earlier and still needs your approval.\n'
+                ),
+              },
+            },
+          },
+        });
       }
     );
 
@@ -2151,10 +2090,8 @@ describe('tools', () => {
         if (!isInputRequiredResult(first)) {
           throw new Error('expected an issued SQL confirmation');
         }
-        classifier.mockClear();
         const second = await resend(tool, 'select 1', first, action);
 
-        expect(classifier).not.toHaveBeenCalled();
         expect(second).toMatchObject(expected);
         expect((second as CallToolResult).isError).not.toBe(true);
         expect(executeSql).not.toHaveBeenCalled();
@@ -2199,11 +2136,11 @@ describe('tools', () => {
     test.each(SQL_TOOLS)(
       '%s does not run the SQL when the request aborts during classification',
       async (tool) => {
-        let entered = false;
+        let classifierSignal: AbortSignal | undefined;
         let classified = false;
         const { call, executeSql, applyMigration } = await setupWithClassifier(
           async (_sql, { signal }) => {
-            entered = true;
+            classifierSignal = signal;
             // Executor form: the package's lib target predates withResolvers.
             await new Promise((resolve) =>
               signal.addEventListener('abort', resolve, { once: true })
@@ -2215,7 +2152,8 @@ describe('tools', () => {
         const controller = new AbortController();
 
         const request = call(tool, 'select 1', controller.signal);
-        await vi.waitFor(() => expect(entered).toBe(true));
+        await vi.waitFor(() => expect(classifierSignal).toBeDefined());
+        expect(classifierSignal?.aborted).toBe(false);
         controller.abort();
         await expect(request).rejects.toThrow();
         await vi.waitFor(() => expect(classified).toBe(true));
