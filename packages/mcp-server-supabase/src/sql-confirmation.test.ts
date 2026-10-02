@@ -12,7 +12,7 @@ const options = () => ({ signal: new AbortController().signal });
 const classifierReturning = (classification: SqlConfirmationClassification) =>
   vi.fn<SqlConfirmationClassifier>(async () => classification);
 
-// The primary proof for the exported `./sql-confirmation` entry point.
+// regexClassifier is a public export; this pins its mapping directly, without the server.
 describe('regexClassifier', () => {
   test.each([
     ['DROP TABLE films;', 'destructive'],
