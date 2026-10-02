@@ -80,14 +80,20 @@ async function main() {
     cliContentApiUrl ?? process.env.SUPABASE_CONTENT_API_URL;
 
   if (http) {
+    const agentcatOtlpEndpoint =
+      process.env.SUPABASE_AGENTCAT_OTLP_ENDPOINT?.trim() || undefined;
     try {
       const entry = await startLocalHttpEntry({
         port: Number(cliPort),
         apiUrl,
         contentApiUrl,
         secretUrlTemplate,
+        agentcatOtlpEndpoint,
       });
       console.error(`Supabase MCP server listening on ${entry.url}`);
+      if (agentcatOtlpEndpoint) {
+        console.error('AgentCat OTLP analytics enabled.');
+      }
     } catch (error) {
       console.error(error);
       process.exitCode = 1;
