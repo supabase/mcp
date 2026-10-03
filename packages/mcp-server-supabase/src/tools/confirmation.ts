@@ -83,11 +83,37 @@ export type ApplyMigrationState = {
 export type DestructiveSqlState = ExecuteSqlState | ApplyMigrationState;
 export type CostConfirmationState = ProjectCostState | BranchCostState;
 
+/** A newly exposed table and the `auth.users` owner column found on it, if any. */
+export type RlsFixTable = {
+  schema: string;
+  name: string;
+  owner_column: string | null;
+};
+
+/**
+ * Signed `requestState` payload for the RLS fix elicitation that follows an
+ * `apply_migration` or `execute_sql` call. The SQL has already run when this
+ * is minted, so the retry that carries it only runs the fix SQL. `queryHash`
+ * and `name` bind it to the call that ran.
+ */
+export type RlsFixState = {
+  tool: 'rls_fix';
+  source: 'apply_migration' | 'execute_sql';
+  project_id: string;
+  /** The migration name; `null` for `execute_sql`. */
+  name: string | null;
+  queryHash: string;
+  tables: RlsFixTable[];
+};
+
 /**
  * Signed `requestState` payload for any confirmation elicitation this server
  * issues, discriminated by `tool`.
  */
-export type ConfirmationState = CostConfirmationState | DestructiveSqlState;
+export type ConfirmationState =
+  | CostConfirmationState
+  | DestructiveSqlState
+  | RlsFixState;
 
 /**
  * Signed state for URL-mode secret collection, bound to the project and name.
@@ -117,24 +143,46 @@ export const applyMigrationStateSchema = z.object({
   queryHash: z.string(),
 }) satisfies z.ZodType<ApplyMigrationState>;
 
+export const rlsFixStateSchema = z.object({
+  tool: z.literal('rls_fix'),
+  source: z.enum(['apply_migration', 'execute_sql']),
+  project_id: z.string(),
+  name: z.string().nullable(),
+  queryHash: z.string(),
+  tables: z
+    .array(
+      z.object({
+        schema: z.string(),
+        name: z.string(),
+        owner_column: z.string().nullable(),
+      })
+    )
+    .min(1),
+}) satisfies z.ZodType<RlsFixState>;
+
 export type CheckConfirmationStateResult =
   | { kind: 'proceed' }
   | { kind: 'reprompt'; result: InputRequiredResult }
   | { kind: 'terminal'; result: CallToolResult };
 
-type ConfirmationStateOptions<S extends ConfirmationState> = {
+type ConfirmationStateOptions<S extends ConfirmationState, C = undefined> = {
   ctx: ServerContext;
   tool: S['tool'];
   schema: z.ZodType<S>;
   requestKey: string;
   argsMatch: (state: S) => boolean;
   payloadMatch?: (state: S) => boolean;
+  /**
+   * Validates the accepted form content. Content that fails it re-prompts,
+   * like a failed `payloadMatch`. Omit for action-only confirmations.
+   */
+  contentSchema?: z.ZodType<C>;
   declinedText: string;
   cancelledText: string;
 };
 
-type ConfirmationDecision<S extends ConfirmationState> =
-  | { kind: 'proceed'; state: S }
+type ConfirmationDecision<S extends ConfirmationState, C = undefined> =
+  | { kind: 'proceed'; state: S; content: C }
   | { kind: 'reprompt' }
   | { kind: 'terminal'; result: CallToolResult };
 
@@ -157,9 +205,10 @@ export async function checkConfirmationState<S extends ConfirmationState>(
 }
 
 /** Inspect SDK-verified state without issuing a new confirmation. */
-export function inspectConfirmationState<S extends ConfirmationState>(
-  options: ConfirmationStateOptions<S>
-): ConfirmationDecision<S> {
+export function inspectConfirmationState<
+  S extends ConfirmationState,
+  C = undefined,
+>(options: ConfirmationStateOptions<S, C>): ConfirmationDecision<S, C> {
   const {
     ctx,
     tool,
@@ -167,6 +216,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     requestKey,
     argsMatch,
     payloadMatch,
+    contentSchema,
     declinedText,
     cancelledText,
   } = options;
@@ -238,7 +288,14 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     return { kind: 'reprompt' };
   }
 
-  return { kind: 'proceed', state };
+  if (!contentSchema) {
+    return { kind: 'proceed', state, content: undefined as C };
+  }
+
+  const content = contentSchema.safeParse(response.content);
+  return content.success
+    ? { kind: 'proceed', state, content: content.data }
+    : { kind: 'reprompt' };
 }
 
 /**

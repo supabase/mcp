@@ -1,5 +1,7 @@
 import {
   inputRequired,
+  type CallToolResult,
+  type InputRequiredResult,
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
@@ -24,13 +26,31 @@ import {
   type ElicitationState,
   executeSqlStateSchema,
   isFormCapable,
+  type RlsFixState,
+  rlsFixStateSchema,
 } from './confirmation.js';
 import { isDestructiveSql } from './destructive-sql.js';
+import {
+  buildRlsFixSql,
+  type ExposedTable,
+  exposedTableSchema,
+  formatTable,
+  listExposedTablesSql,
+  mayExposeTables,
+  newlyExposedTables,
+  RLS_FIX_CHOICES,
+  RLS_FIX_REQUEST_KEY,
+  rlsFixContentSchema,
+  rlsFixElicitationSchema,
+  rlsFixMessage,
+} from './rls-fix.js';
 import {
   injectableTool,
   type ToolDefs,
   wrapWithUntrustedDataBoundary,
 } from './util.js';
+
+type SqlToolName = 'execute_sql' | 'apply_migration';
 
 type DatabaseOperationToolsOptions = {
   database: DatabaseOperations;
@@ -38,7 +58,12 @@ type DatabaseOperationToolsOptions = {
   readOnly?: boolean;
   confirmation?: {
     codec: RequestStateCodec<ElicitationState>;
-    enabledTools: readonly ('execute_sql' | 'apply_migration')[];
+    enabledTools: readonly SqlToolName[];
+  };
+  /** Post-execution RLS fix elicitation for the listed tools. */
+  rlsFix?: {
+    codec: RequestStateCodec<ElicitationState>;
+    enabledTools: readonly SqlToolName[];
   };
 };
 
@@ -118,8 +143,23 @@ const applyMigrationInputSchema = z.object({
   query: z.string().describe('The SQL query to apply'),
 });
 
+const rlsFixOutcomeSchema = z
+  .object({
+    choice: z.enum(RLS_FIX_CHOICES),
+    tables: z.array(z.string()),
+    sql: z.string().nullable(),
+    migration: z.string().optional(),
+    message: z.string(),
+  })
+  .describe(
+    'Set when the SQL left tables without RLS, the user chose how to protect them, and the server ran the SQL for that choice.'
+  );
+
+type RlsFixOutcome = z.infer<typeof rlsFixOutcomeSchema>;
+
 const applyMigrationOutputSchema = z.object({
   success: z.boolean(),
+  rls_fix: rlsFixOutcomeSchema.optional(),
 });
 
 const executeSqlInputSchema = z.object({
@@ -129,6 +169,7 @@ const executeSqlInputSchema = z.object({
 
 const executeSqlOutputSchema = z.object({
   result: z.string(),
+  rls_fix: rlsFixOutcomeSchema.optional(),
 });
 
 // Appended to both raw-SQL tool descriptions (execute_sql, apply_migration),
@@ -212,8 +253,216 @@ export function getDatabaseTools({
   projectId,
   readOnly,
   confirmation,
+  rlsFix,
 }: DatabaseOperationToolsOptions) {
   const project_id = projectId;
+
+  async function listExposedTables(project_id: string) {
+    const { query, parameters } = listExposedTablesSql();
+    const rows = await database.executeSql(project_id, {
+      query,
+      parameters,
+      read_only: true,
+    });
+    return rows.map((row) => exposedTableSchema.parse(row));
+  }
+
+  /**
+   * Snapshot taken before the SQL runs, or `undefined` when the RLS check is
+   * off for this call. A failed snapshot skips the check (today's behavior).
+   */
+  async function snapshotBeforeRun(
+    tool: SqlToolName,
+    ctx: ServerContext,
+    project_id: string,
+    query: string
+  ): Promise<ExposedTable[] | undefined> {
+    if (
+      readOnly ||
+      !rlsFix?.enabledTools.includes(tool) ||
+      !isFormCapable(ctx) ||
+      !mayExposeTables(query)
+    ) {
+      return undefined;
+    }
+    return listExposedTables(project_id).catch(() => undefined);
+  }
+
+  async function askForRlsFix(
+    codec: RequestStateCodec<ElicitationState>,
+    state: RlsFixState,
+    ctx: ServerContext
+  ) {
+    return inputRequired({
+      inputRequests: {
+        [RLS_FIX_REQUEST_KEY]: inputRequired.elicit({
+          mode: 'form',
+          message: rlsFixMessage(state.tables),
+          requestedSchema: rlsFixElicitationSchema(state.tables),
+        }),
+      },
+      requestState: await codec.mint(state, ctx),
+    });
+  }
+
+  /**
+   * Runs after the SQL succeeded. Elicits a fix when the SQL left new tables
+   * exposed without RLS; otherwise returns `undefined` so the tool returns
+   * its normal result. A failed snapshot also returns `undefined`: the SQL
+   * already ran and must not look failed.
+   */
+  async function elicitRlsFix(
+    before: ExposedTable[] | undefined,
+    ctx: ServerContext,
+    call: Pick<RlsFixState, 'source' | 'project_id' | 'name'> & {
+      query: string;
+    }
+  ): Promise<InputRequiredResult | undefined> {
+    if (!before || !rlsFix) {
+      return undefined;
+    }
+    const after = await listExposedTables(call.project_id).catch(
+      () => undefined
+    );
+    const tables = after ? newlyExposedTables(before, after) : [];
+    if (tables.length === 0) {
+      return undefined;
+    }
+    const { query, ...bound } = call;
+    return askForRlsFix(
+      rlsFix.codec,
+      {
+        tool: 'rls_fix',
+        ...bound,
+        queryHash: await hashObject({ query }),
+        tables,
+      },
+      ctx
+    );
+  }
+
+  /**
+   * Handles the retry that answers an RLS fix elicitation. The original SQL
+   * already ran, so this never runs it again: it runs only the fix SQL, or
+   * returns a terminal result. Returns `undefined` when the request is not
+   * an RLS fix retry.
+   */
+  async function resumeRlsFix(
+    ctx: ServerContext,
+    call: Pick<RlsFixState, 'source' | 'project_id' | 'name'> & {
+      query: string;
+    }
+  ): Promise<
+    | CallToolResult
+    | InputRequiredResult
+    | { rls_fix: RlsFixOutcome }
+    | undefined
+  > {
+    const raw = ctx.mcpReq.requestState<{ tool?: unknown } | undefined>();
+    if (raw?.tool !== 'rls_fix') {
+      return undefined;
+    }
+    const ran =
+      call.source === 'apply_migration'
+        ? 'The migration was applied'
+        : 'The SQL ran';
+    if (!rlsFix || readOnly) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `${ran} on an earlier call and was not run again. The RLS fix is not available, so no RLS changes were made.`,
+          },
+        ],
+        structuredContent: { status: 'error' },
+        isError: true,
+      };
+    }
+
+    const queryHash = await hashObject({ query: call.query });
+    const tables = rlsFixStateSchema.safeParse(raw).data?.tables ?? [];
+    const exposed = tables.map(formatTable).join(', ');
+    const decision = inspectConfirmationState({
+      ctx,
+      tool: 'rls_fix',
+      schema: rlsFixStateSchema,
+      requestKey: RLS_FIX_REQUEST_KEY,
+      argsMatch: (state) =>
+        state.source === call.source &&
+        state.project_id === call.project_id &&
+        state.name === call.name &&
+        state.queryHash === queryHash,
+      contentSchema: rlsFixContentSchema(tables),
+      declinedText: `${ran}. The user declined the RLS fix, so no RLS changes were made. These tables are still exposed to anyone with the anon key: ${exposed}. Tell the user.`,
+      cancelledText: `${ran}. The user dismissed the RLS fix, so no RLS changes were made. These tables are still exposed to anyone with the anon key: ${exposed}. Tell the user.`,
+    });
+    if (decision.kind === 'terminal') {
+      return decision.result;
+    }
+    if (decision.kind === 'reprompt') {
+      // inspectConfirmationState only re-prompts after the state parsed.
+      return askForRlsFix(rlsFix.codec, rlsFixStateSchema.parse(raw), ctx);
+    }
+
+    const { state, content } = decision;
+    const { choice } = content;
+    const tableNames = state.tables.map(formatTable);
+    if (choice === 'leave_open') {
+      return {
+        rls_fix: {
+          choice,
+          tables: tableNames,
+          sql: null,
+          message:
+            'The user chose to leave these tables without RLS. Anyone with the anon key can read and change every row. Tell the user.',
+        },
+      };
+    }
+
+    // A follow-up migration keeps migration history in step with the schema.
+    // execute_sql changes were never in the history, so the fix stays out too.
+    const sql = buildRlsFixSql(choice, state.tables);
+    const migration =
+      state.source === 'apply_migration' && state.name !== null
+        ? `${state.name}_rls_fix`
+        : undefined;
+    try {
+      if (migration) {
+        await database.applyMigration(state.project_id, {
+          name: migration,
+          query: sql,
+        });
+      } else {
+        await database.executeSql(state.project_id, {
+          query: sql,
+          read_only: false,
+        });
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `${ran}, but the RLS fix failed: ${error instanceof Error ? error.message : String(error)}. Do not run the original SQL again. Check these tables with list_tables before you retry the fix: ${tableNames.join(', ')}.`,
+          },
+        ],
+        structuredContent: { status: 'error' },
+        isError: true,
+      };
+    }
+
+    return {
+      rls_fix: {
+        choice,
+        tables: tableNames,
+        sql,
+        ...(migration && { migration }),
+        message: migration
+          ? `After the migration, the server applied this SQL as migration ${migration}. Do not run it again or create policies with the same names.`
+          : 'After the SQL ran, the server ran this SQL. Do not run it again or create policies with the same names.',
+      },
+    };
+  }
 
   const databaseOperationTools = {
     list_tables: injectableTool({
@@ -393,6 +642,16 @@ export function getDatabaseTools({
           throw new Error('Cannot apply migration in read-only mode.');
         }
 
+        const resumed = await resumeRlsFix(ctx, {
+          source: 'apply_migration',
+          project_id,
+          name,
+          query,
+        });
+        if (resumed) {
+          return 'rls_fix' in resumed ? { success: true, ...resumed } : resumed;
+        }
+
         if (
           confirmation?.enabledTools.includes('apply_migration') &&
           isFormCapable(ctx)
@@ -446,8 +705,21 @@ export function getDatabaseTools({
           }
         }
 
+        const before = await snapshotBeforeRun(
+          'apply_migration',
+          ctx,
+          project_id,
+          query
+        );
         await database.applyMigration(project_id, { name, query });
-        return { success: true };
+        return (
+          (await elicitRlsFix(before, ctx, {
+            source: 'apply_migration',
+            project_id,
+            name,
+            query,
+          })) ?? { success: true }
+        );
       },
     }),
     execute_sql: injectableTool({
@@ -458,6 +730,19 @@ export function getDatabaseTools({
       },
       inject: { project_id },
       execute: async ({ query, project_id }, ctx: ServerContext) => {
+        const resumed = await resumeRlsFix(ctx, {
+          source: 'execute_sql',
+          project_id,
+          name: null,
+          query,
+        });
+        if (resumed) {
+          // Only empty results elicit, so the retry has no rows to repeat.
+          return 'rls_fix' in resumed
+            ? { result: wrapWithUntrustedDataBoundary([]), ...resumed }
+            : resumed;
+        }
+
         if (
           !readOnly &&
           confirmation?.enabledTools.includes('execute_sql') &&
@@ -509,14 +794,29 @@ export function getDatabaseTools({
           }
         }
 
+        const before = await snapshotBeforeRun(
+          'execute_sql',
+          ctx,
+          project_id,
+          query
+        );
         const result = await database.executeSql(project_id, {
           query,
           read_only: readOnly,
         });
 
-        return {
-          result: wrapWithUntrustedDataBoundary(result),
-        };
+        // A non-empty result would be lost across the retry, so only empty
+        // results (the usual DDL case) elicit.
+        const fix =
+          result.length === 0
+            ? await elicitRlsFix(before, ctx, {
+                source: 'execute_sql',
+                project_id,
+                name: null,
+                query,
+              })
+            : undefined;
+        return fix ?? { result: wrapWithUntrustedDataBoundary(result) };
       },
     }),
   };
