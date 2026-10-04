@@ -143,7 +143,7 @@ const server = createServer((req, res) => {
 });
 ```
 
-`toNodeHandler` comes from `@modelcontextprotocol/node`, which is not a dependency of this package. Install it alongside.
+`toNodeHandler` comes from `@modelcontextprotocol/node`. Your code imports it directly, so install it alongside.
 
 ## Other MCP servers
 
