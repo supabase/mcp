@@ -12,6 +12,10 @@ import {
   assertSuccess,
   createManagementApiClient,
 } from '../management-api/index.js';
+import {
+  assertSuccessV2,
+  createManagementApiV2Client,
+} from '../management-api-v2/index.js';
 import { generatePassword } from '../password.js';
 import {
   applyMigrationOptionsSchema,
@@ -39,6 +43,8 @@ import {
   type EdgeFunctionWithBody,
   type ExecuteSqlOptions,
   type GetLogsOptions,
+  type Notebook,
+  type NotebookOperations,
   type QueryLogsOptions,
   type ResetBranchOptions,
   type SecretOperations,
@@ -74,6 +80,11 @@ export function createSupabaseApiPlatform(
   const managementApiUrl = apiUrl ?? 'https://api.supabase.com';
 
   let managementApiClient = createManagementApiClient(
+    managementApiUrl,
+    accessToken
+  );
+
+  let managementApiV2Client = createManagementApiV2Client(
     managementApiUrl,
     accessToken
   );
@@ -840,6 +851,59 @@ export function createSupabaseApiPlatform(
     },
   };
 
+  const notebooks: NotebookOperations = {
+    async listNotebooks(projectId: string) {
+      const notebooks: Notebook[] = [];
+      let cursor: string | undefined;
+
+      do {
+        const response = await managementApiV2Client.GET(
+          '/v2/projects/{ref}/notebooks',
+          {
+            params: {
+              path: {
+                ref: projectId,
+              },
+              query: cursor ? { page: { after: cursor } } : undefined,
+            },
+          }
+        );
+
+        assertSuccessV2(response, "Failed to retrieve project's notebooks");
+
+        notebooks.push(
+          ...response.data.data.map(({ id, attributes }) => ({
+            id,
+            ...attributes,
+          }))
+        );
+
+        cursor = getNextNotebooksCursor(response.data.links.next);
+      } while (cursor);
+
+      return notebooks;
+    },
+    async getNotebook(projectId: string, notebookId: string) {
+      const response = await managementApiV2Client.GET(
+        '/v2/projects/{ref}/notebooks/{id}',
+        {
+          params: {
+            path: {
+              ref: projectId,
+              id: notebookId,
+            },
+          },
+        }
+      );
+
+      assertSuccessV2(response, 'Failed to retrieve notebook');
+
+      const { id, attributes } = response.data.data;
+
+      return { id, ...attributes };
+    },
+  };
+
   const platform: SupabasePlatform = {
     async init(info: InitData) {
       const { clientInfo } = info;
@@ -847,13 +911,19 @@ export function createSupabaseApiPlatform(
         throw new Error('Client info is required');
       }
 
-      // Re-initialize the management API client with the user agent
+      // Re-initialize the management API clients with the user agent
+      const userAgentHeaders = {
+        'User-Agent': `supabase-mcp/${version} (${clientInfo.name}/${clientInfo.version})`,
+      };
       managementApiClient = createManagementApiClient(
         managementApiUrl,
         accessToken,
-        {
-          'User-Agent': `supabase-mcp/${version} (${clientInfo.name}/${clientInfo.version})`,
-        }
+        userAgentHeaders
+      );
+      managementApiV2Client = createManagementApiV2Client(
+        managementApiUrl,
+        accessToken,
+        userAgentHeaders
       );
     },
     account,
@@ -864,9 +934,23 @@ export function createSupabaseApiPlatform(
     branching,
     storage,
     secrets,
+    notebooks,
   };
 
   return platform;
+}
+
+/**
+ * Extracts the `page[after]` cursor from a JSON:API `links.next` URL path
+ * (e.g. `/v2/projects/{ref}/notebooks?page[size]=10&page[after]=<cursor>`).
+ */
+function getNextNotebooksCursor(next: string | null | undefined) {
+  if (!next) {
+    return undefined;
+  }
+
+  const url = new URL(next, 'https://supabase.com');
+  return url.searchParams.get('page[after]') ?? undefined;
 }
 
 function getProjectDomain(apiHostname: string) {
