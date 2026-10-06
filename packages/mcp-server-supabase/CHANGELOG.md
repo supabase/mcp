@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.13.0...mcp-server-supabase-v0.14.0) (2026-10-06)
+
+
+### Features
+
+* **advisors:** add health advisor support ([#420](https://github.com/supabase/mcp/issues/420)) ([8a26508](https://github.com/supabase/mcp/commit/8a2650891e2fa6e5e895075663ba4f35867083d6))
+
 ## [0.13.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.12.0...mcp-server-supabase-v0.13.0) (2026-09-17)
 
 
