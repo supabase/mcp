@@ -218,8 +218,9 @@ export function getBranchingTools({
         }
 
         // confirmation is the server option enabling inline confirmation; legacy means no form support or no configuration.
-        const legacyReason =
-          confirmation ? 'capability_missing' : 'not_configured';
+        const legacyReason = confirmation
+          ? 'capability_missing'
+          : 'not_configured';
 
         if (confirmation && isFormCapable(ctx)) {
           const { codec } = confirmation;
