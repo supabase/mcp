@@ -2,7 +2,12 @@ import { ACCESS_TOKEN, API_URL, createProjectFixture } from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabaseMcpServerOptions } from './server.js';
-import * as destructiveSql from './tools/destructive-sql.js';
+import {
+  regexClassifier,
+  type SqlConfirmationClassification,
+  type SqlConfirmationClassifier,
+  withFallback,
+} from './sql-confirmation.js';
 import { isInputRequiredResult } from '@modelcontextprotocol/client';
 import type {
   CallToolRequestParams,
@@ -11,6 +16,7 @@ import type {
   InputRequiredResult,
 } from '@modelcontextprotocol/client';
 import { HttpResponse, http } from 'msw';
+import { setImmediate } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const harness = createServerHarness();
@@ -992,103 +998,6 @@ describe('tools', () => {
   }
 
   describe('execute_sql destructive confirmation via elicitation', () => {
-    test.each(['execute_sql', 'apply_migration'] as const)(
-      '%s accepted retry executes original SQL when classification is unavailable',
-      async (tool) => {
-        const { client, platform } = await setupModern({
-          clientCapabilities: FORM_CAPABLE,
-        });
-        const query = '-- preserve this comment\nDROP TABLE films;';
-        const args = {
-          project_id: 'test-project',
-          query,
-          ...(tool === 'apply_migration' && { name: 'drop_films' }),
-        };
-        const executeSql = vi
-          .spyOn(platform.database!, 'executeSql')
-          .mockResolvedValue([]);
-        const applyMigration = vi
-          .spyOn(platform.database!, 'applyMigration')
-          .mockResolvedValue(undefined);
-        const originalClassify = destructiveSql.isDestructiveSql;
-        const classify = vi.spyOn(destructiveSql, 'isDestructiveSql');
-        try {
-          classify.mockImplementation(() => {
-            throw new Error('classification unavailable');
-          });
-          const initialFailure = await callModernTool(client, {
-            name: tool,
-            arguments: args,
-          });
-          expect(initialFailure).toMatchObject({ isError: true });
-          expect(isInputRequiredResult(initialFailure)).toBe(false);
-          expect(executeSql).not.toHaveBeenCalled();
-          expect(applyMigration).not.toHaveBeenCalled();
-          classify.mockImplementation(originalClassify);
-
-          const first = await callModernTool(client, {
-            name: tool,
-            arguments: args,
-          });
-          if (!isInputRequiredResult(first)) {
-            throw new Error('expected an issued SQL confirmation');
-          }
-          expect(executeSql).not.toHaveBeenCalled();
-          expect(applyMigration).not.toHaveBeenCalled();
-          classify.mockImplementation(() => {
-            throw new Error('classification unavailable');
-          });
-          for (const action of [undefined, 'decline', 'cancel'] as const) {
-            const unaccepted = await callModernTool(client, {
-              name: tool,
-              arguments: args,
-              requestState: first.requestState,
-              ...(action && {
-                inputResponses: {
-                  confirm_destructive: { action },
-                },
-              }),
-            });
-            // Non-acceptance retains classification failure precedence.
-            expect(unaccepted).toMatchObject({ isError: true });
-            expect(executeSql).not.toHaveBeenCalled();
-            expect(applyMigration).not.toHaveBeenCalled();
-          }
-
-          const accepted = await callModernTool(client, {
-            name: tool,
-            arguments: args,
-            requestState: first.requestState,
-            inputResponses: {
-              confirm_destructive: { action: 'accept', content: {} },
-            },
-          });
-          expect(isInputRequiredResult(accepted)).toBe(false);
-          expect((accepted as CallToolResult).isError).not.toBe(true);
-          if (tool === 'execute_sql') {
-            expect(executeSql).toHaveBeenCalledWith(
-              'test-project',
-              expect.objectContaining({ query })
-            );
-            expect(applyMigration).not.toHaveBeenCalled();
-          } else {
-            expect(applyMigration).toHaveBeenCalledWith('test-project', {
-              name: 'drop_films',
-              query,
-            });
-            expect((accepted as CallToolResult).content).toContainEqual({
-              type: 'text',
-              text: JSON.stringify({ success: true }),
-            });
-            expect(executeSql).not.toHaveBeenCalled();
-          }
-        } finally {
-          classify.mockRestore();
-          await client.close();
-        }
-      }
-    );
-
     test('form-capable client: non-destructive SQL runs without elicitation', async () => {
       const { client, platform } = await setupModern({
         clientCapabilities: FORM_CAPABLE,
@@ -1423,5 +1332,449 @@ describe('tools', () => {
 
       expect(applyMigration).toHaveBeenCalledOnce();
     });
+  });
+
+  describe('injected SQL confirmation classifier', () => {
+    const SQL_TOOLS = ['execute_sql', 'apply_migration'] as const;
+    type SqlTool = (typeof SQL_TOOLS)[number];
+
+    async function setupWithClassifier(classifier: SqlConfirmationClassifier) {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: { ...COST_CONFIRMATION, classifier },
+        },
+      });
+      const executeSql = vi
+        .spyOn(platform.database!, 'executeSql')
+        .mockResolvedValue([]);
+      const applyMigration = vi
+        .spyOn(platform.database!, 'applyMigration')
+        .mockResolvedValue(undefined);
+      const call = (tool: SqlTool, query: string, signal?: AbortSignal) =>
+        client.request(
+          {
+            method: 'tools/call',
+            params: {
+              name: tool,
+              arguments: {
+                project_id: 'test-project',
+                query,
+                ...(tool === 'apply_migration' && { name: 'classified' }),
+              },
+            },
+          },
+          { allowInputRequired: true, signal }
+        ) as Promise<CallToolResult | InputRequiredResult>;
+      const resend = (
+        tool: SqlTool,
+        query: string,
+        first: InputRequiredResult,
+        action?: 'accept' | 'decline' | 'cancel'
+      ) =>
+        callModernTool(client, {
+          name: tool,
+          arguments: {
+            project_id: 'test-project',
+            query,
+            ...(tool === 'apply_migration' && { name: 'classified' }),
+          },
+          requestState: first.requestState,
+          ...(action && {
+            inputResponses: {
+              confirm_destructive:
+                action === 'accept' ? { action, content: {} } : { action },
+            },
+          }),
+        }) as Promise<CallToolResult | InputRequiredResult>;
+      return { client, call, resend, executeSql, applyMigration };
+    }
+
+    test.each(SQL_TOOLS)(
+      '%s accepted retry executes original SQL when classification is unavailable',
+      async (tool) => {
+        let classification: SqlConfirmationClassification = {
+          failure: 'unavailable',
+        };
+        const { client, executeSql, applyMigration } =
+          await setupWithClassifier(async () => classification);
+        const query = '-- preserve this comment\nDROP TABLE films;';
+        const args = {
+          project_id: 'test-project',
+          query,
+          ...(tool === 'apply_migration' && { name: 'drop_films' }),
+        };
+        try {
+          const initialFailure = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+          });
+          expect(initialFailure).toMatchObject({ isError: true });
+          expect(isInputRequiredResult(initialFailure)).toBe(false);
+          expect(executeSql).not.toHaveBeenCalled();
+          expect(applyMigration).not.toHaveBeenCalled();
+          classification = 'destructive';
+
+          const first = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+          });
+          if (!isInputRequiredResult(first)) {
+            throw new Error('expected an issued SQL confirmation');
+          }
+          expect(executeSql).not.toHaveBeenCalled();
+          expect(applyMigration).not.toHaveBeenCalled();
+          classification = { failure: 'unavailable' };
+          // No answer keeps classification failure precedence.
+          const unaccepted = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+            requestState: first.requestState,
+          });
+          expect(unaccepted).toMatchObject({ isError: true });
+          expect(executeSql).not.toHaveBeenCalled();
+          expect(applyMigration).not.toHaveBeenCalled();
+
+          const accepted = await callModernTool(client, {
+            name: tool,
+            arguments: args,
+            requestState: first.requestState,
+            inputResponses: {
+              confirm_destructive: { action: 'accept', content: {} },
+            },
+          });
+          expect(isInputRequiredResult(accepted)).toBe(false);
+          expect((accepted as CallToolResult).isError).not.toBe(true);
+          if (tool === 'execute_sql') {
+            expect(executeSql).toHaveBeenCalledWith(
+              'test-project',
+              expect.objectContaining({ query })
+            );
+            expect(applyMigration).not.toHaveBeenCalled();
+          } else {
+            expect(applyMigration).toHaveBeenCalledWith('test-project', {
+              name: 'drop_films',
+              query,
+            });
+            expect((accepted as CallToolResult).content).toContainEqual({
+              type: 'text',
+              text: JSON.stringify({ success: true }),
+            });
+            expect(executeSql).not.toHaveBeenCalled();
+          }
+        } finally {
+          await client.close();
+        }
+      }
+    );
+
+    const forEachTool = <T extends readonly unknown[]>(cases: readonly T[]) =>
+      SQL_TOOLS.flatMap((tool) => cases.map((c) => [tool, ...c] as const));
+
+    test.each(SQL_TOOLS)(
+      '%s uses the injected classifier instead of the regex',
+      async (tool) => {
+        const { call, executeSql, applyMigration } = await setupWithClassifier(
+          async (sql) => (sql === 'select 1' ? 'destructive' : undefined)
+        );
+
+        expect(isInputRequiredResult(await call(tool, 'select 1'))).toBe(true);
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+
+        const cleared = await call(tool, 'DROP TABLE films;');
+        expect(isInputRequiredResult(cleared)).toBe(false);
+        expect((cleared as CallToolResult).isError).not.toBe(true);
+        expect(
+          tool === 'execute_sql' ? executeSql : applyMigration
+        ).toHaveBeenCalledOnce();
+      }
+    );
+
+    // The `withFallback(parser, regexClassifier)` recipe from the `classifier`
+    // option docs in server.ts, end to end at the option.
+    test.each(SQL_TOOLS)(
+      '%s runs the documented withFallback(parser, regexClassifier) recipe when the parser is unavailable',
+      async (tool) => {
+        const { call, executeSql, applyMigration } = await setupWithClassifier(
+          withFallback(
+            async () => ({ failure: 'unavailable' }),
+            regexClassifier
+          )
+        );
+
+        const destructive = await call(tool, 'DROP TABLE films;');
+        if (!isInputRequiredResult(destructive)) {
+          throw new Error('expected an input_required result');
+        }
+        expect(
+          destructive.inputRequests?.confirm_destructive?.params
+        ).toMatchObject({
+          message: expect.stringContaining(
+            'This SQL includes destructive operations'
+          ),
+        });
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+
+        expect(isInputRequiredResult(await call(tool, 'select 1'))).toBe(false);
+        expect(
+          tool === 'execute_sql' ? executeSql : applyMigration
+        ).toHaveBeenCalledOnce();
+      }
+    );
+
+    test.each(
+      forEachTool([
+        [
+          'destructive',
+          'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
+        ],
+        [
+          'do-heuristic',
+          'This SQL contains a DO block whose body contains text suggesting potentially destructive operations.',
+        ],
+        [
+          'unclassified',
+          'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.',
+        ],
+        [
+          { failure: 'oversized' },
+          'Could not check for destructive operations because the SQL is too large to check. Approving will allow an attempt to execute the original SQL.',
+        ],
+      ] as const)
+    )(
+      '%s asks for confirmation with the prompt for %j',
+      async (tool, classification, firstLine) => {
+        const { call, executeSql, applyMigration } = await setupWithClassifier(
+          async () => classification
+        );
+        const result = await call(tool, 'select 1');
+        if (!isInputRequiredResult(result)) {
+          throw new Error('expected an input_required result');
+        }
+        expect(result.inputRequests?.confirm_destructive?.params).toMatchObject(
+          { message: expect.stringContaining(`${firstLine}\n`) }
+        );
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each(
+      forEachTool([['unavailable'], ['timeout'], ['crashed']] as const)
+    )(
+      '%s stops with an error when the classifier reports %s',
+      async (tool, failure) => {
+        const { call, executeSql, applyMigration } = await setupWithClassifier(
+          async () => ({ failure })
+        );
+        const result = await call(tool, 'select 1');
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect(result).toMatchObject({
+          isError: true,
+          content: expect.arrayContaining([
+            {
+              type: 'text',
+              text: expect.stringContaining(`classifier ${failure}`),
+            },
+          ]),
+        });
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each(
+      forEachTool([
+        ['null', null],
+        ['empty string', ''],
+        ['false', false],
+        ['0', 0],
+        ['unknown reason', 'maybe-destructive'],
+        ['unknown failure kind', { failure: 'exploded' }],
+        ['failure with extra keys', { failure: 'oversized', reason: 'x' }],
+        ['object without failure', {}],
+        ['array', ['destructive']],
+      ] as const)
+    )(
+      '%s stops with an error when the classifier returns %s',
+      async (tool, _label, value) => {
+        // A result that broke the type contract, for example over IPC.
+        const { call, executeSql, applyMigration } = await setupWithClassifier(
+          (async () => value) as unknown as SqlConfirmationClassifier
+        );
+        const result = await call(tool, 'DROP TABLE films;');
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect(result).toMatchObject({
+          isError: true,
+          content: expect.arrayContaining([
+            {
+              type: 'text',
+              text: expect.stringContaining(
+                'classifier returned an invalid result'
+              ),
+            },
+          ]),
+        });
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each(SQL_TOOLS)(
+      '%s stops with an error when the classifier rejects',
+      async (tool) => {
+        const { call, executeSql, applyMigration } = await setupWithClassifier(
+          async () => {
+            throw new Error('classifier worker exited');
+          }
+        );
+        const result = await call(tool, 'select 1');
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect(result).toMatchObject({
+          isError: true,
+          content: expect.arrayContaining([
+            {
+              type: 'text',
+              text: expect.stringContaining('classifier worker exited'),
+            },
+          ]),
+        });
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each(SQL_TOOLS)(
+      '%s keeps asking on an unanswered resend when the classifier no longer flags the SQL',
+      async (tool) => {
+        // For example the AST flags it, then on the resend the pool sheds and
+        // the regex fallback finds nothing.
+        const classifier = vi
+          .fn<SqlConfirmationClassifier>()
+          .mockResolvedValueOnce('destructive')
+          .mockResolvedValue(undefined);
+        const { call, resend, executeSql, applyMigration } =
+          await setupWithClassifier(classifier);
+
+        const first = await call(tool, 'select 1');
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected an issued SQL confirmation');
+        }
+        const second = await resend(tool, 'select 1', first);
+
+        expect(classifier).toHaveBeenCalledTimes(2);
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+        expect(second).toMatchObject({
+          inputRequests: {
+            confirm_destructive: {
+              params: {
+                message: expect.stringContaining(
+                  'This SQL was flagged for confirmation earlier and still needs your approval.\n'
+                ),
+              },
+            },
+          },
+        });
+      }
+    );
+
+    test.each(
+      forEachTool([
+        ['decline', 'rejects', { structuredContent: { status: 'declined' } }],
+        ['decline', 'crashed', { structuredContent: { status: 'declined' } }],
+        ['cancel', 'rejects', { structuredContent: { status: 'cancelled' } }],
+        ['cancel', 'crashed', { structuredContent: { status: 'cancelled' } }],
+      ] as const)
+    )(
+      '%s returns a %s resend even when the classifier %s',
+      async (tool, action, failure, expected) => {
+        const classifier = vi
+          .fn<SqlConfirmationClassifier>()
+          .mockResolvedValueOnce('destructive');
+        if (failure === 'rejects') {
+          classifier.mockRejectedValue(new Error('classifier worker exited'));
+        } else {
+          classifier.mockResolvedValue({ failure: 'crashed' });
+        }
+        const { call, resend, executeSql, applyMigration } =
+          await setupWithClassifier(classifier);
+
+        const first = await call(tool, 'select 1');
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected an issued SQL confirmation');
+        }
+        const second = await resend(tool, 'select 1', first, action);
+
+        expect(second).toMatchObject(expected);
+        expect((second as CallToolResult).isError).not.toBe(true);
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each(
+      forEachTool([['destructive'], [{ failure: 'oversized' }]] as const)
+    )(
+      '%s runs once on an accepted bound resend after a %j prompt',
+      async (tool, classification) => {
+        // A second classification would fail, so the accepted resend must not
+        // depend on one.
+        const classifier = vi
+          .fn<SqlConfirmationClassifier>()
+          .mockResolvedValueOnce(classification)
+          .mockResolvedValue({ failure: 'crashed' });
+        const { call, resend, executeSql, applyMigration } =
+          await setupWithClassifier(classifier);
+
+        const first = await call(tool, 'select 1');
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected an issued SQL confirmation');
+        }
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+
+        const accepted = await resend(tool, 'select 1', first, 'accept');
+        expect(isInputRequiredResult(accepted)).toBe(false);
+        expect((accepted as CallToolResult).isError).not.toBe(true);
+        expect(
+          tool === 'execute_sql' ? executeSql : applyMigration
+        ).toHaveBeenCalledOnce();
+      }
+    );
+
+    test.each(SQL_TOOLS)(
+      '%s does not run the SQL when the request aborts during classification',
+      async (tool) => {
+        let classifierSignal: AbortSignal | undefined;
+        let classified = false;
+        const { call, executeSql, applyMigration } = await setupWithClassifier(
+          async (_sql, { signal }) => {
+            classifierSignal = signal;
+            // Executor form: the package's lib target predates withResolvers.
+            await new Promise((resolve) =>
+              signal.addEventListener('abort', resolve, { once: true })
+            );
+            classified = true;
+            return undefined;
+          }
+        );
+        const controller = new AbortController();
+
+        const request = call(tool, 'select 1', controller.signal);
+        await vi.waitFor(() => expect(classifierSignal).toBeDefined());
+        expect(classifierSignal?.aborted).toBe(false);
+        controller.abort();
+        await expect(request).rejects.toThrow();
+        await vi.waitFor(() => expect(classified).toBe(true));
+        // The rest of the handler runs on microtasks, which drain first.
+        await setImmediate();
+        expect(executeSql).not.toHaveBeenCalled();
+        expect(applyMigration).not.toHaveBeenCalled();
+      }
+    );
   });
 });

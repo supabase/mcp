@@ -49,6 +49,16 @@
       "types": "./dist/platform/api-platform.d.ts",
       "import": "./dist/platform/api-platform.js",
       "default": "./dist/platform/api-platform.cjs"
+    },
+    "./sql-confirmation": {
+      "import": {
+        "types": "./dist/sql-confirmation.d.ts",
+        "default": "./dist/sql-confirmation.js"
+      },
+      "default": {
+        "types": "./dist/sql-confirmation.d.cts",
+        "default": "./dist/sql-confirmation.cjs"
+      }
     }
   },
   "dependencies": {
