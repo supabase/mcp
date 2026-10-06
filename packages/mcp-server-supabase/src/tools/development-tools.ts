@@ -35,6 +35,12 @@ const getPublishableKeysOutputSchema = z.object({
 
 const generateTypescriptTypesInputSchema = z.object({
   project_id: z.string(),
+  included_schemas: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'List of schemas to include in the generated TypeScript types (e.g. ["public"]). When omitted, includes all exposed schemas.'
+    ),
 });
 
 const generateTypescriptTypesOutputSchema = generateTypescriptTypesResultSchema;
@@ -103,8 +109,11 @@ export function getDevelopmentTools({
     generate_typescript_types: injectableTool({
       ...developmentToolDefs.generate_typescript_types,
       inject: { project_id },
-      execute: async ({ project_id }) => {
-        return development.generateTypescriptTypes(project_id);
+      execute: async ({ project_id, included_schemas }) => {
+        return development.generateTypescriptTypes(
+          project_id,
+          included_schemas
+        );
       },
     }),
   };
