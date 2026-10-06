@@ -15,8 +15,13 @@ import {
   API_URL,
   MCP_CLIENT_NAME,
   MCP_CLIENT_VERSION,
+  mockContentApiSchemaLoadCount,
   setupMockApis,
 } from '../../test/mocks.js';
+import {
+  CONTENT_API_SCHEMA_TTL_MS,
+  invalidateContentApiSchemaCache,
+} from '../content-api/index.js';
 import { createSupabaseApiPlatform } from '../platform/api-platform.js';
 import { createSupabaseMcpHandler } from './http.js';
 
@@ -29,6 +34,8 @@ const cleanups: Array<() => Promise<void>> = [];
 
 beforeEach(() => {
   mockServer = setupMockApis();
+  // The schema cache is process-wide, so it would otherwise leak across tests.
+  invalidateContentApiSchemaCache();
 });
 
 afterEach(async () => {
@@ -108,6 +115,30 @@ describe('createSupabaseMcpHandler', () => {
       MODERN_PROTOCOL_VERSION
     );
     expect(tools.map((tool) => tool.name)).toContain('list_projects');
+  });
+
+  test('fetches the docs schema once across independently created handlers', async () => {
+    expect(mockContentApiSchemaLoadCount.value).toBe(0);
+
+    // Each handler is what the hosted deployment builds per request.
+    for (let i = 0; i < 3; i++) {
+      const { client } = await setupModernClient();
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name)).toContain('search_docs');
+    }
+
+    expect(mockContentApiSchemaLoadCount.value).toBe(1);
+  });
+
+  test('stamps the schema TTL and a private cacheScope on 2026-07-28 tools/list', async () => {
+    const { client } = await setupModernClient();
+
+    const result = await client.listTools();
+
+    expect(result).toMatchObject({
+      ttlMs: CONTENT_API_SCHEMA_TTL_MS,
+      cacheScope: 'private',
+    });
   });
 
   test('calls the same registered read-only business tool', async () => {
