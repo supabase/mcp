@@ -11,7 +11,7 @@ import {
   actionOnlyElicitationSchema,
   checkConfirmationState,
   isFormCapable,
-  observeCostOperation,
+  observeOperation,
   projectCostStateSchema,
   type ElicitationState,
 } from './confirmation.js';
@@ -334,7 +334,7 @@ export function getAccountTools({
               route: 'bypass',
               reason: 'zero_cost',
             });
-            return await observeCostOperation(observation?.record, () =>
+            return await observeOperation('cost', observation?.record, () =>
               account.createProject({ name, region, organization_id })
             );
           }
@@ -392,7 +392,7 @@ export function getAccountTools({
             case 'terminal':
               return confirmationState.result;
             case 'proceed':
-              return await observeCostOperation(observation?.record, () =>
+              return await observeOperation('cost', observation?.record, () =>
                 account.createProject({
                   name: confirmationState.state.name,
                   region: confirmationState.state.region,
@@ -416,7 +416,7 @@ export function getAccountTools({
           );
         }
 
-        return await observeCostOperation(observation?.record, () =>
+        return await observeOperation('cost', observation?.record, () =>
           account.createProject({ name, region, organization_id })
         );
       },

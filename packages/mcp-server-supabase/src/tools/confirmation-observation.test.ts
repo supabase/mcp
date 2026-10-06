@@ -9,27 +9,29 @@ import {
   actionOnlyElicitationSchema,
   branchCostStateSchema,
   checkConfirmationState,
-  observeCostOperation,
+  observeOperation,
   projectCostStateSchema,
   type CostConfirmationState,
 } from './confirmation.js';
 
 afterEach(() => vi.restoreAllMocks());
 
-describe('observeCostOperation', () => {
+describe('observeOperation', () => {
+  const feature = 'cost' as const;
   test('records started before execution and returned with exact duration', async () => {
     let now = 10;
     vi.spyOn(performance, 'now').mockImplementation(() => now);
     const facts: ObservationFact[] = [];
     const result = { id: 'created' };
-    const returned = await observeCostOperation(
+    const returned = await observeOperation(
+      feature,
       (fact) => {
         facts.push(fact);
         now += 2;
       },
       async () => {
         expect(facts).toEqual([
-          { kind: 'operation', feature: 'cost', disposition: 'started' },
+          { kind: 'operation', feature, disposition: 'started' },
         ]);
         now = 37;
         return result;
@@ -37,10 +39,10 @@ describe('observeCostOperation', () => {
     );
     expect(returned).toBe(result);
     expect(facts).toEqual([
-      { kind: 'operation', feature: 'cost', disposition: 'started' },
+      { kind: 'operation', feature, disposition: 'started' },
       {
         kind: 'operation',
-        feature: 'cost',
+        feature,
         disposition: 'returned',
         durationMs: 27,
       },
@@ -52,21 +54,22 @@ describe('observeCostOperation', () => {
     const facts: ObservationFact[] = [];
     vi.spyOn(performance, 'now').mockReturnValueOnce(5).mockReturnValueOnce(14);
     await expect(
-      observeCostOperation(
+      observeOperation(
+        feature,
         (fact) => facts.push(fact),
         async () => {
           expect(facts).toEqual([
-            { kind: 'operation', feature: 'cost', disposition: 'started' },
+            { kind: 'operation', feature, disposition: 'started' },
           ]);
           throw failure;
         }
       )
     ).rejects.toBe(failure);
     expect(facts).toEqual([
-      { kind: 'operation', feature: 'cost', disposition: 'started' },
+      { kind: 'operation', feature, disposition: 'started' },
       {
         kind: 'operation',
-        feature: 'cost',
+        feature,
         disposition: 'threw',
         durationMs: 9,
       },
@@ -78,7 +81,7 @@ describe('observeCostOperation', () => {
     const result = { id: 'created' };
     const promise = Promise.resolve(result);
     const run = vi.fn(() => promise);
-    const returned = observeCostOperation(undefined, run);
+    const returned = observeOperation(feature, undefined, run);
     expect(returned).toBe(promise);
     expect(await returned).toBe(result);
     expect(run).toHaveBeenCalledOnce();

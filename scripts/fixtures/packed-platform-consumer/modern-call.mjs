@@ -152,6 +152,15 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
       { type: 'text', text: JSON.stringify(project) },
     ]);
     assert.equal(creates, 1);
+    for (const scope of scopes) {
+      for (const event of [...scope.facts, ...scope.ends]) {
+        if ('durationMs' in event) {
+          assert.ok(Number.isFinite(event.durationMs));
+          assert.ok(event.durationMs >= 0);
+        }
+      }
+    }
+    assert.doesNotMatch(JSON.stringify(scopes), /PRIVATE_/);
     return tools.length;
   } finally {
     await client.close();

@@ -15,7 +15,7 @@ import {
   branchCostStateSchema,
   checkConfirmationState,
   isFormCapable,
-  observeCostOperation,
+  observeOperation,
   type ElicitationState,
 } from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
@@ -269,7 +269,7 @@ export function getBranchingTools({
             case 'terminal':
               return confirmationState.result;
             case 'proceed':
-              return await observeCostOperation(observation?.record, () =>
+              return await observeOperation('cost', observation?.record, () =>
                 branching.createBranch(confirmationState.state.project_id, {
                   name: confirmationState.state.name,
                 })
@@ -290,7 +290,7 @@ export function getBranchingTools({
             'Cost confirmation ID does not match the expected cost of creating a branch.'
           );
         }
-        return await observeCostOperation(observation?.record, () =>
+        return await observeOperation('cost', observation?.record, () =>
           branching.createBranch(project_id, { name })
         );
       },

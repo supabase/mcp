@@ -7,7 +7,7 @@ import {
   type ServerContext,
 } from '@modelcontextprotocol/server';
 import type { ToolObservation } from '@supabase/mcp-utils';
-import type { ObservationFact } from '../observation.js';
+import type { ConfirmationFeature, ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { BranchCost, Cost } from '../pricing.js';
 import { AWS_REGION_CODES } from '../regions.js';
@@ -308,8 +308,9 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   return { kind: 'proceed', state };
 }
 
-/** Records only the duration and disposition of the actual cost-bearing operation. */
-export function observeCostOperation<T>(
+/** Records only the duration and disposition of the actual backend operation. */
+export function observeOperation<T>(
+  feature: ConfirmationFeature,
   record:
     | ((fact: Extract<ObservationFact, { kind: 'operation' }>) => void)
     | undefined,
@@ -319,13 +320,13 @@ export function observeCostOperation<T>(
     return run();
   }
   const startedAt = performance.now();
-  record({ kind: 'operation', feature: 'cost', disposition: 'started' });
+  record({ kind: 'operation', feature, disposition: 'started' });
   return (async () => {
     try {
       const result = await run();
       record({
         kind: 'operation',
-        feature: 'cost',
+        feature,
         disposition: 'returned',
         durationMs: performance.now() - startedAt,
       });
@@ -333,7 +334,7 @@ export function observeCostOperation<T>(
     } catch (error) {
       record({
         kind: 'operation',
-        feature: 'cost',
+        feature,
         disposition: 'threw',
         durationMs: performance.now() - startedAt,
       });
