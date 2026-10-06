@@ -15,7 +15,20 @@ export type ObservedTool =
 
 export type ConfirmationFeature = 'cost' | 'destructive_sql';
 
-/** Closed, payload-free facts for confirmation and operation attempts. */
+/**
+ * Bounded, payload-free facts for confirmation and backend invocation attempts.
+ *
+ * Fact and discriminator unions are finite for each version but can grow.
+ * Consumers must handle additional values when upgrading.
+ * `not_destructive` is a classifier result, not a SQL safety or authorization verdict.
+ *
+ * Operation facts describe backend invocation: `returned` does not prove readiness
+ * or commit, and `threw` does not prove that nothing committed. For `destructive_sql`,
+ * they also cover SELECT, read-only calls, and calls that bypass confirmation due
+ * to configuration or missing capabilities, when those calls reach the backend.
+ * Blocked calls, confirmation prompts, and honored declines or cancellations
+ * emit no operation facts.
+ */
 export type ObservationFact =
   | Readonly<{
       kind: 'confirmation_decision';

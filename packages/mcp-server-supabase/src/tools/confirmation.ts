@@ -124,7 +124,7 @@ export type CheckConfirmationStateResult =
   | { kind: 'reprompt'; result: InputRequiredResult }
   | { kind: 'terminal'; result: CallToolResult };
 
-type ConfirmationStateOptions<S extends ConfirmationState> = {
+export type ConfirmationStateOptions<S extends ConfirmationState> = {
   ctx: ServerContext;
   tool: S['tool'];
   schema: z.ZodType<S>;

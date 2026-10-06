@@ -238,9 +238,21 @@ describe.each(tools)('%s SQL observations', (name) => {
     }
   );
 
-  test.each(['tool_mismatch', 'arguments_mismatch'] as const)(
-    'rejects truthful %s without consuming accept',
-    async (mismatch) => {
+  test.each([
+    { change: 'tool', mismatch: 'tool_mismatch', changedArgs: {} },
+    {
+      change: 'query',
+      mismatch: 'arguments_mismatch',
+      changedArgs: { query: `${query}\nDROP TABLE "PRIVATE_OTHER";` },
+    },
+    {
+      change: 'project_id',
+      mismatch: 'arguments_mismatch',
+      changedArgs: { project_id: 'PRIVATE_OTHER_PROJECT' },
+    },
+  ] as const)(
+    'rejects changed $change without consuming accept',
+    async ({ mismatch, changedArgs }) => {
       const h = await setup();
       const other = name === 'execute_sql' ? 'apply_migration' : 'execute_sql';
       const first = issued(
@@ -250,9 +262,7 @@ describe.each(tools)('%s SQL observations', (name) => {
         requestState: first.requestState,
         arguments: {
           ...h.args(name),
-          ...(mismatch === 'arguments_mismatch'
-            ? { query: `${query}\nDROP TABLE "PRIVATE_OTHER";` }
-            : {}),
+          ...changedArgs,
         },
         inputResponses: accept,
       });
