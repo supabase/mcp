@@ -217,6 +217,10 @@ export function getBranchingTools({
           throw new Error('Cannot create a branch in read-only mode.');
         }
 
+        // confirmation is the server option enabling inline confirmation; legacy means no form support or no configuration.
+        const legacyReason =
+          confirmation ? 'capability_missing' : 'not_configured';
+
         if (confirmation && isFormCapable(ctx)) {
           const { codec } = confirmation;
           const cost = getBranchCost();
@@ -282,7 +286,7 @@ export function getBranchingTools({
           kind: 'confirmation_decision',
           feature: 'cost',
           route: 'legacy',
-          reason: confirmation ? 'capability_missing' : 'not_configured',
+          reason: legacyReason,
         });
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
