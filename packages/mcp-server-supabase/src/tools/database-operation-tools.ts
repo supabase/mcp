@@ -58,7 +58,9 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
   const { observation, askForConfirmation } = options;
   const record = observation?.record;
   // State facts and outcome count only when the inspected decision applies.
-  const stagedFacts: ObservationFact[] | undefined = observation ? [] : undefined;
+  const stagedFacts: ObservationFact[] | undefined = observation
+    ? []
+    : undefined;
   let stagedOutcome: ToolOutcome | undefined;
   const confirmationState = inspectConfirmationState({
     ...options,
