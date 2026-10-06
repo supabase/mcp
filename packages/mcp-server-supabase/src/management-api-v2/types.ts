@@ -849,7 +849,8 @@ export interface components {
         };
         ErrorResponseBodyAPIErrorObject: {
             id?: string;
-            code: string;
+            /** @enum {string} */
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
             message: string;
             description?: string;
             links?: {
@@ -867,7 +868,27 @@ export interface components {
             meta?: {
                 [key: string]: unknown;
             };
-            issues?: components["schemas"]["ErrorResponseBodyAPIErrorObject"][];
+            issues?: {
+                id?: string;
+                code: string;
+                message: string;
+                description?: string;
+                links?: {
+                    [key: string]: {
+                        href: string;
+                        rel?: string;
+                        title?: string;
+                        type?: string;
+                        describedby?: string;
+                        meta?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                meta?: {
+                    [key: string]: unknown;
+                };
+            }[];
         };
         ErrorResponseBody: {
             error: components["schemas"]["ErrorResponseBodyAPIErrorObject"];
@@ -2190,7 +2211,8 @@ export interface components {
         V2CreateInvitationsResponse_Output: {
             error?: {
                 id?: string;
-                code: string;
+                /** @enum {string} */
+                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
                 message: string;
                 description?: string;
                 links?: {
