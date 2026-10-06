@@ -1,4 +1,8 @@
-import { isCallToolResult, Server } from '@modelcontextprotocol/server';
+import {
+  isCallToolResult,
+  ResourceNotFoundError,
+  Server,
+} from '@modelcontextprotocol/server';
 import type {
   CallToolResult,
   ClientCapabilities,
@@ -403,69 +407,57 @@ export function createMcpServer(options: McpServerOptions) {
     server.setRequestHandler(
       'resources/read',
       async (request): Promise<ReadResourceResult> => {
-        try {
-          const allResources = await getResources();
-          const { uri } = request.params;
+        // resources/read has no isError result shape: errors must be thrown
+        // so the client receives a JSON-RPC error with the real message.
+        const allResources = await getResources();
+        const { uri } = request.params;
 
-          const resources = allResources.filter(
-            (resource) => 'uri' in resource
-          );
-          const resource = resources.find((resource) =>
-            compareUris(resource.uri, uri)
-          );
+        const resources = allResources.filter((resource) => 'uri' in resource);
+        const resource = resources.find((resource) =>
+          compareUris(resource.uri, uri)
+        );
 
-          if (resource) {
-            const result = await resource.read(uri as `${string}://${string}`);
-
-            const contents = Array.isArray(result) ? result : [result];
-
-            return {
-              contents,
-            };
-          }
-
-          const resourceTemplates = allResources.filter(
-            (resource) => 'uriTemplate' in resource
-          );
-          const resourceTemplateUris = resourceTemplates.map(
-            ({ uriTemplate }) => assertValidUri(uriTemplate)
-          );
-
-          const templateMatch = matchUriTemplate(uri, resourceTemplateUris);
-
-          if (!templateMatch) {
-            throw new Error('resource not found');
-          }
-
-          const resourceTemplate = resourceTemplates.find(
-            (r) => r.uriTemplate === templateMatch.uri
-          );
-
-          if (!resourceTemplate) {
-            throw new Error('resource not found');
-          }
-
-          const result = await resourceTemplate.read(
-            uri as `${string}://${string}`,
-            templateMatch.params
-          );
+        if (resource) {
+          const result = await resource.read(uri as `${string}://${string}`);
 
           const contents = Array.isArray(result) ? result : [result];
 
           return {
             contents,
           };
-        } catch (error) {
-          return {
-            isError: true,
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({ error: enumerateError(error) }),
-              },
-            ],
-          } as any;
         }
+
+        const resourceTemplates = allResources.filter(
+          (resource) => 'uriTemplate' in resource
+        );
+        const resourceTemplateUris = resourceTemplates.map(({ uriTemplate }) =>
+          assertValidUri(uriTemplate)
+        );
+
+        const templateMatch = matchUriTemplate(uri, resourceTemplateUris);
+
+        if (!templateMatch) {
+          throw new ResourceNotFoundError(uri);
+        }
+
+        const resourceTemplate = resourceTemplates.find(
+          (r) => r.uriTemplate === templateMatch.uri
+        );
+
+        if (!resourceTemplate) {
+          throw new ResourceNotFoundError(uri);
+        }
+
+        const result = await resourceTemplate.read(
+          uri as `${string}://${string}`,
+          templateMatch.params
+        );
+
+        const contents = Array.isArray(result) ? result : [result];
+
+        return {
+          contents,
+        };
       }
     );
   }
