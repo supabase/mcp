@@ -80,6 +80,18 @@ export type ApplyMigrationState = {
   queryHash: string;
 };
 
+/**
+ * Signed `requestState` payload for the `run_notebook` confirmation, bound to
+ * the notebook, execution mode and a hash of the query cells shown to the user.
+ */
+export type RunNotebookState = {
+  tool: 'run_notebook';
+  project_id: string;
+  notebook_id: string;
+  cellsHash: string;
+  readOnly: boolean;
+};
+
 export type DestructiveSqlState = ExecuteSqlState | ApplyMigrationState;
 export type CostConfirmationState = ProjectCostState | BranchCostState;
 
@@ -87,7 +99,10 @@ export type CostConfirmationState = ProjectCostState | BranchCostState;
  * Signed `requestState` payload for any confirmation elicitation this server
  * issues, discriminated by `tool`.
  */
-export type ConfirmationState = CostConfirmationState | DestructiveSqlState;
+export type ConfirmationState =
+  | CostConfirmationState
+  | DestructiveSqlState
+  | RunNotebookState;
 
 /**
  * Signed state for URL-mode secret collection, bound to the project and name.
@@ -116,6 +131,14 @@ export const applyMigrationStateSchema = z.object({
   name: z.string(),
   queryHash: z.string(),
 }) satisfies z.ZodType<ApplyMigrationState>;
+
+export const runNotebookStateSchema = z.object({
+  tool: z.literal('run_notebook'),
+  project_id: z.string(),
+  notebook_id: z.string(),
+  cellsHash: z.string(),
+  readOnly: z.boolean(),
+}) satisfies z.ZodType<RunNotebookState>;
 
 export type CheckConfirmationStateResult =
   | { kind: 'proceed' }

@@ -24,6 +24,7 @@ import {
   API_URL,
   createOrganization,
   createProject,
+  createProjectFixture,
   MCP_CLIENT_NAME,
   MCP_CLIENT_VERSION,
   mockBranches,
@@ -868,6 +869,71 @@ describe('startLocalHttpEntry', () => {
     const again = await client.listTools();
     expect(again.tools).toEqual(tools);
   });
+
+  test.each(['', 'execute_sql', 'run_notebook'])(
+    'notebook run confirmation respects HTTP skip_elicitations=%j',
+    async (skip) => {
+      const skipped = skip === 'run_notebook';
+      const { project } = await createProjectFixture();
+      await project.db.exec('create table films (id int)');
+      const notebook = project.createNotebook({
+        name: 'HTTP execution',
+        content: {
+          schema_version: 1,
+          cells: [
+            {
+              id: 'first',
+              type: 'database',
+              sql: 'create table notebook_probe (id int)',
+              row_limit: 100,
+            },
+            {
+              id: 'last',
+              type: 'database',
+              sql: 'drop table films',
+              row_limit: 100,
+            },
+          ],
+        },
+      });
+      const client = await connect(
+        { pin: MODERN_PROTOCOL_VERSION },
+        `project_ref=${project.id}&features=notebooks,database&skip_elicitations=${skip}`,
+        {
+          capabilities: { elicitation: { form: {} } },
+          inputRequired: { autoFulfill: false },
+        }
+      );
+      const result = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'run_notebook',
+            arguments: {
+              notebook_id: notebook.id,
+              expected_updated_at: notebook.attributes.updated_at,
+            },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+      expect(isInputRequiredResult(result)).toBe(!skipped);
+      if (!isInputRequiredResult(result)) {
+        expect(result.isError).toBeFalsy();
+      }
+      expect(
+        (
+          await project.db.query(
+            "select to_regclass('public.notebook_probe') as name"
+          )
+        ).rows
+      ).toEqual([{ name: skipped ? 'notebook_probe' : null }]);
+      expect(
+        (await project.db.query("select to_regclass('public.films') as name"))
+          .rows
+      ).toEqual([{ name: skipped ? null : 'films' }]);
+    }
+  );
 
   test.each(['', ' , '])(
     'keeps elicitation defaults for blank CSV %j',
