@@ -16,10 +16,10 @@ import { z } from 'zod/v4';
 
 import type { ExtractParams } from './types.js';
 import { assertValidUri, compareUris, matchUriTemplate } from './util.js';
-import { beginObservation, snapshotToolClassification } from './observation.js';
+import { beginObservation } from './observation.js';
 import type {
   ObservationEnd,
-  ToolClassification,
+  ObservedMethod,
   ToolObservation,
   RequestObserver,
 } from './observation.js';
@@ -307,16 +307,9 @@ export type McpServerOptions<Bucket extends string = never, Fact = never> = {
     verify?: (state: string, ctx: ServerContext) => unknown | Promise<unknown>;
   };
 
-  /**
-   * Optional per-request observation factory for lightweight, payload-free
-   * lifecycle instrumentation. Invoked synchronously at most once per
-   * registered handler entry (`tools/call`, `tools/list`, `resources/list`,
-   * `resources/templates/list`, `resources/read`); its return value is
-   * never awaited. Omitting it disables observation entirely: no context
-   * object, clock read, or fact is ever produced.
-   */
+  /** Optional per-request observer; see ObservedMethod for covered handlers. */
   observer?: RequestObserver<Bucket, Fact>;
-  toolClassification?: ToolClassification<Bucket>;
+  classifyTool?: (name: string) => Bucket | 'other';
 };
 
 /**
@@ -328,9 +321,6 @@ export type McpServerOptions<Bucket extends string = never, Fact = never> = {
 export function createMcpServer<Bucket extends string = never, Fact = never>(
   options: McpServerOptions<Bucket, Fact>
 ) {
-  const classifyTool = options.observer
-    ? snapshotToolClassification(options.toolClassification)
-    : undefined;
   const capabilities: ServerCapabilities = {};
 
   if (options.resources) {
@@ -374,6 +364,24 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
       : options.tools;
   }
 
+  async function observed<Result extends object>(
+    method: Exclude<ObservedMethod, 'tools/call'>,
+    run: () => Promise<Result>
+  ): Promise<Result> {
+    const scope = beginObservation(options.observer, { method });
+    let outcome: ObservationEnd['result'] = 'handler_error';
+    try {
+      const result = await run();
+      outcome =
+        'isError' in result && result.isError === true
+          ? 'tool_error'
+          : 'completed';
+      return result;
+    } finally {
+      scope?.end(outcome);
+    }
+  }
+
   server.oninitialized = async () => {
     const clientInfo = server.getClientVersion();
     const clientCapabilities = server.getClientCapabilities();
@@ -397,17 +405,10 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
   if (options.resources) {
     server.setRequestHandler(
       'resources/list',
-      async (): Promise<ListResourcesResult> => {
-        const scope = options.observer
-          ? beginObservation(options.observer, {
-              method: 'resources/list',
-            })
-          : undefined;
-        let outcome: ObservationEnd['result'] = 'handler_error';
-
-        try {
+      (): Promise<ListResourcesResult> =>
+        observed('resources/list', async () => {
           const allResources = await getResources();
-          const result = {
+          return {
             resources: allResources
               .filter((resource) => 'uri' in resource)
               .map(({ uri, name, description, mimeType }) => {
@@ -419,27 +420,15 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
                 };
               }),
           };
-          outcome = 'completed';
-          return result;
-        } finally {
-          scope?.end(outcome);
-        }
-      }
+        })
     );
 
     server.setRequestHandler(
       'resources/templates/list',
-      async (): Promise<ListResourceTemplatesResult> => {
-        const scope = options.observer
-          ? beginObservation(options.observer, {
-              method: 'resources/templates/list',
-            })
-          : undefined;
-        let outcome: ObservationEnd['result'] = 'handler_error';
-
-        try {
+      (): Promise<ListResourceTemplatesResult> =>
+        observed('resources/templates/list', async () => {
           const allResources = await getResources();
-          const result = {
+          return {
             resourceTemplates: allResources
               .filter((resource) => 'uriTemplate' in resource)
               .map(({ uriTemplate, name, description, mimeType }) => {
@@ -451,113 +440,91 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
                 };
               }),
           };
-          outcome = 'completed';
-          return result;
-        } finally {
-          scope?.end(outcome);
-        }
-      }
+        })
     );
 
     server.setRequestHandler(
       'resources/read',
-      async (request): Promise<ReadResourceResult> => {
-        const scope = options.observer
-          ? beginObservation(options.observer, {
-              method: 'resources/read',
-            })
-          : undefined;
-        let outcome: ObservationEnd['result'] = 'handler_error';
+      (request): Promise<ReadResourceResult> =>
+        observed('resources/read', async () => {
+          try {
+            const allResources = await getResources();
+            const { uri } = request.params;
 
-        try {
-          const allResources = await getResources();
-          const { uri } = request.params;
+            const resources = allResources.filter(
+              (resource) => 'uri' in resource
+            );
+            const resource = resources.find((resource) =>
+              compareUris(resource.uri, uri)
+            );
 
-          const resources = allResources.filter(
-            (resource) => 'uri' in resource
-          );
-          const resource = resources.find((resource) =>
-            compareUris(resource.uri, uri)
-          );
+            if (resource) {
+              const result = await resource.read(
+                uri as `${string}://${string}`
+              );
 
-          if (resource) {
-            const result = await resource.read(uri as `${string}://${string}`);
+              const contents = Array.isArray(result) ? result : [result];
+
+              return {
+                contents,
+              };
+            }
+
+            const resourceTemplates = allResources.filter(
+              (resource) => 'uriTemplate' in resource
+            );
+            const resourceTemplateUris = resourceTemplates.map(
+              ({ uriTemplate }) => assertValidUri(uriTemplate)
+            );
+
+            const templateMatch = matchUriTemplate(uri, resourceTemplateUris);
+
+            if (!templateMatch) {
+              throw new Error('resource not found');
+            }
+
+            const resourceTemplate = resourceTemplates.find(
+              (r) => r.uriTemplate === templateMatch.uri
+            );
+
+            if (!resourceTemplate) {
+              throw new Error('resource not found');
+            }
+
+            const result = await resourceTemplate.read(
+              uri as `${string}://${string}`,
+              templateMatch.params
+            );
 
             const contents = Array.isArray(result) ? result : [result];
 
-            outcome = 'completed';
             return {
               contents,
             };
+          } catch (error) {
+            // Preserve the existing resource error payload despite the SDK result type.
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ error: enumerateError(error) }),
+                },
+              ],
+            } as unknown as ReadResourceResult;
           }
-
-          const resourceTemplates = allResources.filter(
-            (resource) => 'uriTemplate' in resource
-          );
-          const resourceTemplateUris = resourceTemplates.map(
-            ({ uriTemplate }) => assertValidUri(uriTemplate)
-          );
-
-          const templateMatch = matchUriTemplate(uri, resourceTemplateUris);
-
-          if (!templateMatch) {
-            throw new Error('resource not found');
-          }
-
-          const resourceTemplate = resourceTemplates.find(
-            (r) => r.uriTemplate === templateMatch.uri
-          );
-
-          if (!resourceTemplate) {
-            throw new Error('resource not found');
-          }
-
-          const result = await resourceTemplate.read(
-            uri as `${string}://${string}`,
-            templateMatch.params
-          );
-
-          const contents = Array.isArray(result) ? result : [result];
-
-          outcome = 'completed';
-          return {
-            contents,
-          };
-        } catch (error) {
-          // Preserve the existing resource error payload despite the SDK result type.
-          const result = {
-            isError: true,
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({ error: enumerateError(error) }),
-              },
-            ],
-          } as unknown as ReadResourceResult;
-          outcome = 'tool_error';
-          return result;
-        } finally {
-          scope?.end(outcome);
-        }
-      }
+        })
     );
   }
 
   if (options.tools) {
     server.setRequestHandler(
       'tools/list',
-      async (_request, ctx): Promise<ListToolsResult> => {
-        const scope = options.observer
-          ? beginObservation(options.observer, {
-              method: 'tools/list',
-            })
-          : undefined;
-        let outcome: ObservationEnd['result'] = 'handler_error';
-
-        try {
+      (_request, ctx): Promise<ListToolsResult> =>
+        observed('tools/list', async () => {
           const tools = await getTools(ctx);
 
-          const result = {
+          return {
             tools: await Promise.all(
               Object.entries(tools)
                 .filter(([, tool]) => !tool.hidden)
@@ -582,27 +549,17 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
                 )
             ),
           } satisfies ListToolsResult;
-          outcome = 'completed';
-          return result;
-        } finally {
-          scope?.end(outcome);
-        }
-      }
+        })
     );
 
     server.setRequestHandler('tools/call', async (request, ctx) => {
-      const startedAt = options.observer ? performance.now() : undefined;
       const toolName = request.params.name;
-      const scope = options.observer
-        ? beginObservation(
-            options.observer,
-            {
-              method: 'tools/call',
-              tool: classifyTool?.(toolName) ?? 'other',
-            },
-            startedAt
-          )
-        : undefined;
+      const scope = beginObservation(options.observer, {
+        method: 'tools/call',
+        tool: options.observer
+          ? (options.classifyTool?.(toolName) ?? 'other')
+          : 'other',
+      });
       let outcome: ObservationEnd['result'] = 'handler_error';
 
       try {
@@ -653,20 +610,16 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
 
         // An InputRequiredResult is already shaped for the wire.
         if (isInputRequiredResult(result)) {
-          outcome =
-            scope && 'isError' in result && result.isError === true
-              ? 'tool_error'
-              : 'input_required';
+          outcome = 'input_required';
           return result;
         }
 
         // A direct CallToolResult is already shaped for the wire; pass it
         // through instead of JSON-wrapping it.
         if (isCallToolResult(result)) {
-          outcome =
-            scope && result.isError === true
-              ? 'tool_error'
-              : (scope?.outcome() ?? 'completed');
+          outcome = result.isError
+            ? 'tool_error'
+            : (scope?.outcome() ?? 'completed');
           return result;
         }
 

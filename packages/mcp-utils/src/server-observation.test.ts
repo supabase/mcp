@@ -1,11 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { setImmediate } from 'node:timers/promises';
 import { z } from 'zod/v4';
-import type {
-  RequestObserver,
-  ToolClassification,
-  ToolObservation,
-} from './observation.js';
+import type { RequestObserver, ToolObservation } from './observation.js';
 import { tool } from './server.js';
 import {
   action,
@@ -38,13 +34,6 @@ describe('registered handler observations', () => {
     };
     const run = handlers({
       observer,
-      toolClassification: {
-        buckets: [],
-        classify() {
-          now += 4;
-          return 'other';
-        },
-      },
       tools: {
         private_tool_name: action(async () => ({
           toJSON() {
@@ -89,7 +78,7 @@ describe('registered handler observations', () => {
         })),
         {
           context: { method: 'tools/call', tool: 'other' },
-          ends: [{ result: 'completed', durationMs: 9 }],
+          ends: [{ result: 'completed', durationMs: 5 }],
         },
         {
           context: { method: 'resources/read' },
@@ -107,15 +96,9 @@ describe('registered handler observations', () => {
       const clock = vi.spyOn(performance, 'now').mockReturnValue(0);
       let constructed = 0;
       const classify = vi.fn(() => 'other' as const);
-      const buckets = vi.fn(() => []);
       const run = handlers({
         observer: mode === 'undefined' ? () => undefined : undefined,
-        toolClassification: {
-          get buckets() {
-            return buckets();
-          },
-          classify,
-        },
+        classifyTool: classify,
         tools: {
           task: action(async (_args, _ctx, observation) => {
             observation?.record((constructed++, fact));
@@ -141,7 +124,6 @@ describe('registered handler observations', () => {
       if (mode === 'omitted') {
         expect(clock).not.toHaveBeenCalled();
         expect(classify).not.toHaveBeenCalled();
-        expect(buckets).not.toHaveBeenCalled();
       }
     }
   );
@@ -158,11 +140,6 @@ describe('registered handler observations', () => {
     {
       outcome: 'cancelled',
       value: { content: [], isError: true },
-      result: 'tool_error',
-    },
-    {
-      outcome: 'declined',
-      value: { resultType: 'input_required', isError: true },
       result: 'tool_error',
     },
   ] as const)(
@@ -345,137 +322,54 @@ describe('registered handler observations', () => {
     ]);
   });
 
-  test.each([
-    'throw',
-    'undeclared',
-    'invalid',
-    'resolved',
-    'rejected',
-  ] as const)(
-    'classifier %s falls back without changing the call',
+  test('classification uses the requested tool name', async () => {
+    const seen = capture<'task'>();
+    const run = handlers({
+      observer: seen.observer,
+      classifyTool: (name) => (name === 'task' ? 'task' : 'other'),
+      tools: async () => ({ task: action(async () => ({ ok: true })) }),
+    });
+    expect(await run('tools/call', { name: 'task' })).toEqual({
+      content: [{ type: 'text', text: '{"ok":true}' }],
+    });
+    expect(seen.scopes.map(({ context }) => context)).toEqual([
+      { method: 'tools/call', tool: 'task' },
+    ]);
+  });
+
+  test.each(['throw', 'reject'] as const)(
+    '%s from an observation sink leaves the tool result unchanged',
     async (mode) => {
-      const seen = capture<'task'>();
       const unhandled: unknown[] = [];
       const onUnhandled = (error: unknown) => unhandled.push(error);
-      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const classify = (): unknown => {
-        if (mode === 'throw') throw failure;
-        if (mode === 'undeclared') return 'PRIVATE_TOOL';
-        if (mode === 'invalid') return 42;
-        if (mode === 'resolved') return Promise.resolve('task');
-        return Promise.reject(failure);
-      };
       process.on('unhandledRejection', onUnhandled);
       try {
         const run = handlers({
-          observer: seen.observer,
-          toolClassification: {
-            buckets: ['task'],
-            // Deliberately exercise runtime returns outside the synchronous contract.
-            // @ts-expect-error Runtime classifier returns unknown.
-            classify,
+          observer: () => ({
+            record() {
+              if (mode === 'throw') throw failure;
+              return Promise.reject(failure);
+            },
+            end() {
+              if (mode === 'throw') throw failure;
+              return Promise.reject(failure);
+            },
+          }),
+          tools: {
+            task: action(async (_args, _ctx, observation) => {
+              observation?.record(fact);
+              return { ok: true };
+            }),
           },
-          tools: { PRIVATE_TOOL: action(async () => ({ ok: true })) },
         });
-        expect(await run('tools/call', { name: 'PRIVATE_TOOL' })).toEqual({
+        expect(await run('tools/call', { name: 'task' })).toEqual({
           content: [{ type: 'text', text: '{"ok":true}' }],
         });
         await setImmediate();
-        expect(seen.scopes[0]!.context).toEqual({
-          method: 'tools/call',
-          tool: 'other',
-        });
-        expect(seen.scopes[0]!.ends).toEqual([
-          { result: 'completed', durationMs: expect.any(Number) },
-        ]);
         expect(unhandled).toEqual([]);
-        expect(log).not.toHaveBeenCalled();
       } finally {
         process.off('unhandledRejection', onUnhandled);
       }
     }
   );
-
-  test.each<unknown>([
-    { buckets: ['task', 1], classify: () => 'task' },
-    { buckets: new Set(['task']), classify: () => 'task' },
-    Object.defineProperty({}, 'buckets', {
-      get() {
-        throw failure;
-      },
-    }),
-  ])(
-    'invalid classification configuration falls back to other',
-    async (configuration) => {
-      const seen = capture<'task'>();
-      const run = handlers({
-        observer: seen.observer,
-        // JS consumers can supply malformed configuration.
-        // @ts-expect-error Invalid runtime configuration.
-        toolClassification: configuration,
-        tools: { task: action(async () => ({ ok: true })) },
-      });
-      expect(await run('tools/call', { name: 'task' })).toEqual({
-        content: [{ type: 'text', text: '{"ok":true}' }],
-      });
-      expect(seen.scopes[0]!.context).toEqual({
-        method: 'tools/call',
-        tool: 'other',
-      });
-    }
-  );
-
-  test('classification uses the requested tool name and snapshots declared buckets at creation', async () => {
-    type Bucket = 'task' | 'later';
-    const buckets: Bucket[] = ['task'];
-    let selected: Bucket = 'task';
-    const configuration: ToolClassification<Bucket> = {
-      buckets,
-      classify: (name) => (name === 'task' ? selected : 'other'),
-    };
-    const seen = capture<Bucket>();
-    const run = handlers({
-      observer: seen.observer,
-      toolClassification: configuration,
-      tools: async () => ({ task: action(async () => ({ ok: true })) }),
-    });
-    buckets.splice(0, 1, 'later');
-    for (const next of ['task', 'later'] as const) {
-      selected = next;
-      expect(await run('tools/call', { name: 'task' })).toEqual({
-        content: [{ type: 'text', text: '{"ok":true}' }],
-      });
-    }
-    expect(seen.scopes.map(({ context }) => context)).toEqual([
-      { method: 'tools/call', tool: 'task' },
-      { method: 'tools/call', tool: 'other' },
-    ]);
-  });
-
-  test('facts are opaque and invalid outcomes cannot replace a valid outcome', async () => {
-    const seen = capture();
-    const opaque = new Proxy(fact, {
-      get() {
-        throw failure;
-      },
-    });
-    const run = handlers({
-      observer: seen.observer,
-      tools: {
-        task: action(async (_args, _ctx, observation) => {
-          expect(observation).not.toHaveProperty('end');
-          observation?.record(opaque);
-          observation?.setOutcome('cancelled');
-          // @ts-expect-error JS consumers can supply invalid outcomes.
-          observation?.setOutcome('input_required');
-          return { ok: true };
-        }),
-      },
-    });
-    expect(await run('tools/call', { name: 'task' })).toEqual({
-      content: [{ type: 'text', text: '{"ok":true}' }],
-    });
-    expect(seen.scopes[0]!.facts[0]).toBe(opaque);
-    expect(seen.scopes[0]!.ends[0]!.result).toBe('cancelled');
-  });
 });
