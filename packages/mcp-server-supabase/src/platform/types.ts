@@ -348,7 +348,26 @@ export type StorageOperations = {
   listAllBuckets(projectId: string): Promise<StorageBucket[]>;
 };
 
+/** The host resolves a branch to its parent project. */
+export type BranchingAvailabilityScope =
+  | { projectId: string }
+  | { branchId: string };
+
+export type BranchingAvailability =
+  | { available: true }
+  /** `message` is relayed to the agent; without it the server uses a generic one. */
+  | { available: false; message?: string };
+
 export type BranchingOperations = {
+  /**
+   * Whether the project's organization can use branching, as the platform
+   * decides it. Every branching tool, and branch `get_cost`, asks before
+   * acting. A rejected promise lets the call proceed, so the other operations
+   * must keep enforcing the entitlement.
+   */
+  getAvailability?(
+    scope: BranchingAvailabilityScope
+  ): Promise<BranchingAvailability>;
   listBranches(projectId: string): Promise<Branch[]>;
   createBranch(
     projectId: string,
