@@ -34,7 +34,7 @@ describe('observer noninterference', () => {
               throw failure;
             },
           }) as RequestObservation<TestFact>;
-        const sink: RequestObservation<TestFact> = {
+        const sink = {
           record() {
             events.push('record');
             if (mode === 'record') throw failure;
@@ -69,7 +69,8 @@ describe('observer noninterference', () => {
             }
           );
         }
-        return sink;
+        // JS consumers can return malformed thenables from sink methods.
+        return sink as unknown as RequestObservation<TestFact>;
       };
       const run = handlers({
         observer,
@@ -179,7 +180,7 @@ test.each([
         end() {
           if (stage === 'end') return rejected();
         },
-      };
+      } as unknown as RequestObservation<TestFact>;
     };
     process.on('unhandledRejection', onUnhandled);
     try {
