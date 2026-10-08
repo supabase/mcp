@@ -52,7 +52,7 @@ export function snapshotToolClassification<Bucket extends string>(
   try {
     if (!configuration) return undefined;
     const { buckets, classify } = configuration;
-    if (!Array.isArray(buckets) || typeof classify !== 'function') {
+    if (!Array.isArray(buckets)) {
       return undefined;
     }
     const allowed = new Set<string>();
