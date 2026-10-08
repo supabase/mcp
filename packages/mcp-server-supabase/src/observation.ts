@@ -3,15 +3,11 @@ import type {
   RequestObservation as CoreRequestObservation,
   RequestObserver as CoreRequestObserver,
 } from '@supabase/mcp-utils';
+import type { ElicitationToolName } from './types.js';
 
 export type { ObservationEnd, ObservedMethod } from '@supabase/mcp-utils';
 
-export type ObservedTool =
-  | 'create_project'
-  | 'create_branch'
-  | 'execute_sql'
-  | 'apply_migration'
-  | 'other';
+export type ObservedTool = ElicitationToolName | 'other';
 
 export type ConfirmationFeature = 'cost';
 

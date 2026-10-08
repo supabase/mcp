@@ -139,6 +139,12 @@ type ConfirmationStateOptions<S extends ConfirmationState> = {
 
 type RepromptReason = 'initial' | 'missing_response' | 'changed_quote';
 
+const OUTCOME = {
+  accept: 'completed',
+  decline: 'declined',
+  cancel: 'cancelled',
+} as const;
+
 type ConfirmationDecision<S extends ConfirmationState> =
   | { kind: 'proceed'; state: S }
   | { kind: 'reprompt'; reason: RepromptReason }
@@ -192,17 +198,10 @@ export function inspectConfirmationState<S extends ConfirmationState>(
 
   const parsed = schema.safeParse(raw);
   if (!parsed.success || parsed.data.tool !== tool) {
-    // Schema rejection remains authoritative. A malformed same-tool payload
-    // has no truthful classification in the finite cost observation contract.
-    if (
-      observation &&
-      raw !== null &&
-      typeof raw === 'object' &&
-      'tool' in raw &&
-      typeof raw.tool === 'string' &&
-      raw.tool !== tool
-    ) {
-      observation.record({
+    // Only a different tool's state counts as tool_mismatch.
+    const rawTool = z.object({ tool: z.string() }).safeParse(raw).data?.tool;
+    if (rawTool !== undefined && rawTool !== tool) {
+      observation?.record({
         kind: 'resume_validation',
         feature: 'cost',
         result: 'tool_mismatch',
@@ -255,20 +254,11 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     return { kind: 'reprompt', reason: 'missing_response' };
   }
 
-  observation?.setOutcome(
-    response.action === 'accept'
-      ? 'completed'
-      : response.action === 'decline'
-        ? 'declined'
-        : 'cancelled'
-  );
+  observation?.setOutcome(OUTCOME[response.action]);
   observation?.record({
     kind: 'input_response',
     feature: 'cost',
-    action:
-      response.action === 'accept' || response.action === 'decline'
-        ? response.action
-        : 'cancel',
+    action: response.action,
   });
 
   if (response.action === 'decline') {

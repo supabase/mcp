@@ -1,12 +1,11 @@
 import { z } from 'zod/v4';
-import type { ObservedTool } from './observation.js';
 
 export const CURRENT_ELICITATION_TOOLS = [
   'create_project',
   'create_branch',
   'execute_sql',
   'apply_migration',
-] as const satisfies readonly ObservedTool[];
+] as const;
 
 export type ElicitationToolName = (typeof CURRENT_ELICITATION_TOOLS)[number];
 
