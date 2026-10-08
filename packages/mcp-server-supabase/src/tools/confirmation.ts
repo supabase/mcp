@@ -138,23 +138,23 @@ export type ConfirmationStateOptions<S extends ConfirmationState> = {
 
 type RepromptReason = 'initial' | 'missing_response' | 'changed_quote';
 
+const OUTCOME = {
+  accept: 'completed',
+  decline: 'declined',
+  cancel: 'cancelled',
+} as const;
+
 type ConfirmationDecision<S extends ConfirmationState> =
   | { kind: 'proceed'; state: S }
   | { kind: 'reprompt'; reason: RepromptReason }
   | { kind: 'terminal'; result: CallToolResult };
 
-function confirmationFeature(
-  tool: ConfirmationState['tool']
-): ConfirmationFeature {
-  switch (tool) {
-    case 'create_project':
-    case 'create_branch':
-      return 'cost';
-    case 'execute_sql':
-    case 'apply_migration':
-      return 'destructive_sql';
-  }
-}
+const FEATURE = {
+  create_project: 'cost',
+  create_branch: 'cost',
+  execute_sql: 'destructive_sql',
+  apply_migration: 'destructive_sql',
+} as const satisfies Record<ConfirmationState['tool'], ConfirmationFeature>;
 
 export async function checkConfirmationState<S extends ConfirmationState>(
   options: ConfirmationStateOptions<S> & {
@@ -175,7 +175,7 @@ export async function checkConfirmationState<S extends ConfirmationState>(
   const result = await options.askForConfirmation();
   options.observation?.record({
     kind: 'input_required',
-    feature: confirmationFeature(options.tool),
+    feature: FEATURE[options.tool],
     mode: 'form',
     reason: decision.reason,
   });
@@ -197,6 +197,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     cancelledText,
     observation,
   } = options;
+  const feature = FEATURE[tool];
   const raw = ctx.mcpReq.requestState<unknown>();
   if (raw === undefined) {
     return { kind: 'reprompt', reason: 'initial' };
@@ -204,19 +205,12 @@ export function inspectConfirmationState<S extends ConfirmationState>(
 
   const parsed = schema.safeParse(raw);
   if (!parsed.success || parsed.data.tool !== tool) {
-    // Schema rejection remains authoritative. A malformed same-tool payload
-    // has no truthful classification in the finite observation contract.
-    if (
-      observation &&
-      raw !== null &&
-      typeof raw === 'object' &&
-      'tool' in raw &&
-      typeof raw.tool === 'string' &&
-      raw.tool !== tool
-    ) {
-      observation.record({
+    // Only a different tool's state counts as tool_mismatch.
+    const rawTool = z.object({ tool: z.string() }).safeParse(raw).data?.tool;
+    if (rawTool !== undefined && rawTool !== tool) {
+      observation?.record({
         kind: 'resume_validation',
-        feature: confirmationFeature(tool),
+        feature,
         result: 'tool_mismatch',
       });
     }
@@ -239,7 +233,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   if (!argsMatch(state)) {
     observation?.record({
       kind: 'resume_validation',
-      feature: confirmationFeature(tool),
+      feature,
       result: 'arguments_mismatch',
     });
     return {
@@ -261,26 +255,17 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   if (response.kind !== 'elicit') {
     observation?.record({
       kind: 'resume_validation',
-      feature: confirmationFeature(tool),
+      feature,
       result: 'missing_response',
     });
     return { kind: 'reprompt', reason: 'missing_response' };
   }
 
-  observation?.setOutcome(
-    response.action === 'accept'
-      ? 'completed'
-      : response.action === 'decline'
-        ? 'declined'
-        : 'cancelled'
-  );
+  observation?.setOutcome(OUTCOME[response.action]);
   observation?.record({
     kind: 'input_response',
-    feature: confirmationFeature(tool),
-    action:
-      response.action === 'accept' || response.action === 'decline'
-        ? response.action
-        : 'cancel',
+    feature,
+    action: response.action,
   });
 
   if (response.action === 'decline') {
@@ -306,7 +291,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   if (payloadMatch && !payloadMatch(state)) {
     observation?.record({
       kind: 'resume_validation',
-      feature: confirmationFeature(tool),
+      feature,
       result: 'changed_quote',
     });
     return { kind: 'reprompt', reason: 'changed_quote' };
@@ -314,7 +299,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
 
   observation?.record({
     kind: 'resume_validation',
-    feature: confirmationFeature(tool),
+    feature,
     result: 'valid',
   });
   return { kind: 'proceed', state };

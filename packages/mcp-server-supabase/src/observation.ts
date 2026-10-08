@@ -3,32 +3,15 @@ import type {
   RequestObservation as CoreRequestObservation,
   RequestObserver as CoreRequestObserver,
 } from '@supabase/mcp-utils';
+import type { ElicitationToolName } from './types.js';
 
 export type { ObservationEnd, ObservedMethod } from '@supabase/mcp-utils';
 
-export type ObservedTool =
-  | 'create_project'
-  | 'create_branch'
-  | 'execute_sql'
-  | 'apply_migration'
-  | 'other';
+export type ObservedTool = ElicitationToolName | 'other';
 
 export type ConfirmationFeature = 'cost' | 'destructive_sql';
 
-/**
- * Bounded, payload-free facts for confirmation and backend invocation attempts.
- *
- * Fact and discriminator unions are finite for each version but can grow.
- * Consumers must handle additional values when upgrading.
- * `not_destructive` is a classifier result, not a SQL safety or authorization verdict.
- *
- * Operation facts describe backend invocation: `returned` does not prove readiness
- * or commit, and `threw` does not prove that nothing committed. For `destructive_sql`,
- * they also cover SELECT, read-only calls, and calls that bypass confirmation due
- * to configuration or missing capabilities, when those calls reach the backend.
- * Blocked calls, confirmation prompts, and honored declines or cancellations
- * emit no operation facts.
- */
+/** Payload-free facts recorded by Supabase tools. */
 export type ObservationFact =
   | Readonly<{
       kind: 'confirmation_decision';

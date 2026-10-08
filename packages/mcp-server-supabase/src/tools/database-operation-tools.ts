@@ -475,20 +475,11 @@ export function getDatabaseTools({
           throw new Error('Cannot apply migration in read-only mode.');
         }
 
+        let bypassReason: 'not_configured' | 'capability_missing' | undefined;
         if (!confirmation?.enabledTools.includes('apply_migration')) {
-          record?.({
-            kind: 'confirmation_decision',
-            feature: 'destructive_sql',
-            route: 'bypass',
-            reason: 'not_configured',
-          });
+          bypassReason = 'not_configured';
         } else if (!isFormCapable(ctx)) {
-          record?.({
-            kind: 'confirmation_decision',
-            feature: 'destructive_sql',
-            route: 'bypass',
-            reason: 'capability_missing',
-          });
+          bypassReason = 'capability_missing';
         } else {
           const { codec } = confirmation;
           const queryHash =
@@ -538,6 +529,14 @@ export function getDatabaseTools({
             return gated;
           }
         }
+        if (bypassReason) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'bypass',
+            reason: bypassReason,
+          });
+        }
 
         await observeOperation('destructive_sql', record, () =>
           database.applyMigration(project_id, { name, query })
@@ -558,27 +557,17 @@ export function getDatabaseTools({
         observation?: ToolObservation<ObservationFact>
       ) => {
         const record = observation?.record;
+        let bypassReason:
+          | 'read_only'
+          | 'not_configured'
+          | 'capability_missing'
+          | undefined;
         if (readOnly) {
-          record?.({
-            kind: 'confirmation_decision',
-            feature: 'destructive_sql',
-            route: 'bypass',
-            reason: 'read_only',
-          });
+          bypassReason = 'read_only';
         } else if (!confirmation?.enabledTools.includes('execute_sql')) {
-          record?.({
-            kind: 'confirmation_decision',
-            feature: 'destructive_sql',
-            route: 'bypass',
-            reason: 'not_configured',
-          });
+          bypassReason = 'not_configured';
         } else if (!isFormCapable(ctx)) {
-          record?.({
-            kind: 'confirmation_decision',
-            feature: 'destructive_sql',
-            route: 'bypass',
-            reason: 'capability_missing',
-          });
+          bypassReason = 'capability_missing';
         } else {
           const { codec } = confirmation;
           const queryHash =
@@ -624,6 +613,14 @@ export function getDatabaseTools({
           if (gated) {
             return gated;
           }
+        }
+        if (bypassReason) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'bypass',
+            reason: bypassReason,
+          });
         }
 
         const result = await observeOperation('destructive_sql', record, () =>

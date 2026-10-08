@@ -3,7 +3,6 @@ import {
   createMcpServer,
   type Tool,
   type ToolCallCallback,
-  type ToolClassification,
 } from '@supabase/mcp-utils';
 import packageJson from '../package.json' with { type: 'json' };
 import { z } from 'zod/v4';
@@ -33,28 +32,12 @@ import {
 } from './tools/secret-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
 import { writeToolSet } from './tools/tool-schemas.js';
-import type { ElicitationToolName, FeatureGroup } from './types.js';
+import {
+  CURRENT_ELICITATION_TOOLS,
+  type ElicitationToolName,
+  type FeatureGroup,
+} from './types.js';
 import { parseFeatureGroups } from './util.js';
-
-const toolClassification: ToolClassification<ObservedTool> = {
-  buckets: [
-    'create_project',
-    'create_branch',
-    'execute_sql',
-    'apply_migration',
-  ],
-  classify: (name) => {
-    switch (name) {
-      case 'create_project':
-      case 'create_branch':
-      case 'execute_sql':
-      case 'apply_migration':
-        return name;
-      default:
-        return 'other';
-    }
-  },
-};
 
 const { version } = packageJson;
 
@@ -93,12 +76,7 @@ export type SupabaseMcpServerOptions = {
    */
   onToolCall?: ToolCallCallback;
 
-  /**
-   * Optional observer invoked once per general MCP handler entry
-   * (`tools/call`, `tools/list`, `resources/list`,
-   * `resources/templates/list`, `resources/read`) and forwarded unchanged
-   * to the underlying `@supabase/mcp-utils` server.
-   */
+  /** Optional per-request observer; see ObservedMethod for covered handlers. */
   observer?: RequestObserver;
 
   /**
@@ -241,7 +219,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     },
     onToolCall,
     observer,
-    toolClassification: observer ? toolClassification : undefined,
+    classifyTool: (name) =>
+      (CURRENT_ELICITATION_TOOLS as readonly string[]).includes(name)
+        ? (name as ElicitationToolName)
+        : 'other',
     requestState: elicitationCodec && {
       verify: elicitationCodec.verify,
     },

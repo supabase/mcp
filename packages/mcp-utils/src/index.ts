@@ -7,7 +7,6 @@ export type {
   ObservedMethod,
   RequestObservation,
   RequestObserver,
-  ToolClassification,
   ToolObservation,
   ToolOutcome,
 } from './observation.js';
