@@ -7,16 +7,19 @@ import {
   type InputResponses,
 } from '@modelcontextprotocol/client';
 import { afterEach, expect, vi } from 'vitest';
-import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import { callModernTool, createServerHarness } from './server-harness.js';
 import type {
   ObservationContext,
   ObservationEnd,
   ObservationFact,
   RequestObserver,
-} from './index.js';
-import type { Branch, Project, SupabasePlatform } from './platform/types.js';
-import * as pricing from './pricing.js';
-import type { SupabaseMcpServerOptions } from './server.js';
+} from '../src/index.js';
+import type {
+  Branch,
+  Project,
+  SupabasePlatform,
+} from '../src/platform/types.js';
+import type { SupabaseMcpServerOptions } from '../src/server.js';
 
 const confirmation = {
   requestState: {
@@ -90,6 +93,11 @@ function fakePlatform() {
       resetBranch: vi.fn(async () => {}),
       rebaseBranch: vi.fn(async () => {}),
     },
+    database: {
+      executeSql: vi.fn(async () => []),
+      applyMigration: vi.fn(async () => {}),
+      listMigrations: vi.fn(async () => []),
+    },
   } satisfies SupabasePlatform;
   return { platform, project, branch, createProject, createBranch };
 }
@@ -103,6 +111,9 @@ async function setup(
     readOnly?: boolean;
     observer?: RequestObserver;
     onToolCall?: SupabaseMcpServerOptions['onToolCall'];
+    platform?: SupabasePlatform;
+    features?: SupabaseMcpServerOptions['features'];
+    elicitation?: SupabaseMcpServerOptions['elicitation'];
   } = {}
 ) {
   const fake = fakePlatform();
@@ -122,11 +133,13 @@ async function setup(
       };
     });
   const serverOptions: SupabaseMcpServerOptions = {
-    platform: fake.platform,
-    features: ['account', 'branching'],
+    platform: options.platform ?? fake.platform,
+    features: options.features ?? ['account', 'branching', 'database'],
     projectId: options.injected ? fake.project.id : undefined,
     readOnly: options.readOnly,
-    elicitation: options.configured === false ? undefined : confirmation,
+    elicitation:
+      options.elicitation ??
+      (options.configured === false ? undefined : confirmation),
     observer,
     onToolCall: options.onToolCall,
   };
@@ -172,48 +185,54 @@ function issued(
     throw new Error('expected input_required');
   return result;
 }
-function decision(
-  route: Extract<ObservationFact, { kind: 'confirmation_decision' }>['route'],
-  reason: Extract<ObservationFact, { kind: 'confirmation_decision' }>['reason']
-): ObservationFact {
-  return { kind: 'confirmation_decision', feature: 'cost', route, reason };
-}
-function required(
-  reason: Extract<ObservationFact, { kind: 'input_required' }>['reason']
-): ObservationFact {
-  return { kind: 'input_required', feature: 'cost', mode: 'form', reason };
-}
-function validation(
-  result: Extract<ObservationFact, { kind: 'resume_validation' }>['result']
-): ObservationFact {
-  return { kind: 'resume_validation', feature: 'cost', result };
-}
-function response(
-  action: Extract<ObservationFact, { kind: 'input_response' }>['action']
-): ObservationFact {
-  return { kind: 'input_response', feature: 'cost', action };
-}
-const started: ObservationFact = {
-  kind: 'operation',
-  feature: 'cost',
-  disposition: 'started',
-};
-function operationEnd(
-  disposition: Extract<
-    ObservationFact,
-    { kind: 'operation'; durationMs: number }
-  >['disposition']
-) {
-  return {
+function factBuilders(feature: ObservationFact['feature']) {
+  function decision(
+    route: Extract<ObservationFact, { kind: 'confirmation_decision' }>['route'],
+    reason: Extract<
+      ObservationFact,
+      { kind: 'confirmation_decision' }
+    >['reason']
+  ): ObservationFact {
+    return { kind: 'confirmation_decision', feature, route, reason };
+  }
+  function required(
+    reason: Extract<ObservationFact, { kind: 'input_required' }>['reason']
+  ): ObservationFact {
+    return { kind: 'input_required', feature, mode: 'form', reason };
+  }
+  function validation(
+    result: Extract<ObservationFact, { kind: 'resume_validation' }>['result']
+  ): ObservationFact {
+    return { kind: 'resume_validation', feature, result };
+  }
+  function response(
+    action: Extract<ObservationFact, { kind: 'input_response' }>['action']
+  ): ObservationFact {
+    return { kind: 'input_response', feature, action };
+  }
+  const started: ObservationFact = {
     kind: 'operation',
-    feature: 'cost',
-    disposition,
-    durationMs: expect.any(Number),
+    feature,
+    disposition: 'started',
   };
+  function operationEnd(
+    disposition: Extract<
+      ObservationFact,
+      { kind: 'operation'; durationMs: number }
+    >['disposition']
+  ) {
+    return {
+      kind: 'operation',
+      feature,
+      disposition,
+      durationMs: expect.any(Number),
+    };
+  }
+  return { decision, required, validation, response, started, operationEnd };
 }
 function assertAttempt(
   attempt: Attempt | undefined,
-  name: CostTool,
+  name: Extract<ObservationContext, { method: 'tools/call' }>['tool'],
   facts: unknown[],
   result: ObservationEnd['result']
 ) {
@@ -229,32 +248,5 @@ function assertAttempt(
     }
   }
 }
-function changeQuote(name: CostTool) {
-  if (name === 'create_project')
-    vi.spyOn(pricing, 'getNextProjectCost').mockResolvedValue({
-      type: 'project',
-      recurrence: 'monthly',
-      amount: 20,
-    });
-  else
-    vi.spyOn(pricing, 'getBranchCost').mockReturnValue({
-      type: 'branch',
-      recurrence: 'hourly',
-      amount: 0.02,
-    });
-}
 
-export {
-  form,
-  tools,
-  setup,
-  issued,
-  decision,
-  required,
-  validation,
-  response,
-  started,
-  operationEnd,
-  assertAttempt,
-  changeQuote,
-};
+export { form, tools, setup, issued, factBuilders, assertAttempt };

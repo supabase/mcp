@@ -9,27 +9,67 @@ const failure = new Error('PRIVATE_ERROR_SENTINEL');
 afterEach(() => vi.restoreAllMocks());
 
 describe('observer noninterference', () => {
-  test.each(['factory', 'record', 'end', 'pending'] as const)(
-    '%s failure preserves callback ordering, business returns and execution errors',
+  test.each([
+    'factory',
+    'record',
+    'end',
+    'pending',
+    'then-getter',
+    'record-getter',
+    'end-getter',
+    'factory-then-getter',
+  ] as const)(
+    '%s failure silently preserves business returns and onToolCall success and error details',
     async (mode) => {
-      const order: string[] = [];
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const events: string[] = [];
       const callback = vi.fn<(details: unknown) => void>(() => {
-        order.push('callback');
+        events.push('callback');
       });
       const observer: RequestObserver<never, TestFact> = () => {
         if (mode === 'factory') throw failure;
-        return {
+        if (mode === 'factory-then-getter')
+          return Object.defineProperty({}, 'then', {
+            get() {
+              throw failure;
+            },
+          }) as RequestObservation<TestFact>;
+        const sink: RequestObservation<TestFact> = {
           record() {
-            order.push('record');
+            events.push('record');
             if (mode === 'record') throw failure;
             if (mode === 'pending') return new Promise<void>(() => {});
+            if (mode === 'then-getter')
+              return Object.defineProperty({}, 'then', {
+                get() {
+                  throw failure;
+                },
+              });
           },
           end() {
-            order.push('end');
+            events.push('end');
             if (mode === 'end') throw failure;
             if (mode === 'pending') return new Promise<void>(() => {});
+            if (mode === 'then-getter')
+              return Object.defineProperty({}, 'then', {
+                get() {
+                  throw failure;
+                },
+              });
           },
         };
+        if (mode === 'record-getter' || mode === 'end-getter') {
+          Object.defineProperty(
+            sink,
+            mode === 'record-getter' ? 'record' : 'end',
+            {
+              get() {
+                throw failure;
+              },
+            }
+          );
+        }
+        return sink;
       };
       const run = handlers({
         observer,
@@ -37,76 +77,94 @@ describe('observer noninterference', () => {
         tools: {
           good: action(async (_args, _ctx, observation) => {
             observation?.record(fact);
-            order.push('execute');
+            events.push('execute');
             return { privateResult: 'unchanged' };
           }),
           bad: action(async (_args, _ctx, observation) => {
             observation?.record(fact);
-            order.push('execute');
+            events.push('execute');
             throw failure;
           }),
         },
       });
       expect(await run('tools/call', { name: 'good' })).toEqual({
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ privateResult: 'unchanged' }),
-          },
-        ],
+        content: [{ type: 'text', text: '{"privateResult":"unchanged"}' }],
       });
       expect(await run('tools/call', { name: 'bad' })).toEqual({
         isError: true,
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              error: { name: failure.name, message: failure.message },
-            }),
+            text: '{"error":{"name":"Error","message":"PRIVATE_ERROR_SENTINEL"}}',
           },
         ],
       });
-      expect(order).toEqual(
-        mode === 'factory'
-          ? ['execute', 'callback', 'execute', 'callback']
-          : [
-              'record',
-              'execute',
-              'callback',
-              'end',
-              'record',
-              'execute',
-              'callback',
-              'end',
-            ]
+      const disabled = mode === 'factory' || mode === 'factory-then-getter';
+      expect(events.filter((event) => event === 'record')).toEqual(
+        disabled || mode === 'record-getter' ? [] : ['record', 'record']
       );
-      expect(callback.mock.calls[0]![0]).toMatchObject({
-        success: true,
-        data: { privateResult: 'unchanged' },
-      });
-      expect(callback.mock.calls[1]![0]).toMatchObject({
-        success: false,
-        error: failure,
-      });
+      expect(events.filter((event) => event === 'end')).toEqual(
+        disabled || mode === 'end-getter' ? [] : ['end', 'end']
+      );
+      expect(events.filter((event) => event === 'execute')).toEqual([
+        'execute',
+        'execute',
+      ]);
+      expect(callback.mock.calls).toEqual([
+        [
+          expect.objectContaining({
+            success: true,
+            data: { privateResult: 'unchanged' },
+          }),
+        ],
+        [expect.objectContaining({ success: false, error: failure })],
+      ]);
+      await setImmediate();
+      expect(log).not.toHaveBeenCalled();
     }
   );
 });
 
-test.each(['factory', 'record', 'end'] as const)(
-  'a rejected native promise with hostile own attachment getters from %s is consumed',
-  async (stage) => {
+test.each([
+  {
+    kind: 'native promise with hostile own attachment getters',
+    stage: 'factory',
+  },
+  {
+    kind: 'native promise with hostile own attachment getters',
+    stage: 'record',
+  },
+  { kind: 'native promise with hostile own attachment getters', stage: 'end' },
+  {
+    kind: 'thenable delegating to a rejected native promise',
+    stage: 'factory',
+  },
+  { kind: 'thenable delegating to a rejected native promise', stage: 'record' },
+  { kind: 'thenable delegating to a rejected native promise', stage: 'end' },
+] as const)(
+  'a rejected $kind from $stage is silently consumed without changing the handler result',
+  async ({ kind, stage }) => {
     const unhandled: unknown[] = [];
     const onUnhandled = (error: unknown) => {
       unhandled.push(error);
     };
-    const getter = vi.fn(() => {
-      throw failure;
-    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     function rejected() {
       const promise = Promise.reject(failure);
+      if (kind === 'thenable delegating to a rejected native promise') {
+        return { then: promise.then.bind(promise) };
+      }
       Object.defineProperties(promise, {
-        catch: { get: getter },
-        then: { get: getter },
+        catch: {
+          get() {
+            throw failure;
+          },
+        },
+        then: {
+          get() {
+            throw failure;
+          },
+        },
       });
       return promise;
     }
@@ -135,13 +193,12 @@ test.each(['factory', 'record', 'end'] as const)(
         },
       });
       expect(await run('tools/call', { name: 'test' })).toEqual({
-        content: [{ type: 'text', text: JSON.stringify({ unchanged: true }) }],
+        content: [{ type: 'text', text: '{"unchanged":true}' }],
       });
-      // Cross a real event-loop boundary so Node can report unhandled rejections;
-      // no elapsed-time delay is used to guess at completion.
+      // Cross an event-loop boundary so Node can report unhandled rejections.
       await setImmediate();
       expect(unhandled).toEqual([]);
-      expect(getter).not.toHaveBeenCalled();
+      expect(log).not.toHaveBeenCalled();
     } finally {
       process.off('unhandledRejection', onUnhandled);
     }
