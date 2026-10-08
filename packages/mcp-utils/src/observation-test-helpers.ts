@@ -59,8 +59,7 @@ export function handlers<Bucket extends string = never, Fact = TestFact>(
   return async (method: string, params: Record<string, unknown> = {}) => {
     const handler = registered[method];
     if (!handler) throw new Error(`Handler not registered: ${method}`);
-    // Each request below supplies the params for its method; SDK validation is
-    // tested separately through the real transport in server-observation-sdk.test.ts.
+    // Each request supplies valid params for its registered handler.
     return handler({ method, params }, {} as ServerContext);
   };
 }
