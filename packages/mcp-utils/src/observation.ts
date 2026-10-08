@@ -86,4 +86,3 @@ function safeCall(action: () => void | Promise<void>): void {
     // Telemetry-only failure: never surface, retry, or log the raw value.
   }
 }
-
