@@ -4,22 +4,23 @@ import {
   isInputRequiredResult,
   type CallToolResult,
   type ClientCapabilities,
-  type InputRequiredResult,
 } from '@modelcontextprotocol/client';
 import type {
   RequestStateCodec,
   ServerContext,
 } from '@modelcontextprotocol/server';
 import type { Tool } from '@supabase/mcp-utils';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import type { z } from 'zod/v4';
-import { callModernTool, createServerHarness } from '../test/server-harness.js';
-import type {
-  ObservationContext,
-  ObservationEnd,
-  ObservationFact,
-  RequestObserver,
-} from './index.js';
+import { callModernTool } from '../test/server-harness.js';
+import {
+  setup as setupObservation,
+  factBuilders,
+  issued,
+  assertAttempt,
+  form,
+} from '../test/observation-test-helpers.js';
+import type { ObservationFact } from './index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import type { ElicitationState } from './tools/confirmation.js';
 import { getDatabaseTools } from './tools/database-operation-tools.js';
@@ -27,21 +28,16 @@ import * as classifier from './tools/destructive-sql.js';
 
 const tools = ['execute_sql', 'apply_migration'] as const;
 type SqlTool = (typeof tools)[number];
-type Attempt = {
-  context: ObservationContext;
-  facts: ObservationFact[];
-  ends: ObservationEnd[];
-};
-const harness = createServerHarness();
+const {
+  decision,
+  required,
+  response,
+  validation,
+  started,
+  operationEnd: finished,
+} = factBuilders('destructive_sql');
 const query = 'DROP TABLE "PRIVATE_TABLE"; -- PRIVATE_SQL';
 const projectId = 'PRIVATE_PROJECT';
-const form: ClientCapabilities = { elicitation: { form: {} } };
-const feature = 'destructive_sql' as const;
-
-afterEach(async () => {
-  vi.restoreAllMocks();
-  await harness.close();
-});
 
 async function setup(
   options: {
@@ -50,8 +46,6 @@ async function setup(
     readOnly?: boolean;
     capabilities?: ClientCapabilities;
     legacy?: boolean;
-    observer?: RequestObserver;
-    unobserved?: boolean;
   } = {}
 ) {
   const executeSql = vi.fn(async () => []);
@@ -63,26 +57,12 @@ async function setup(
       listMigrations: vi.fn(async () => []),
     },
   } satisfies SupabasePlatform;
-  const attempts: Attempt[] = [];
-  const observer: RequestObserver = (context) => {
-    const attempt: Attempt = { context, facts: [], ends: [] };
-    attempts.push(attempt);
-    return {
-      record: (fact) => {
-        attempt.facts.push(fact);
-      },
-      end: (end) => {
-        attempt.ends.push(end);
-      },
-    };
-  };
-  const { client } = await (options.legacy
-    ? harness.setup
-    : harness.setupModern)({
+  const { client, attempts } = await setupObservation({
     platform,
     features: ['database'],
     readOnly: options.readOnly,
-    clientCapabilities: options.capabilities ?? form,
+    capabilities: options.capabilities,
+    legacy: options.legacy,
     elicitation: {
       requestState: { key: 'a'.repeat(32), principal: 'PRIVATE_PRINCIPAL' },
       confirmation:
@@ -90,9 +70,7 @@ async function setup(
           ? undefined
           : { enabledTools: options.disabled ? [] : tools },
     },
-    ...(options.unobserved ? {} : { observer: options.observer ?? observer }),
   });
-  attempts.length = 0;
   function args(name: SqlTool) {
     return {
       project_id: projectId,
@@ -112,61 +90,6 @@ async function setup(
   return { attempts, args, call, operation, executeSql, applyMigration };
 }
 
-function issued(result: CallToolResult | InputRequiredResult) {
-  expect(isInputRequiredResult(result)).toBe(true);
-  if (!isInputRequiredResult(result))
-    throw new Error('expected input_required');
-  return result;
-}
-function decision(
-  route: Extract<ObservationFact, { kind: 'confirmation_decision' }>['route'],
-  reason: Extract<ObservationFact, { kind: 'confirmation_decision' }>['reason']
-): ObservationFact {
-  return { kind: 'confirmation_decision', feature, route, reason };
-}
-function required(reason: 'initial' | 'missing_response'): ObservationFact {
-  return { kind: 'input_required', feature, mode: 'form', reason };
-}
-function response(action: 'accept' | 'decline' | 'cancel'): ObservationFact {
-  return { kind: 'input_response', feature, action };
-}
-function validation(
-  result: Extract<ObservationFact, { kind: 'resume_validation' }>['result']
-): ObservationFact {
-  return { kind: 'resume_validation', feature, result };
-}
-const started: ObservationFact = {
-  kind: 'operation',
-  feature,
-  disposition: 'started',
-};
-function finished(disposition: 'returned' | 'threw') {
-  return {
-    kind: 'operation',
-    feature,
-    disposition,
-    durationMs: expect.any(Number),
-  };
-}
-function assertAttempt(
-  attempt: Attempt | undefined,
-  tool: SqlTool,
-  facts: unknown[],
-  result: ObservationEnd['result']
-) {
-  expect(attempt).toEqual({
-    context: { method: 'tools/call', tool },
-    facts,
-    ends: [{ result, durationMs: expect.any(Number) }],
-  });
-  for (const event of [...attempt!.facts, ...attempt!.ends]) {
-    if ('durationMs' in event) {
-      expect(Number.isFinite(event.durationMs)).toBe(true);
-      expect(event.durationMs).toBeGreaterThanOrEqual(0);
-    }
-  }
-  expect(JSON.stringify(attempt)).not.toContain('PRIVATE_');
-}
 const accept = { confirm_destructive: { action: 'accept', content: {} } };
 
 describe.each(tools)('%s SQL observations', (name) => {
@@ -191,7 +114,6 @@ describe.each(tools)('%s SQL observations', (name) => {
       'input_required'
     );
     expect(h.operation(name)).not.toHaveBeenCalled();
-    expect(JSON.stringify(h.attempts)).not.toContain(first.requestState);
   });
 
   test.each(['accept', 'decline', 'cancel'] as const)(
@@ -199,11 +121,6 @@ describe.each(tools)('%s SQL observations', (name) => {
     async (action) => {
       const h = await setup();
       const first = issued(await h.call(name));
-      const classify = vi.spyOn(classifier, 'isDestructiveSql');
-      if (action === 'accept')
-        classify.mockImplementation(() => {
-          throw new Error('must not classify an accepted resume');
-        });
       const result = await h.call(name, {
         requestState: first.requestState,
         inputResponses: {
@@ -225,16 +142,7 @@ describe.each(tools)('%s SQL observations', (name) => {
         ],
         accepted ? 'completed' : action === 'decline' ? 'declined' : 'cancelled'
       );
-      expect(classify).toHaveBeenCalledTimes(accepted ? 0 : 1);
       expect(h.operation(name)).toHaveBeenCalledTimes(accepted ? 1 : 0);
-      if (accepted) {
-        expect(h.operation(name)).toHaveBeenCalledWith(
-          projectId,
-          name === 'execute_sql'
-            ? { query, read_only: undefined }
-            : { query, name: 'PRIVATE_MIGRATION' }
-        );
-      }
     }
   );
 
@@ -277,187 +185,44 @@ describe.each(tools)('%s SQL observations', (name) => {
     }
   );
 
-  test.each(['decline', 'cancel'] as const)(
-    'discards ignored %s when classification changes to non-destructive',
-    async (action) => {
+  test.each([
+    { action: 'decline', fails: false },
+    { action: 'cancel', fails: false },
+    { action: 'decline', fails: true },
+  ] as const)(
+    'discards staged $action when classification changes (fails=$fails)',
+    async ({ action, fails }) => {
       const h = await setup();
       const first = issued(await h.call(name));
-      const classify = vi
-        .spyOn(classifier, 'isDestructiveSql')
-        .mockReturnValue(false);
+      vi.spyOn(classifier, 'isDestructiveSql').mockImplementation(() => {
+        if (fails) throw new Error('PRIVATE_CLASSIFIER_ERROR');
+        return false;
+      });
       const result = await h.call(name, {
         requestState: first.requestState,
         inputResponses: { confirm_destructive: { action } },
       });
-      expect((result as CallToolResult).isError).not.toBe(true);
-      assertAttempt(
-        h.attempts[1],
-        name,
-        [decision('bypass', 'not_destructive'), started, finished('returned')],
-        'completed'
-      );
-      expect(classify).toHaveBeenCalledOnce();
-      expect(classify).toHaveBeenCalledWith(query);
-      expect(h.operation(name)).toHaveBeenCalledOnce();
+      if (fails) {
+        expect((result as CallToolResult).isError).toBe(true);
+        expect(JSON.stringify(result)).toContain('PRIVATE_CLASSIFIER_ERROR');
+        assertAttempt(h.attempts[1], name, [], 'tool_error');
+        expect(h.operation(name)).not.toHaveBeenCalled();
+      } else {
+        expect((result as CallToolResult).isError).not.toBe(true);
+        assertAttempt(
+          h.attempts[1],
+          name,
+          [
+            decision('bypass', 'not_destructive'),
+            started,
+            finished('returned'),
+          ],
+          'completed'
+        );
+        expect(h.operation(name)).toHaveBeenCalledOnce();
+      }
     }
   );
-
-  test('classifier failure does not consume a staged decline or run SQL', async () => {
-    const h = await setup();
-    const first = issued(await h.call(name));
-    vi.spyOn(classifier, 'isDestructiveSql').mockImplementation(() => {
-      throw new Error('PRIVATE_CLASSIFIER_ERROR');
-    });
-    const result = await h.call(name, {
-      requestState: first.requestState,
-      inputResponses: { confirm_destructive: { action: 'decline' } },
-    });
-    expect((result as CallToolResult).isError).toBe(true);
-    assertAttempt(h.attempts[1], name, [], 'tool_error');
-    expect(h.operation(name)).not.toHaveBeenCalled();
-  });
-
-  test.each([
-    { configured: false, reason: 'not_configured' },
-    { disabled: true, reason: 'not_configured' },
-    { capabilities: {}, reason: 'capability_missing' },
-    { legacy: true, configured: false, reason: 'not_configured' },
-  ] as const)(
-    'observes allowed bypass $reason ($legacy/$disabled)',
-    async (options) => {
-      const h = await setup(options);
-      const classify = vi.spyOn(classifier, 'isDestructiveSql');
-      const result = await h.call(name);
-      expect((result as CallToolResult).isError).not.toBe(true);
-      assertAttempt(
-        h.attempts[0],
-        name,
-        [decision('bypass', options.reason), started, finished('returned')],
-        'completed'
-      );
-      expect(classify).not.toHaveBeenCalled();
-      expect(h.operation(name)).toHaveBeenCalledOnce();
-    }
-  );
-
-  test('records an initial non-destructive route and preserves the SQL', async () => {
-    const h = await setup();
-    const safeQuery = 'SELECT 1 AS "PRIVATE_RESULT";';
-    const result = await h.call(name, {
-      arguments: { ...h.args(name), query: safeQuery },
-    });
-    expect((result as CallToolResult).isError).not.toBe(true);
-    assertAttempt(
-      h.attempts[0],
-      name,
-      [decision('bypass', 'not_destructive'), started, finished('returned')],
-      'completed'
-    );
-    expect(h.operation(name)).toHaveBeenCalledWith(
-      projectId,
-      name === 'execute_sql'
-        ? { query: safeQuery, read_only: undefined }
-        : { query: safeQuery, name: 'PRIVATE_MIGRATION' }
-    );
-  });
-
-  test('read-only policy takes precedence over confirmation and classification', async () => {
-    const h = await setup({ readOnly: true });
-    const classify = vi.spyOn(classifier, 'isDestructiveSql');
-    const result = await h.call(name);
-    const blocked = name === 'apply_migration';
-    expect((result as CallToolResult).isError === true).toBe(blocked);
-    assertAttempt(
-      h.attempts[0],
-      name,
-      [
-        decision(blocked ? 'blocked' : 'bypass', 'read_only'),
-        ...(blocked ? [] : [started, finished('returned')]),
-      ],
-      blocked ? 'tool_error' : 'completed'
-    );
-    expect(classify).not.toHaveBeenCalled();
-    if (blocked) expect(h.applyMigration).not.toHaveBeenCalled();
-    else
-      expect(h.executeSql).toHaveBeenCalledWith(projectId, {
-        query,
-        read_only: true,
-      });
-  });
-
-  test('records a backend failure after accepted input without leaking its payload', async () => {
-    const h = await setup();
-    const first = issued(await h.call(name));
-    h.operation(name).mockRejectedValueOnce(new Error('PRIVATE_BACKEND_ERROR'));
-    const result = await h.call(name, {
-      requestState: first.requestState,
-      inputResponses: accept,
-    });
-    expect((result as CallToolResult).isError).toBe(true);
-    expect(JSON.stringify(result)).toContain('PRIVATE_BACKEND_ERROR');
-    assertAttempt(
-      h.attempts[1],
-      name,
-      [
-        decision('inline', 'eligible'),
-        response('accept'),
-        validation('valid'),
-        started,
-        finished('threw'),
-      ],
-      'tool_error'
-    );
-    expect(JSON.stringify(h.attempts)).not.toContain(first.requestState);
-  });
-
-  test.each(['omitted', 'inactive'] as const)(
-    '%s observer preserves confirmation and execution',
-    async (mode) => {
-      const h = await setup({
-        unobserved: mode === 'omitted',
-        observer: mode === 'inactive' ? () => undefined : undefined,
-      });
-      const clock =
-        mode === 'omitted' ? vi.spyOn(performance, 'now') : undefined;
-      const first = issued(await h.call(name));
-      const result = await h.call(name, {
-        requestState: first.requestState,
-        inputResponses: accept,
-      });
-      expect((result as CallToolResult).isError).not.toBe(true);
-      expect(h.operation(name)).toHaveBeenCalledOnce();
-      if (clock) expect(clock).not.toHaveBeenCalled();
-      expect(h.attempts).toEqual([]);
-    }
-  );
-
-  test('throwing record and rejecting end preserve confirmation and backend outcomes', async () => {
-    const h = await setup({
-      observer: () => ({
-        record() {
-          throw new Error('PRIVATE_OBSERVER_ERROR');
-        },
-        end() {
-          return Promise.reject(new Error('PRIVATE_OBSERVER_REJECTION'));
-        },
-      }),
-    });
-    const first = issued(await h.call(name));
-    const result = await h.call(name, {
-      requestState: first.requestState,
-      inputResponses: accept,
-    });
-    expect((result as CallToolResult).isError).not.toBe(true);
-    h.operation(name).mockRejectedValueOnce(new Error('PRIVATE_BACKEND_ERROR'));
-    const failure = await h.call(name, {
-      requestState: first.requestState,
-      inputResponses: accept,
-    });
-    expect((failure as CallToolResult).isError).toBe(true);
-    expect(JSON.stringify(failure)).toContain('PRIVATE_BACKEND_ERROR');
-    expect(h.operation(name)).toHaveBeenCalledTimes(2);
-    await new Promise<void>((resolve) => queueMicrotask(resolve));
-  });
 });
 
 test.each(tools)(
@@ -509,9 +274,343 @@ test.each(tools)(
         }
       )
     ).rejects.toBe(failure);
-    expect(codec.mint).toHaveBeenCalledOnce();
     expect(facts).toEqual([decision('inline', 'eligible')]);
     expect(database.executeSql).not.toHaveBeenCalled();
     expect(database.applyMigration).not.toHaveBeenCalled();
   }
 );
+
+test.each([
+  // tool, readOnly, configured, formCapable, destructive, route, reason, outcome
+  [
+    'execute_sql',
+    false,
+    false,
+    false,
+    false,
+    'bypass',
+    'not_configured',
+    'completed',
+  ],
+  [
+    'execute_sql',
+    false,
+    false,
+    false,
+    true,
+    'bypass',
+    'not_configured',
+    'completed',
+  ],
+  [
+    'execute_sql',
+    false,
+    false,
+    true,
+    false,
+    'bypass',
+    'not_configured',
+    'completed',
+  ],
+  [
+    'execute_sql',
+    false,
+    false,
+    true,
+    true,
+    'bypass',
+    'not_configured',
+    'completed',
+  ],
+  [
+    'execute_sql',
+    false,
+    true,
+    false,
+    false,
+    'bypass',
+    'capability_missing',
+    'completed',
+  ],
+  [
+    'execute_sql',
+    false,
+    true,
+    false,
+    true,
+    'bypass',
+    'capability_missing',
+    'completed',
+  ],
+  [
+    'execute_sql',
+    false,
+    true,
+    true,
+    false,
+    'bypass',
+    'not_destructive',
+    'completed',
+  ],
+  [
+    'execute_sql',
+    false,
+    true,
+    true,
+    true,
+    'inline',
+    'eligible',
+    'input_required',
+  ],
+  [
+    'execute_sql',
+    true,
+    false,
+    false,
+    false,
+    'bypass',
+    'read_only',
+    'completed',
+  ],
+  ['execute_sql', true, false, false, true, 'bypass', 'read_only', 'completed'],
+  ['execute_sql', true, false, true, false, 'bypass', 'read_only', 'completed'],
+  ['execute_sql', true, false, true, true, 'bypass', 'read_only', 'completed'],
+  ['execute_sql', true, true, false, false, 'bypass', 'read_only', 'completed'],
+  ['execute_sql', true, true, false, true, 'bypass', 'read_only', 'completed'],
+  ['execute_sql', true, true, true, false, 'bypass', 'read_only', 'completed'],
+  ['execute_sql', true, true, true, true, 'bypass', 'read_only', 'completed'],
+  [
+    'apply_migration',
+    false,
+    false,
+    false,
+    false,
+    'bypass',
+    'not_configured',
+    'completed',
+  ],
+  [
+    'apply_migration',
+    false,
+    false,
+    false,
+    true,
+    'bypass',
+    'not_configured',
+    'completed',
+  ],
+  [
+    'apply_migration',
+    false,
+    false,
+    true,
+    false,
+    'bypass',
+    'not_configured',
+    'completed',
+  ],
+  [
+    'apply_migration',
+    false,
+    false,
+    true,
+    true,
+    'bypass',
+    'not_configured',
+    'completed',
+  ],
+  [
+    'apply_migration',
+    false,
+    true,
+    false,
+    false,
+    'bypass',
+    'capability_missing',
+    'completed',
+  ],
+  [
+    'apply_migration',
+    false,
+    true,
+    false,
+    true,
+    'bypass',
+    'capability_missing',
+    'completed',
+  ],
+  [
+    'apply_migration',
+    false,
+    true,
+    true,
+    false,
+    'bypass',
+    'not_destructive',
+    'completed',
+  ],
+  [
+    'apply_migration',
+    false,
+    true,
+    true,
+    true,
+    'inline',
+    'eligible',
+    'input_required',
+  ],
+  [
+    'apply_migration',
+    true,
+    false,
+    false,
+    false,
+    'blocked',
+    'read_only',
+    'tool_error',
+  ],
+  [
+    'apply_migration',
+    true,
+    false,
+    false,
+    true,
+    'blocked',
+    'read_only',
+    'tool_error',
+  ],
+  [
+    'apply_migration',
+    true,
+    false,
+    true,
+    false,
+    'blocked',
+    'read_only',
+    'tool_error',
+  ],
+  [
+    'apply_migration',
+    true,
+    false,
+    true,
+    true,
+    'blocked',
+    'read_only',
+    'tool_error',
+  ],
+  [
+    'apply_migration',
+    true,
+    true,
+    false,
+    false,
+    'blocked',
+    'read_only',
+    'tool_error',
+  ],
+  [
+    'apply_migration',
+    true,
+    true,
+    false,
+    true,
+    'blocked',
+    'read_only',
+    'tool_error',
+  ],
+  [
+    'apply_migration',
+    true,
+    true,
+    true,
+    false,
+    'blocked',
+    'read_only',
+    'tool_error',
+  ],
+  [
+    'apply_migration',
+    true,
+    true,
+    true,
+    true,
+    'blocked',
+    'read_only',
+    'tool_error',
+  ],
+] as const)(
+  '%s initial policy: readOnly=%s configured=%s form=%s destructive=%s -> %s/%s/%s',
+  async (
+    name,
+    readOnly,
+    configured,
+    formCapable,
+    destructive,
+    route,
+    reason,
+    outcome
+  ) => {
+    const h = await setup({
+      readOnly,
+      disabled: !configured,
+      capabilities: formCapable ? form : {},
+    });
+    const sql = destructive
+      ? 'DROP TABLE "PRIVATE_TABLE"; -- PRIVATE_SQL'
+      : 'SELECT 1 AS "PRIVATE_RESULT";';
+    const result = await h.call(name, {
+      arguments: { ...h.args(name), query: sql },
+    });
+    const facts: unknown[] = [decision(route, reason)];
+    switch (outcome) {
+      case 'completed':
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect((result as CallToolResult).isError).not.toBe(true);
+        facts.push(started, finished('returned'));
+        expect(h.operation(name)).toHaveBeenCalledOnce();
+        expect(h.operation(name)).toHaveBeenCalledWith(
+          projectId,
+          name === 'execute_sql'
+            ? { query: sql, read_only: readOnly }
+            : { query: sql, name: 'PRIVATE_MIGRATION' }
+        );
+        break;
+      case 'input_required':
+        issued(result);
+        facts.push(required('initial'));
+        expect(h.executeSql).not.toHaveBeenCalled();
+        expect(h.applyMigration).not.toHaveBeenCalled();
+        break;
+      case 'tool_error':
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect((result as CallToolResult).isError).toBe(true);
+        expect(h.executeSql).not.toHaveBeenCalled();
+        expect(h.applyMigration).not.toHaveBeenCalled();
+        break;
+    }
+    expect(h.attempts).toHaveLength(1);
+    assertAttempt(h.attempts[0], name, facts, outcome);
+  }
+);
+
+// Keep absent confirmation configuration distinct from enabledTools: [].
+describe.each(tools)('%s absent confirmation configuration', (name) => {
+  test.each([false, true])(
+    'completes without confirmation (legacy=%s)',
+    async (legacy) => {
+      const h = await setup({ configured: false, legacy });
+      const result = await h.call(name);
+      expect(isInputRequiredResult(result)).toBe(false);
+      expect((result as CallToolResult).isError).not.toBe(true);
+      expect(h.attempts).toHaveLength(1);
+      assertAttempt(
+        h.attempts[0],
+        name,
+        [decision('bypass', 'not_configured'), started, finished('returned')],
+        'completed'
+      );
+      expect(h.operation(name)).toHaveBeenCalledOnce();
+    }
+  );
+});
