@@ -319,8 +319,8 @@ export function observeOperation<T>(
   if (!record) {
     return run();
   }
-  const startedAt = performance.now();
   record({ kind: 'operation', feature, disposition: 'started' });
+  const startedAt = performance.now();
   return (async () => {
     try {
       const result = await run();
