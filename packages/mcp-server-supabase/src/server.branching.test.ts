@@ -6,6 +6,8 @@ import type {
 } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
+  ACCESS_TOKEN,
+  API_URL,
   createBranch,
   createOrganization,
   createProject,
@@ -13,6 +15,8 @@ import {
   mockBranches,
 } from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import { createSupabaseApiPlatform } from './platform/api-platform.js';
+import type { BranchingOperations } from './platform/types.js';
 import { BRANCH_COST_HOURLY, getBranchCost } from './pricing.js';
 import * as pricing from './pricing.js';
 import type { SupabaseMcpServerOptions } from './server.js';
@@ -1210,5 +1214,258 @@ describe('tools', () => {
       });
       expect(mockBranches.size).toBe(0);
     });
+  });
+});
+
+describe('branching availability', () => {
+  const UNAVAILABLE = {
+    available: false,
+    message: 'Branching is not available. Upgrade at https://example.test',
+  } as const;
+
+  const UNAVAILABLE_RESULT = {
+    content: [{ type: 'text', text: UNAVAILABLE.message }],
+    structuredContent: { status: 'unavailable', message: UNAVAILABLE.message },
+  };
+
+  function createPlatform(
+    getAvailability: NonNullable<BranchingOperations['getAvailability']>
+  ) {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    platform.branching = { ...platform.branching!, getAvailability };
+    return platform;
+  }
+
+  test('create_branch returns the unavailable result instead of a tool error', async () => {
+    const getAvailability = vi.fn(async () => UNAVAILABLE);
+    const { client } = await setup({
+      platform: createPlatform(getAvailability),
+      features: ['account', 'branching'],
+    });
+    const { project } = await createProjectFixture();
+
+    const result = await client.callTool({
+      name: 'create_branch',
+      arguments: {
+        project_id: project.id,
+        name: 'test-branch',
+        confirm_cost_id: await hashObject(getBranchCost()),
+      },
+    });
+
+    expect(result).toEqual(UNAVAILABLE_RESULT);
+    expect(getAvailability).toHaveBeenCalledWith({ projectId: project.id });
+    expect(mockBranches.size).toBe(0);
+  });
+
+  test('create_branch answers before the form cost prompt', async () => {
+    const { client, platform } = await setupModern({
+      clientCapabilities: FORM_CAPABLE,
+    });
+    platform.branching = {
+      ...platform.branching!,
+      getAvailability: async () => UNAVAILABLE,
+    };
+    const { project } = await createProjectFixture();
+
+    const result = await callModernTool(client, {
+      name: 'create_branch',
+      arguments: { project_id: project.id, name: 'test-branch' },
+    });
+
+    expect(result).toMatchObject(UNAVAILABLE_RESULT);
+    expect(result).not.toHaveProperty('isError');
+    expect(mockBranches.size).toBe(0);
+  });
+
+  test('project-scoped create_branch answers without confirm_cost_id', async () => {
+    const { project } = await createProjectFixture();
+    const { client } = await setup({
+      platform: createPlatform(async () => UNAVAILABLE),
+      projectId: project.id,
+      features: ['branching'],
+    });
+
+    const result = await client.callTool({
+      name: 'create_branch',
+      arguments: { name: 'test-branch' },
+    });
+
+    expect(result).toEqual(UNAVAILABLE_RESULT);
+  });
+
+  test('project-scoped create_branch still requires confirm_cost_id when available', async () => {
+    const { project } = await createProjectFixture();
+    const { callTool } = await setup({
+      platform: createPlatform(async () => ({ available: true })),
+      projectId: project.id,
+      features: ['branching'],
+    });
+
+    await expect(
+      callTool({ name: 'create_branch', arguments: { name: 'test-branch' } })
+    ).rejects.toThrow(
+      'User must confirm understanding of costs before creating a branch.'
+    );
+    expect(mockBranches.size).toBe(0);
+  });
+
+  test('get_cost returns the unavailable result for a branch with project_id', async () => {
+    const getAvailability = vi.fn(async () => UNAVAILABLE);
+    const { client } = await setup({
+      platform: createPlatform(getAvailability),
+      features: ['account', 'branching'],
+    });
+    const { project, organization } = await createProjectFixture();
+
+    const result = await client.callTool({
+      name: 'get_cost',
+      arguments: {
+        type: 'branch',
+        organization_id: organization.id,
+        project_id: project.id,
+      },
+    });
+
+    expect(result).toEqual(UNAVAILABLE_RESULT);
+    expect(getAvailability).toHaveBeenCalledWith({ projectId: project.id });
+  });
+
+  test('get_cost quotes as before without project_id or for projects', async () => {
+    const getAvailability = vi.fn(async () => UNAVAILABLE);
+    const { callTool } = await setup({
+      platform: createPlatform(getAvailability),
+      features: ['account', 'branching'],
+    });
+    const { project, organization } = await createProjectFixture();
+
+    await expect(
+      callTool({
+        name: 'get_cost',
+        arguments: { type: 'branch', organization_id: organization.id },
+      })
+    ).resolves.toEqual(getBranchCost());
+    await expect(
+      callTool({
+        name: 'get_cost',
+        arguments: {
+          type: 'project',
+          organization_id: organization.id,
+          project_id: project.id,
+        },
+      })
+    ).resolves.toMatchObject({ type: 'project' });
+    expect(getAvailability).not.toHaveBeenCalled();
+  });
+
+  test('create_branch uses a generic answer when the host gives no message', async () => {
+    const { client } = await setup({
+      platform: createPlatform(async () => ({ available: false })),
+      features: ['account', 'branching'],
+    });
+    const { project } = await createProjectFixture();
+
+    const result = await client.callTool({
+      name: 'create_branch',
+      arguments: {
+        project_id: project.id,
+        name: 'test-branch',
+        confirm_cost_id: await hashObject(getBranchCost()),
+      },
+    });
+
+    expect(result).not.toHaveProperty('isError');
+    expect(result).toMatchObject({
+      structuredContent: {
+        status: 'unavailable',
+        message: expect.stringContaining("Branching isn't available"),
+      },
+    });
+    expect(mockBranches.size).toBe(0);
+  });
+
+  test('list_branches returns the unavailable result', async () => {
+    const getAvailability = vi.fn(async () => UNAVAILABLE);
+    const platform = createPlatform(getAvailability);
+    const listBranches = vi.spyOn(platform.branching!, 'listBranches');
+    const { client } = await setup({ platform, features: ['branching'] });
+    const { project } = await createProjectFixture();
+
+    const result = await client.callTool({
+      name: 'list_branches',
+      arguments: { project_id: project.id },
+    });
+
+    expect(result).toEqual(UNAVAILABLE_RESULT);
+    expect(getAvailability).toHaveBeenCalledWith({ projectId: project.id });
+    expect(listBranches).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['delete_branch', 'deleteBranch', {}],
+    ['merge_branch', 'mergeBranch', {}],
+    ['reset_branch', 'resetBranch', {}],
+    ['rebase_branch', 'rebaseBranch', {}],
+  ] as const)(
+    '%s returns the unavailable result',
+    async (name, operation, extraArguments) => {
+      const getAvailability = vi.fn(async () => UNAVAILABLE);
+      const platform = createPlatform(getAvailability);
+      const branchOperation = vi.spyOn(platform.branching!, operation);
+      const { client } = await setup({ platform, features: ['branching'] });
+      const { project } = await createProjectFixture();
+      const branch = await createBranch({
+        name: 'test-branch',
+        parent_project_ref: project.id,
+      });
+
+      const result = await client.callTool({
+        name,
+        arguments: { branch_id: branch.id, ...extraArguments },
+      });
+
+      expect(result).toEqual(UNAVAILABLE_RESULT);
+      expect(getAvailability).toHaveBeenCalledWith({ branchId: branch.id });
+      expect(branchOperation).not.toHaveBeenCalled();
+    }
+  );
+
+  test('branch-id tools work as before when branching is available', async () => {
+    const platform = createPlatform(async () => ({ available: true }));
+    const { callTool } = await setup({ platform, features: ['branching'] });
+    const { project } = await createProjectFixture();
+    const branch = await createBranch({
+      name: 'test-branch',
+      parent_project_ref: project.id,
+    });
+
+    await expect(
+      callTool({ name: 'delete_branch', arguments: { branch_id: branch.id } })
+    ).resolves.toEqual({ success: true });
+    expect(mockBranches.has(branch.id)).toBe(false);
+  });
+
+  test('a failing availability check lets create_branch proceed', async () => {
+    const { callTool } = await setup({
+      platform: createPlatform(async () => {
+        throw new Error('availability unavailable');
+      }),
+      features: ['account', 'branching'],
+    });
+    const { project } = await createProjectFixture();
+
+    await expect(
+      callTool({
+        name: 'create_branch',
+        arguments: {
+          project_id: project.id,
+          name: 'test-branch',
+          confirm_cost_id: await hashObject(getBranchCost()),
+        },
+      })
+    ).resolves.toMatchObject({ name: 'test-branch' });
   });
 });
