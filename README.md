@@ -167,7 +167,7 @@ const server = createMcpServer({
 });
 ```
 
-The server does not automatically forward request or response payloads to the observer. Custom fact producers own their privacy checks. Omitting `observer` skips all observation work. Observer and classifier failures do not change request behavior, but their synchronous work can block requests.
+The server does not automatically forward request or response payloads to the observer. Custom fact producers own their privacy checks. Omitting `observer` skips all observation work. Observer failures do not change request behavior, but synchronous observer and classifier work can block requests.
 
 ## Other MCP servers
 

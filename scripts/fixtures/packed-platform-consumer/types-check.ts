@@ -118,10 +118,7 @@ const coreOptions: McpServerOptions<'named', Fact> = {
   name: 'packed-observer',
   version: '0.0.0',
   observer,
-  toolClassification: {
-    buckets: ['named'],
-    classify: (name) => (name === 'observed' ? 'named' : 'other'),
-  },
+  classifyTool: (name) => (name === 'observed' ? 'named' : 'other'),
   tools: { observed: observedTool },
 };
 void createMcpServer(coreOptions);
