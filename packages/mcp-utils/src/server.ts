@@ -554,11 +554,15 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
 
     server.setRequestHandler('tools/call', async (request, ctx) => {
       const toolName = request.params.name;
+      let tool: Bucket | 'other' = 'other';
+      if (options.observer) {
+        try {
+          tool = options.classifyTool?.(toolName) ?? 'other';
+        } catch {}
+      }
       const scope = beginObservation(options.observer, {
         method: 'tools/call',
-        tool: options.observer
-          ? (options.classifyTool?.(toolName) ?? 'other')
-          : 'other',
+        tool,
       });
       let outcome: ObservationEnd['result'] = 'handler_error';
 

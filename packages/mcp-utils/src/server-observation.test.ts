@@ -372,4 +372,44 @@ describe('registered handler observations', () => {
       }
     }
   );
+
+  test('classification failure preserves the tool result and uses other context', async () => {
+    const seen = capture();
+    const run = handlers({
+      observer: seen.observer,
+      classifyTool: () => {
+        throw failure;
+      },
+      tools: { task: action(async () => ({ ok: true })) },
+    });
+    expect(await run('tools/call', { name: 'task' })).toEqual({
+      content: [{ type: 'text', text: '{"ok":true}' }],
+    });
+    expect(seen.scopes.map(({ context }) => context)).toEqual([
+      { method: 'tools/call', tool: 'other' },
+    ]);
+  });
+
+  test('async observer factory rejection preserves the tool result without an unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (error: unknown) => unhandled.push(error);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const observer = (() => Promise.reject(failure)) as unknown as RequestObserver<
+        never,
+        TestFact
+      >;
+      const run = handlers({
+        observer,
+        tools: { task: action(async () => ({ ok: true })) },
+      });
+      expect(await run('tools/call', { name: 'task' })).toEqual({
+        content: [{ type: 'text', text: '{"ok":true}' }],
+      });
+      await setImmediate();
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
 });
