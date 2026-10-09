@@ -145,6 +145,30 @@ const server = createServer((req, res) => {
 
 `toNodeHandler` comes from `@modelcontextprotocol/node`, which is not a dependency of this package. Install it alongside.
 
+## Observability
+
+Pass an `observer` to `createMcpServer` to collect request lifecycle results and facts recorded by your tools:
+
+```ts
+import { createMcpServer } from '@supabase/mcp-utils';
+
+const server = createMcpServer({
+  name: 'example',
+  version: '1.0.0',
+  tools: {},
+  observer: (context) => ({
+    record(fact) {
+      console.info(fact);
+    },
+    end(result) {
+      console.info({ ...context, ...result });
+    },
+  }),
+});
+```
+
+The server does not automatically forward request or response payloads to the observer. Custom fact producers own their privacy checks. Omitting `observer` skips all observation work. Observer, classifier and sink failures don't change request behavior, but synchronous observer and classifier work can block requests.
+
 ## Other MCP servers
 
 ### `@supabase/mcp-server-postgrest`
