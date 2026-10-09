@@ -6,6 +6,8 @@ import {
   type InputRequiredResult,
   type ServerContext,
 } from '@modelcontextprotocol/server';
+import type { ToolObservation } from '@supabase/mcp-utils';
+import type { ConfirmationFeature, ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { BranchCost, Cost } from '../pricing.js';
 import { AWS_REGION_CODES } from '../regions.js';
@@ -131,11 +133,21 @@ type ConfirmationStateOptions<S extends ConfirmationState> = {
   payloadMatch?: (state: S) => boolean;
   declinedText: string;
   cancelledText: string;
+  /** Internal cost-only observation; SQL callers do not provide one. */
+  observation?: ToolObservation<ObservationFact>;
 };
+
+type RepromptReason = 'initial' | 'missing_response' | 'changed_quote';
+
+const OUTCOME = {
+  accept: 'completed',
+  decline: 'declined',
+  cancel: 'cancelled',
+} as const;
 
 type ConfirmationDecision<S extends ConfirmationState> =
   | { kind: 'proceed'; state: S }
-  | { kind: 'reprompt' }
+  | { kind: 'reprompt'; reason: RepromptReason }
   | { kind: 'terminal'; result: CallToolResult };
 
 export async function checkConfirmationState<S extends ConfirmationState>(
@@ -151,9 +163,17 @@ export async function checkConfirmationState<S extends ConfirmationState>(
     )
 > {
   const decision = inspectConfirmationState(options);
-  return decision.kind === 'reprompt'
-    ? { kind: 'reprompt', result: await options.askForConfirmation() }
-    : decision;
+  if (decision.kind !== 'reprompt') {
+    return decision;
+  }
+  const result = await options.askForConfirmation();
+  options.observation?.record({
+    kind: 'input_required',
+    feature: 'cost',
+    mode: 'form',
+    reason: decision.reason,
+  });
+  return { kind: 'reprompt', result };
 }
 
 /** Inspect SDK-verified state without issuing a new confirmation. */
@@ -169,14 +189,24 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     payloadMatch,
     declinedText,
     cancelledText,
+    observation,
   } = options;
   const raw = ctx.mcpReq.requestState<unknown>();
   if (raw === undefined) {
-    return { kind: 'reprompt' };
+    return { kind: 'reprompt', reason: 'initial' };
   }
 
   const parsed = schema.safeParse(raw);
   if (!parsed.success || parsed.data.tool !== tool) {
+    // Only a different tool's state counts as tool_mismatch.
+    const rawTool = z.object({ tool: z.string() }).safeParse(raw).data?.tool;
+    if (rawTool !== undefined && rawTool !== tool) {
+      observation?.record({
+        kind: 'resume_validation',
+        feature: 'cost',
+        result: 'tool_mismatch',
+      });
+    }
     return {
       kind: 'terminal',
       result: {
@@ -194,6 +224,11 @@ export function inspectConfirmationState<S extends ConfirmationState>(
 
   const state = parsed.data;
   if (!argsMatch(state)) {
+    observation?.record({
+      kind: 'resume_validation',
+      feature: 'cost',
+      result: 'arguments_mismatch',
+    });
     return {
       kind: 'terminal',
       result: {
@@ -211,8 +246,20 @@ export function inspectConfirmationState<S extends ConfirmationState>(
 
   const response = inputResponse(ctx.mcpReq.inputResponses, requestKey);
   if (response.kind !== 'elicit') {
-    return { kind: 'reprompt' };
+    observation?.record({
+      kind: 'resume_validation',
+      feature: 'cost',
+      result: 'missing_response',
+    });
+    return { kind: 'reprompt', reason: 'missing_response' };
   }
+
+  observation?.setOutcome(OUTCOME[response.action]);
+  observation?.record({
+    kind: 'input_response',
+    feature: 'cost',
+    action: response.action,
+  });
 
   if (response.action === 'decline') {
     return {
@@ -235,10 +282,55 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   }
 
   if (payloadMatch && !payloadMatch(state)) {
-    return { kind: 'reprompt' };
+    observation?.record({
+      kind: 'resume_validation',
+      feature: 'cost',
+      result: 'changed_quote',
+    });
+    return { kind: 'reprompt', reason: 'changed_quote' };
   }
 
+  observation?.record({
+    kind: 'resume_validation',
+    feature: 'cost',
+    result: 'valid',
+  });
   return { kind: 'proceed', state };
+}
+
+/** Records only the duration and disposition of the actual backend operation. */
+export function observeOperation<T>(
+  feature: ConfirmationFeature,
+  record:
+    | ((fact: Extract<ObservationFact, { kind: 'operation' }>) => void)
+    | undefined,
+  run: () => Promise<T>
+): Promise<T> {
+  if (!record) {
+    return run();
+  }
+  record({ kind: 'operation', feature, disposition: 'started' });
+  const startedAt = performance.now();
+  return (async () => {
+    try {
+      const result = await run();
+      record({
+        kind: 'operation',
+        feature,
+        disposition: 'returned',
+        durationMs: performance.now() - startedAt,
+      });
+      return result;
+    } catch (error) {
+      record({
+        kind: 'operation',
+        feature,
+        disposition: 'threw',
+        durationMs: performance.now() - startedAt,
+      });
+      throw error;
+    }
+  })();
 }
 
 /**

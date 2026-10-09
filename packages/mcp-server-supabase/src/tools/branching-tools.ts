@@ -3,7 +3,8 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { tool } from '@supabase/mcp-utils';
+import { type ToolObservation, tool } from '@supabase/mcp-utils';
+import type { ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { BranchingOperations } from '../platform/types.js';
 import { branchSchema } from '../platform/types.js';
@@ -14,6 +15,7 @@ import {
   branchCostStateSchema,
   checkConfirmationState,
   isFormCapable,
+  observeOperation,
   type ElicitationState,
 } from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
@@ -202,19 +204,32 @@ export function getBranchingTools({
           name,
           confirm_cost_id,
         }: z.infer<typeof createBranchInputSchemaWithElicitation>,
-        ctx: ServerContext
+        ctx: ServerContext,
+        observation?: ToolObservation<ObservationFact>
       ) => {
         if (readOnly) {
+          observation?.record({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'blocked',
+            reason: 'read_only',
+          });
           throw new Error('Cannot create a branch in read-only mode.');
         }
 
         if (confirmation && isFormCapable(ctx)) {
           const { codec } = confirmation;
           const cost = getBranchCost();
+          observation?.record({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'inline',
+            reason: 'eligible',
+          });
           const costSuffix = { hourly: '/hr' }[cost.recurrence];
 
-          const askForConfirmation = async () =>
-            inputRequired({
+          const askForConfirmation = async () => {
+            return inputRequired({
               inputRequests: {
                 confirm_cost: inputRequired.elicit({
                   mode: 'form',
@@ -231,6 +246,7 @@ export function getBranchingTools({
                 ctx
               ),
             });
+          };
 
           const confirmationState = await checkConfirmationState({
             ctx,
@@ -238,6 +254,7 @@ export function getBranchingTools({
             schema: branchCostStateSchema,
             requestKey: 'confirm_cost',
             askForConfirmation,
+            observation,
             argsMatch: (state) =>
               state.project_id === project_id && state.name === name,
             payloadMatch: (state) =>
@@ -247,27 +264,37 @@ export function getBranchingTools({
             declinedText: 'Branch creation was declined.',
             cancelledText: 'Branch creation was cancelled.',
           });
-
           switch (confirmationState.kind) {
             case 'reprompt':
             case 'terminal':
               return confirmationState.result;
             case 'proceed':
-              return await branching.createBranch(
-                confirmationState.state.project_id,
-                { name: confirmationState.state.name }
+              return await observeOperation('cost', observation?.record, () =>
+                branching.createBranch(confirmationState.state.project_id, {
+                  name: confirmationState.state.name,
+                })
               );
           }
         }
 
         const cost = getBranchCost();
+        // confirmation is the server option enabling inline confirmation; legacy means no form support or no configuration.
+        const reason = confirmation ? 'capability_missing' : 'not_configured';
+        observation?.record({
+          kind: 'confirmation_decision',
+          feature: 'cost',
+          route: 'legacy',
+          reason,
+        });
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
           throw new Error(
             'Cost confirmation ID does not match the expected cost of creating a branch.'
           );
         }
-        return await branching.createBranch(project_id, { name });
+        return await observeOperation('cost', observation?.record, () =>
+          branching.createBranch(project_id, { name })
+        );
       },
     }),
     list_branches: injectableTool({
