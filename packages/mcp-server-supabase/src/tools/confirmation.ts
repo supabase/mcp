@@ -124,7 +124,7 @@ export type CheckConfirmationStateResult =
   | { kind: 'reprompt'; result: InputRequiredResult }
   | { kind: 'terminal'; result: CallToolResult };
 
-type ConfirmationStateOptions<S extends ConfirmationState> = {
+export type ConfirmationStateOptions<S extends ConfirmationState> = {
   ctx: ServerContext;
   tool: S['tool'];
   schema: z.ZodType<S>;
@@ -133,7 +133,6 @@ type ConfirmationStateOptions<S extends ConfirmationState> = {
   payloadMatch?: (state: S) => boolean;
   declinedText: string;
   cancelledText: string;
-  /** Internal cost-only observation; SQL callers do not provide one. */
   observation?: ToolObservation<ObservationFact>;
 };
 
@@ -149,6 +148,13 @@ type ConfirmationDecision<S extends ConfirmationState> =
   | { kind: 'proceed'; state: S }
   | { kind: 'reprompt'; reason: RepromptReason }
   | { kind: 'terminal'; result: CallToolResult };
+
+const FEATURE = {
+  create_project: 'cost',
+  create_branch: 'cost',
+  execute_sql: 'destructive_sql',
+  apply_migration: 'destructive_sql',
+} as const satisfies Record<ConfirmationState['tool'], ConfirmationFeature>;
 
 export async function checkConfirmationState<S extends ConfirmationState>(
   options: ConfirmationStateOptions<S> & {
@@ -169,7 +175,7 @@ export async function checkConfirmationState<S extends ConfirmationState>(
   const result = await options.askForConfirmation();
   options.observation?.record({
     kind: 'input_required',
-    feature: 'cost',
+    feature: FEATURE[options.tool],
     mode: 'form',
     reason: decision.reason,
   });
@@ -191,6 +197,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     cancelledText,
     observation,
   } = options;
+  const feature = FEATURE[tool];
   const raw = ctx.mcpReq.requestState<unknown>();
   if (raw === undefined) {
     return { kind: 'reprompt', reason: 'initial' };
@@ -203,7 +210,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     if (rawTool !== undefined && rawTool !== tool) {
       observation?.record({
         kind: 'resume_validation',
-        feature: 'cost',
+        feature,
         result: 'tool_mismatch',
       });
     }
@@ -226,7 +233,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   if (!argsMatch(state)) {
     observation?.record({
       kind: 'resume_validation',
-      feature: 'cost',
+      feature,
       result: 'arguments_mismatch',
     });
     return {
@@ -248,7 +255,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   if (response.kind !== 'elicit') {
     observation?.record({
       kind: 'resume_validation',
-      feature: 'cost',
+      feature,
       result: 'missing_response',
     });
     return { kind: 'reprompt', reason: 'missing_response' };
@@ -257,7 +264,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   observation?.setOutcome(OUTCOME[response.action]);
   observation?.record({
     kind: 'input_response',
-    feature: 'cost',
+    feature,
     action: response.action,
   });
 
@@ -284,7 +291,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   if (payloadMatch && !payloadMatch(state)) {
     observation?.record({
       kind: 'resume_validation',
-      feature: 'cost',
+      feature,
       result: 'changed_quote',
     });
     return { kind: 'reprompt', reason: 'changed_quote' };
@@ -292,7 +299,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
 
   observation?.record({
     kind: 'resume_validation',
-    feature: 'cost',
+    feature,
     result: 'valid',
   });
   return { kind: 'proceed', state };

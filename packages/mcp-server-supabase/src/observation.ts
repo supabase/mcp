@@ -9,9 +9,9 @@ export type { ObservationEnd, ObservedMethod } from '@supabase/mcp-utils';
 
 export type ObservedTool = ElicitationToolName | 'other';
 
-export type ConfirmationFeature = 'cost';
+export type ConfirmationFeature = 'cost' | 'destructive_sql';
 
-/** Closed, payload-free facts for cost confirmation and operation attempts. */
+/** Payload-free facts recorded by Supabase tools. */
 export type ObservationFact =
   | Readonly<{
       kind: 'confirmation_decision';
@@ -22,7 +22,8 @@ export type ObservationFact =
         | 'not_configured'
         | 'capability_missing'
         | 'read_only'
-        | 'zero_cost';
+        | 'zero_cost'
+        | 'not_destructive';
     }>
   | Readonly<{
       kind: 'input_required';

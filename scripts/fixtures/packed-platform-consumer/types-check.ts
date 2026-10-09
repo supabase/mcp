@@ -125,6 +125,29 @@ const coreOptions: McpServerOptions<'named', Fact> = {
 };
 void createMcpServer(coreOptions);
 
+const sqlFeature: Supabase.ConfirmationFeature = 'destructive_sql';
+const sqlFacts = [
+  {
+    kind: 'confirmation_decision',
+    feature: sqlFeature,
+    route: 'bypass',
+    reason: 'not_destructive',
+  },
+  { kind: 'operation', feature: sqlFeature, disposition: 'started' },
+  {
+    kind: 'operation',
+    feature: sqlFeature,
+    disposition: 'returned',
+    durationMs: 1,
+  },
+  {
+    kind: 'operation',
+    feature: sqlFeature,
+    disposition: 'threw',
+    durationMs: 2,
+  },
+] satisfies Supabase.ObservationFact[];
+void sqlFacts;
 const supabaseObserver: Supabase.RequestObserver = (context) => {
   if (context.method === 'tools/call') {
     const tool:
@@ -140,7 +163,7 @@ const supabaseObserver: Supabase.RequestObserver = (context) => {
   }
   return {
     record: (fact) => {
-      const feature: 'cost' = fact.feature;
+      const feature: 'cost' | 'destructive_sql' = fact.feature;
       void feature;
       if (fact.kind === 'operation' && fact.disposition !== 'started') {
         const durationMs: number = fact.durationMs;

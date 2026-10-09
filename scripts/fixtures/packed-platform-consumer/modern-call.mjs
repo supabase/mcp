@@ -42,6 +42,11 @@ const issuance = {
 export async function runConsumer(createHandler = createSupabaseMcpHandler) {
   const scopes = [];
   let creates = 0;
+  let sqlExecutions = 0;
+  const sqlArgs = {
+    project_id: project.id,
+    query: 'DROP TABLE "PRIVATE_TABLE"; -- PRIVATE_SQL',
+  };
   const observer = (context) => {
     const scope = { context, facts: [], ends: [] };
     scopes.push(scope);
@@ -78,15 +83,28 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
         pauseProject: notImplemented,
         restoreProject: notImplemented,
       },
+      database: {
+        executeSql: async (projectId, input) => {
+          assert.equal(projectId, project.id);
+          assert.deepEqual(input, {
+            query: sqlArgs.query,
+            read_only: undefined,
+          });
+          sqlExecutions++;
+          return [{ private_result: 'PRIVATE_RESULT' }];
+        },
+        applyMigration: notImplemented,
+        listMigrations: notImplemented,
+      },
     },
-    // docs descriptions can fetch supabase.com; deliberately register account only.
-    features: ['account'],
+    // Exclude docs descriptions, which can fetch supabase.com.
+    features: ['account', 'database'],
     elicitation: {
       requestState: {
         key: 'a'.repeat(32), // fixed test-only key, never a credential
         principal: 'PRIVATE_PRINCIPAL',
       },
-      confirmation: { enabledTools: ['create_project'] },
+      confirmation: { enabledTools: ['create_project', 'execute_sql'] },
     },
   });
   const transport = new StreamableHTTPClientTransport(
@@ -152,6 +170,52 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
       { type: 'text', text: JSON.stringify(project) },
     ]);
     assert.equal(creates, 1);
+
+    const sqlFirst = await call({ name: 'execute_sql', arguments: sqlArgs });
+    assert.ok(sqlFirst.inputRequests?.confirm_destructive);
+    assert.equal(typeof sqlFirst.requestState, 'string');
+    assert.equal(sqlExecutions, 0);
+    assert.deepEqual(scopes[3].facts, [
+      { ...decision, feature: 'destructive_sql' },
+      { ...issuance, feature: 'destructive_sql' },
+    ]);
+    assert.equal(scopes[3].ends[0].result, 'input_required');
+    const sqlAccepted = await call({
+      name: 'execute_sql',
+      arguments: sqlArgs,
+      requestState: sqlFirst.requestState,
+      inputResponses: {
+        confirm_destructive: { action: 'accept', content: {} },
+      },
+    });
+    assert.notEqual(sqlAccepted.isError, true);
+    assert.equal(sqlExecutions, 1);
+    assert.match(JSON.stringify(sqlAccepted), /PRIVATE_RESULT/);
+    const sqlResume = scopes[4];
+    assert.deepEqual(sqlResume.context, {
+      method: 'tools/call',
+      tool: 'execute_sql',
+    });
+    assert.deepEqual(sqlResume.facts.slice(0, 4), [
+      { ...decision, feature: 'destructive_sql' },
+      { kind: 'input_response', feature: 'destructive_sql', action: 'accept' },
+      {
+        kind: 'resume_validation',
+        feature: 'destructive_sql',
+        result: 'valid',
+      },
+      { kind: 'operation', feature: 'destructive_sql', disposition: 'started' },
+    ]);
+    assert.equal(sqlResume.facts.length, 5);
+    const returned = sqlResume.facts[4];
+    assert.deepEqual(returned, {
+      kind: 'operation',
+      feature: 'destructive_sql',
+      disposition: 'returned',
+      durationMs: returned.durationMs,
+    });
+    assert.equal(sqlResume.ends.length, 1);
+    assert.equal(sqlResume.ends[0].result, 'completed');
     for (const scope of scopes) {
       for (const event of [...scope.facts, ...scope.ends]) {
         if ('durationMs' in event) {
@@ -161,6 +225,7 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
       }
     }
     assert.doesNotMatch(JSON.stringify(scopes), /PRIVATE_/);
+    assert.ok(!JSON.stringify(scopes).includes(sqlFirst.requestState));
     return tools.length;
   } finally {
     await client.close();
