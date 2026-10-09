@@ -53,6 +53,14 @@ export function beginObservation<Bucket extends string = never, Fact = never>(
   let observation: RequestObservation<Fact> | undefined;
   try {
     observation = observer(context);
+    if (
+      observation &&
+      'then' in observation &&
+      typeof observation.then === 'function'
+    ) {
+      void Promise.resolve(observation).catch(() => {});
+      return undefined;
+    }
   } catch {
     return undefined;
   }
