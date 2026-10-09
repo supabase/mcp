@@ -395,10 +395,8 @@ describe('registered handler observations', () => {
     const onUnhandled = (error: unknown) => unhandled.push(error);
     process.on('unhandledRejection', onUnhandled);
     try {
-      const observer = (() => Promise.reject(failure)) as unknown as RequestObserver<
-        never,
-        TestFact
-      >;
+      const observer = (() =>
+        Promise.reject(failure)) as unknown as RequestObserver<never, TestFact>;
       const run = handlers({
         observer,
         tools: { task: action(async () => ({ ok: true })) },
