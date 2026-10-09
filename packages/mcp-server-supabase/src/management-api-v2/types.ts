@@ -1281,6 +1281,8 @@ export interface components {
                         postgres_settings: {
                             effective_cache_size?: string;
                             logical_decoding_work_mem?: string;
+                            autovacuum_max_workers?: number;
+                            autovacuum_work_mem?: string;
                             /** @description Default unit: ms */
                             log_autovacuum_min_duration?: string;
                             log_checkpoints?: boolean;
@@ -1323,6 +1325,8 @@ export interface components {
                             checkpoint_timeout?: string;
                             hot_standby_feedback?: boolean;
                             cron_log_statement?: boolean;
+                            pg_net_batch_size?: number;
+                            pg_stat_statements_max?: number;
                         };
                     };
                     pooler: {
