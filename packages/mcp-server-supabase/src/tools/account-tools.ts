@@ -197,7 +197,7 @@ export const accountToolDefs = {
   },
   confirm_cost: {
     description:
-      'Records that the user has agreed to the cost of a new project or branch returned by `get_cost`. Only call this after the user has explicitly agreed to that cost in the conversation. Returns a confirmation ID to pass to `create_project` or `create_branch`.',
+      'Returns a confirmation ID for the cost of a new project or branch returned by `get_cost`. Only call this after the user has explicitly agreed to that cost in the conversation. Pass the ID to `create_project` or `create_branch`.',
     parameters: confirmCostInputSchema,
     outputSchema: confirmCostOutputSchema,
     annotations: {
