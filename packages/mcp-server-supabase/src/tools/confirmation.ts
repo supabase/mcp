@@ -12,7 +12,7 @@ import { AWS_REGION_CODES } from '../regions.js';
 
 /** `confirm_cost_id` description for clients that must call `confirm_cost`. */
 export const confirmCostIdDescription =
-  'The ID returned by `confirm_cost` after the user agrees to the cost from `get_cost`.';
+  'The ID returned by `confirm_cost`. To get it, call `get_cost`, tell the user the cost, and call `confirm_cost` once they agree.';
 
 /** `confirm_cost_id` description when the create tool can also confirm inline. */
 export const optionalConfirmCostIdDescription = `${confirmCostIdDescription} Required unless the client asks the user to confirm the cost when this tool runs.`;

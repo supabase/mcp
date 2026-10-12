@@ -210,7 +210,7 @@ export const accountToolDefs = {
   },
   create_project: {
     description:
-      "Creates a new Supabase project, which can add to the organization's bill. The user must agree to the cost before the project is created: either the client asks them when this tool runs, or you call `get_cost`, tell the user the cost, and pass the ID from `confirm_cost`. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use `get_project` to check the status.",
+      "Creates a new Supabase project, which can add to the organization's bill. The user must agree to the cost before the project is created. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use `get_project` to check the status.",
     parameters: createProjectInputSchema,
     outputSchema: createProjectOutputSchema,
     annotations: {
