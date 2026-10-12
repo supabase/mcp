@@ -10,6 +10,13 @@ import { z } from 'zod/v4';
 import type { BranchCost, Cost } from '../pricing.js';
 import { AWS_REGION_CODES } from '../regions.js';
 
+/** `confirm_cost_id` description for clients that must call `confirm_cost`. */
+export const confirmCostIdDescription =
+  'The ID returned by `confirm_cost` after the user agrees to the cost from `get_cost`.';
+
+/** `confirm_cost_id` description when the create tool can also confirm inline. */
+export const optionalConfirmCostIdDescription = `${confirmCostIdDescription} Required unless the client asks the user to confirm the cost when this tool runs.`;
+
 /**
  * Signed `requestState` payload for the `create_project` cost-confirmation
  * elicitation, bound to the project arguments and the cost quoted to the
