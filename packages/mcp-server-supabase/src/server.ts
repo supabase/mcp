@@ -8,7 +8,10 @@ import packageJson from '../package.json' with { type: 'json' };
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
-import { getBranchingTools } from './tools/branching-tools.js';
+import {
+  getBranchingTools,
+  getBranchingUnavailableResult,
+} from './tools/branching-tools.js';
 import {
   type ElicitationState,
   isFormCapable,
@@ -118,6 +121,16 @@ const DEFAULT_FEATURES: FeatureGroup[] = [
 ];
 
 export const PLATFORM_INDEPENDENT_FEATURES: FeatureGroup[] = ['docs'];
+
+// Module scope: describe() registers in the global zod registry, so building it per request would grow it.
+const branchCostProjectIdParameter = z.object({
+  project_id: z
+    .string()
+    .optional()
+    .describe(
+      'The project ID to create the branch on. Pass it when getting the cost of a branch.'
+    ),
+});
 
 export const instructions = `
 Here are guidelines for using Supabase tools effectively:
@@ -328,6 +341,30 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             tools[name] = { ...tool, hidden: true };
           }
         }
+      }
+
+      // Branch quotes ask the platform first, so an organization without
+      // branching gets that answer before any cost step.
+      const getCost = tools.get_cost;
+      if (getCost && branching?.getAvailability) {
+        tools.get_cost = {
+          ...getCost,
+          parameters: getCost.parameters.extend(
+            branchCostProjectIdParameter.shape
+          ),
+          execute: async (params, ctx) => {
+            const { project_id } = branchCostProjectIdParameter.parse(params);
+            const args = getCost.parameters.parse(params);
+            return (
+              (args.type === 'branch' &&
+                project_id &&
+                (await getBranchingUnavailableResult(branching, {
+                  projectId: project_id,
+                }))) ||
+              (await getCost.execute(args, ctx))
+            );
+          },
+        };
       }
 
       // Form-capable clients confirm cost inside the create tools, so those

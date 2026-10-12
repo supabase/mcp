@@ -4,6 +4,7 @@ import {
 } from '@mjackson/multipart-parser';
 import type { InitData } from '@supabase/mcp-utils';
 import { fileURLToPath } from 'node:url';
+import { z } from 'zod/v4';
 import packageJson from '../../package.json' with { type: 'json' };
 import { getDeploymentId, normalizeFilename } from '../edge-function.js';
 import { getClickHouseLogQuery } from '../logs.js';
@@ -706,6 +707,40 @@ export function createSupabaseApiPlatform(
   };
 
   const branching: BranchingOperations = {
+    // TEMP(AI-1292): replace with the typed managementApiClient call once
+    // GET /v1/projects/{ref}/branching is deployed and the generated types include it.
+    async getAvailability(scope) {
+      let projectId: string;
+      if ('branchId' in scope) {
+        // A branch is a project in its parent's organization.
+        const branchResponse = await managementApiClient.GET(
+          '/v1/branches/{branch_id_or_ref}',
+          { params: { path: { branch_id_or_ref: scope.branchId } } }
+        );
+        assertSuccess(branchResponse, 'Failed to fetch branch');
+        projectId = branchResponse.data.ref;
+      } else {
+        projectId = scope.projectId;
+      }
+      const response = await fetch(
+        `${managementApiUrl}/v1/projects/${encodeURIComponent(projectId)}/branching`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to check branching: ${response.status}`);
+      }
+      const { available } = z
+        .object({ available: z.boolean() })
+        .parse(await response.json());
+      if (available) {
+        return { available: true };
+      }
+      const { organization_slug } = await account.getProject(projectId);
+      return {
+        available: false,
+        message: `Branching isn't available for this organization. Branching is supported only on the Pro plan or above. Ask the user whether they want to upgrade. They can upgrade on the organization's billing page: https://supabase.com/dashboard/org/${organization_slug}/billing`,
+      };
+    },
     async listBranches(projectId: string) {
       const response = await managementApiClient.GET(
         '/v1/projects/{ref}/branches',

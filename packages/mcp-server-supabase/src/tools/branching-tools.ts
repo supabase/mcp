@@ -1,11 +1,15 @@
 import {
+  type CallToolResult,
   inputRequired,
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
 import { tool } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
-import type { BranchingOperations } from '../platform/types.js';
+import type {
+  BranchingAvailabilityScope,
+  BranchingOperations,
+} from '../platform/types.js';
 import { branchSchema } from '../platform/types.js';
 import { getBranchCost } from '../pricing.js';
 import { hashObject } from '../util.js';
@@ -33,15 +37,16 @@ type BranchingToolsOptions = {
   };
 };
 
+const missingCostConfirmationMessage =
+  'User must confirm understanding of costs before creating a branch.';
+
 const createBranchInputSchema = z.object({
   project_id: z.string(),
   name: z.string().default('develop').describe('Name of the branch to create'),
   confirm_cost_id: z
     .string({
       error: (issue) =>
-        issue.input === undefined
-          ? 'User must confirm understanding of costs before creating a branch.'
-          : undefined,
+        issue.input === undefined ? missingCostConfirmationMessage : undefined,
     })
     .describe('The cost confirmation ID. Call `confirm_cost` first.'),
 });
@@ -54,6 +59,10 @@ const createBranchInputSchemaWithElicitation = createBranchInputSchema.extend({
       'The cost confirmation ID. Only required for clients without per-request form-elicitation capability; those clients must call `confirm_cost` first. Form-capable clients are asked to confirm the cost inline when creating the branch.'
     ),
 });
+
+// Project scope has no confirm_cost tool, so the availability check must be reachable without an ID.
+const createBranchInputSchemaOptionalConfirmation =
+  createBranchInputSchema.partial({ confirm_cost_id: true });
 
 const createBranchOutputSchema = branchSchema;
 
@@ -194,7 +203,9 @@ export function getBranchingTools({
       ...branchingToolDefs.create_branch,
       parameters: confirmation
         ? createBranchInputSchemaWithElicitation
-        : createBranchInputSchema,
+        : projectId
+          ? createBranchInputSchemaOptionalConfirmation
+          : createBranchInputSchema,
       inject: { project_id },
       execute: async (
         {
@@ -206,6 +217,17 @@ export function getBranchingTools({
       ) => {
         if (readOnly) {
           throw new Error('Cannot create a branch in read-only mode.');
+        }
+
+        const unavailable = await getBranchingUnavailableResult(branching, {
+          projectId: project_id,
+        });
+        if (unavailable) {
+          return unavailable;
+        }
+
+        if (!confirmation && confirm_cost_id === undefined) {
+          throw new Error(missingCostConfirmationMessage);
         }
 
         if (confirmation && isFormCapable(ctx)) {
@@ -274,7 +296,11 @@ export function getBranchingTools({
       ...branchingToolDefs.list_branches,
       inject: { project_id },
       execute: async ({ project_id }) => {
-        return { branches: await branching.listBranches(project_id) };
+        return (
+          (await getBranchingUnavailableResult(branching, {
+            projectId: project_id,
+          })) ?? { branches: await branching.listBranches(project_id) }
+        );
       },
     }),
     delete_branch: tool({
@@ -282,6 +308,12 @@ export function getBranchingTools({
       execute: async ({ branch_id }) => {
         if (readOnly) {
           throw new Error('Cannot delete a branch in read-only mode.');
+        }
+        const unavailable = await getBranchingUnavailableResult(branching, {
+          branchId: branch_id,
+        });
+        if (unavailable) {
+          return unavailable;
         }
 
         await branching.deleteBranch(branch_id);
@@ -294,6 +326,12 @@ export function getBranchingTools({
         if (readOnly) {
           throw new Error('Cannot merge a branch in read-only mode.');
         }
+        const unavailable = await getBranchingUnavailableResult(branching, {
+          branchId: branch_id,
+        });
+        if (unavailable) {
+          return unavailable;
+        }
 
         await branching.mergeBranch(branch_id);
         return { success: true };
@@ -304,6 +342,12 @@ export function getBranchingTools({
       execute: async ({ branch_id, migration_version }) => {
         if (readOnly) {
           throw new Error('Cannot reset a branch in read-only mode.');
+        }
+        const unavailable = await getBranchingUnavailableResult(branching, {
+          branchId: branch_id,
+        });
+        if (unavailable) {
+          return unavailable;
         }
 
         await branching.resetBranch(branch_id, {
@@ -318,10 +362,40 @@ export function getBranchingTools({
         if (readOnly) {
           throw new Error('Cannot rebase a branch in read-only mode.');
         }
+        const unavailable = await getBranchingUnavailableResult(branching, {
+          branchId: branch_id,
+        });
+        if (unavailable) {
+          return unavailable;
+        }
 
         await branching.rebaseBranch(branch_id);
         return { success: true };
       },
     }),
+  };
+}
+
+/**
+ * The platform's "not available" answer as a normal result: an entitlement
+ * block is not a tool error. A failed check lets the call proceed.
+ */
+export async function getBranchingUnavailableResult(
+  branching: BranchingOperations | undefined,
+  scope: BranchingAvailabilityScope
+): Promise<CallToolResult | undefined> {
+  const availability = await branching
+    ?.getAvailability?.(scope)
+    .catch(() => undefined);
+  if (availability?.available !== false) {
+    return undefined;
+  }
+  const message =
+    availability.message ??
+    "Branching isn't available for this project's organization. Tell the user and ask whether they want to upgrade their plan.";
+  return {
+    content: [{ type: 'text', text: message }],
+    // Some clients show the model structuredContent instead of the text, so it carries the message too.
+    structuredContent: { status: 'unavailable', message },
   };
 }
