@@ -13,7 +13,9 @@ import {
   actionOnlyElicitationSchema,
   branchCostStateSchema,
   checkConfirmationState,
+  confirmCostIdDescription,
   isFormCapable,
+  optionalConfirmCostIdDescription,
   type ElicitationState,
 } from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
@@ -43,16 +45,14 @@ const createBranchInputSchema = z.object({
           ? 'User must confirm understanding of costs before creating a branch.'
           : undefined,
     })
-    .describe('The cost confirmation ID. Call `confirm_cost` first.'),
+    .describe(confirmCostIdDescription),
 });
 
 const createBranchInputSchemaWithElicitation = createBranchInputSchema.extend({
   confirm_cost_id: z
     .string()
     .optional()
-    .describe(
-      'The cost confirmation ID. Only required for clients without per-request form-elicitation capability; those clients must call `confirm_cost` first. Form-capable clients are asked to confirm the cost inline when creating the branch.'
-    ),
+    .describe(optionalConfirmCostIdDescription),
 });
 
 const createBranchOutputSchema = branchSchema;
@@ -104,7 +104,7 @@ const rebaseBranchOutputSchema = z.object({
 export const branchingToolDefs = {
   create_branch: {
     description:
-      'Creates a development branch on a Supabase project. This will apply all migrations from the main project to a fresh branch database. Note that production data will not carry over. The branch will get its own project_id via the resulting project_ref. Use this ID to execute queries and migrations on the branch.',
+      'Creates a development branch on a Supabase project, which can incur hourly compute and other usage charges. The user must agree to the cost before the branch is created. This will apply all migrations from the main project to a fresh branch database. Note that production data will not carry over. The branch will get its own project_id via the resulting project_ref. Use this ID to execute queries and migrations on the branch.',
     parameters: createBranchInputSchema,
     outputSchema: createBranchOutputSchema,
     annotations: {

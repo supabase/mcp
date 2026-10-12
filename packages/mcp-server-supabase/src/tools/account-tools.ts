@@ -9,7 +9,9 @@ import type { ToolDefs } from './util.js';
 import {
   actionOnlyElicitationSchema,
   checkConfirmationState,
+  confirmCostIdDescription,
   isFormCapable,
+  optionalConfirmCostIdDescription,
   projectCostStateSchema,
   type ElicitationState,
 } from './confirmation.js';
@@ -99,7 +101,7 @@ const createProjectInputSchema = z.object({
           ? 'User must confirm understanding of costs before creating a project.'
           : undefined,
     })
-    .describe('The cost confirmation ID. Call `confirm_cost` first.'),
+    .describe(confirmCostIdDescription),
 });
 
 const createProjectOutputSchema = projectSchema;
@@ -109,9 +111,7 @@ const createProjectInputSchemaWithElicitation = createProjectInputSchema.extend(
     confirm_cost_id: z
       .string()
       .optional()
-      .describe(
-        'The cost confirmation ID. Only required for clients without per-request form-elicitation capability; those clients must call `confirm_cost` first. Form-capable clients are asked to confirm the cost inline when creating the project.'
-      ),
+      .describe(optionalConfirmCostIdDescription),
   }
 );
 
@@ -197,7 +197,7 @@ export const accountToolDefs = {
   },
   confirm_cost: {
     description:
-      'Ask the user to confirm their understanding of the cost of creating a new project or branch. Call `get_cost` first. Returns a unique ID for this confirmation which should be passed to `create_project` or `create_branch`.',
+      'Returns a confirmation ID for the cost of a new project or branch returned by `get_cost`. Only call this after the user has explicitly agreed to that cost in the conversation. Pass the ID to `create_project` or `create_branch`.',
     parameters: confirmCostInputSchema,
     outputSchema: confirmCostOutputSchema,
     annotations: {
@@ -210,7 +210,7 @@ export const accountToolDefs = {
   },
   create_project: {
     description:
-      'Creates a new Supabase project. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use `get_project` to check the status.',
+      "Creates a new Supabase project, which can add to the organization's bill. The user must agree to the cost before the project is created. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use `get_project` to check the status.",
     parameters: createProjectInputSchema,
     outputSchema: createProjectOutputSchema,
     annotations: {
