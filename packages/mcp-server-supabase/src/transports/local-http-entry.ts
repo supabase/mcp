@@ -205,6 +205,12 @@ export async function startLocalHttpEntry({
                       (tool) => !skipElicitations?.includes(tool)
                     ),
                   },
+                  // skip_elicitations for a SQL tool skips its RLS fix too.
+                  rlsFix: {
+                    enabledTools: (
+                      ['execute_sql', 'apply_migration'] as const
+                    ).filter((tool) => !skipElicitations?.includes(tool)),
+                  },
                   secretCollection,
                 },
               }),

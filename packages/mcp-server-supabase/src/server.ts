@@ -91,6 +91,15 @@ export type SupabaseMcpServerOptions = {
       enabledTools: readonly ElicitationToolName[];
     };
     /**
+     * After the listed SQL tools run, ask form-capable clients how to protect
+     * tables the SQL left exposed without RLS, then run the SQL for the
+     * chosen option. Clients without form capability get today's behavior.
+     * Empty or omitted turns the check off.
+     */
+    rlsFix?: {
+      enabledTools: readonly ('execute_sql' | 'apply_migration')[];
+    };
+    /**
      * URL-mode secret collection for `create_edge_function_secret`. Requires
      * `platform.secrets` and the functions feature group. Only URL-capable
      * clients get the tool.
@@ -175,9 +184,12 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
   const enabledConfirmationTools =
     elicitation?.confirmation?.enabledTools ?? [];
+  const enabledRlsFixTools = elicitation?.rlsFix?.enabledTools ?? [];
   const elicitationCodec =
     elicitation &&
-    (enabledConfirmationTools.length > 0 || elicitation.secretCollection)
+    (enabledConfirmationTools.length > 0 ||
+      enabledRlsFixTools.length > 0 ||
+      elicitation.secretCollection)
       ? createRequestStateCodec<ElicitationState>({
           key: elicitation.requestState.key,
           ttlSeconds: elicitation.requestState.ttlSeconds,
@@ -260,6 +272,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
                         tool === 'execute_sql' || tool === 'apply_migration'
                     ),
                   }
+                : undefined,
+            rlsFix:
+              elicitationCodec && enabledRlsFixTools.length > 0
+                ? { codec: elicitationCodec, enabledTools: enabledRlsFixTools }
                 : undefined,
           })
         );

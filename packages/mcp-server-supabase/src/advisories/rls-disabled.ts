@@ -4,7 +4,7 @@ import type { Advisory } from './schema.js';
  * Schemas excluded from the RLS advisory.
  * Matches the exclusion list in the database linter (lints.sql `rls_disabled_in_public`).
  */
-const SYSTEM_SCHEMAS = new Set([
+export const SYSTEM_SCHEMAS: ReadonlySet<string> = new Set([
   '_timescaledb_cache',
   '_timescaledb_catalog',
   '_timescaledb_config',
@@ -36,7 +36,7 @@ const SYSTEM_SCHEMAS = new Set([
 /**
  * Quotes a Postgres identifier, doubling any embedded double quotes.
  */
-function quoteIdentifier(identifier: string): string {
+export function quoteIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 

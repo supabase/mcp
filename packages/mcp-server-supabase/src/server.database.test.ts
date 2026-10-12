@@ -1,4 +1,9 @@
-import { ACCESS_TOKEN, API_URL, createProjectFixture } from '../test/mocks.js';
+import {
+  ACCESS_TOKEN,
+  API_URL,
+  createProjectFixture,
+  type MockProject,
+} from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabaseMcpServerOptions } from './server.js';
@@ -1421,6 +1426,322 @@ describe('tools', () => {
         },
       });
 
+      expect(applyMigration).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('RLS fix after execution via elicitation', () => {
+    const RLS_FIX_ELICITATION: NonNullable<
+      SupabaseMcpServerOptions['elicitation']
+    > = {
+      requestState: ELICITATION_REQUEST_STATE,
+      rlsFix: { enabledTools: ['execute_sql', 'apply_migration'] },
+    };
+
+    // The pieces of a Supabase database the check and the fix SQL rely on.
+    async function createSupabaseLikeProject() {
+      const project = await createActiveProject();
+      await project.db.exec(`
+        create role anon;
+        create role authenticated;
+        create schema auth;
+        create table auth.users (id uuid primary key);
+        create function auth.uid() returns uuid language sql stable
+          as $$ select null::uuid $$;
+        create schema private;
+        grant usage on schema public, private to anon, authenticated;
+        alter default privileges in schema public, private
+          grant all on tables to anon, authenticated;
+      `);
+      return project;
+    }
+
+    async function rlsState(project: MockProject, table: string) {
+      const { rows: rls } = await project.db.query<{
+        relrowsecurity: boolean;
+      }>('select relrowsecurity from pg_class where oid = $1::regclass', [
+        table,
+      ]);
+      const { rows: policies } = await project.db.query<{ cmd: string }>(
+        "select cmd from pg_policies where schemaname || '.' || tablename = $1 order by cmd",
+        [table]
+      );
+      return {
+        rls_enabled: rls[0]?.relrowsecurity,
+        policies: policies.map(({ cmd }) => cmd),
+      };
+    }
+
+    function offeredChoices(result: InputRequiredResult) {
+      const request = result.inputRequests?.rls_fix as
+        | {
+            params: {
+              message: string;
+              requestedSchema: {
+                properties: { choice: { oneOf: { const: string }[] } };
+              };
+            };
+          }
+        | undefined;
+      return {
+        message: request?.params.message,
+        choices: request?.params.requestedSchema.properties.choice.oneOf.map(
+          (option) => option.const
+        ),
+      };
+    }
+
+    test('apply_migration: the accepted retry runs only the fix, as a follow-up migration', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitation: RLS_FIX_ELICITATION,
+      });
+      const project = await createSupabaseLikeProject();
+      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+      const args = {
+        project_id: project.id,
+        name: 'create_todos',
+        query:
+          'create table todos (id bigint primary key, author_id uuid references auth.users (id), title text);',
+      };
+
+      const first = await callModernTool(client, {
+        name: 'apply_migration',
+        arguments: args,
+      });
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an RLS fix elicitation');
+      }
+      expect(offeredChoices(first).choices).toEqual([
+        'owner_only',
+        'public_read_owner_write',
+        'server_only',
+        'leave_open',
+      ]);
+      expect(offeredChoices(first).message).toContain(
+        'public.todos (owner column: author_id)'
+      );
+      expect(applyMigration).toHaveBeenCalledOnce();
+
+      const second = await callModernTool(client, {
+        name: 'apply_migration',
+        arguments: args,
+        requestState: first.requestState,
+        inputResponses: {
+          rls_fix: { action: 'accept', content: { choice: 'owner_only' } },
+        },
+      });
+      if (isInputRequiredResult(second)) {
+        throw new Error('expected a CallToolResult');
+      }
+
+      expect(applyMigration).toHaveBeenCalledTimes(2);
+      expect(applyMigration).toHaveBeenLastCalledWith(project.id, {
+        name: 'create_todos_rls_fix',
+        query: expect.stringContaining(
+          'alter table "public"."todos" enable row level security;'
+        ),
+      });
+      expect(project.migrations.map(({ name }) => name)).toEqual([
+        'create_todos',
+        'create_todos_rls_fix',
+      ]);
+      const [content] = second.content;
+      expect(
+        JSON.parse(content?.type === 'text' ? content.text : '')
+      ).toMatchObject({
+        success: true,
+        rls_fix: {
+          choice: 'owner_only',
+          tables: ['public.todos'],
+          migration: 'create_todos_rls_fix',
+          sql: expect.stringContaining('create policy'),
+        },
+      });
+      expect(await rlsState(project, 'public.todos')).toEqual({
+        rls_enabled: true,
+        policies: ['DELETE', 'INSERT', 'SELECT', 'UPDATE'],
+      });
+    });
+
+    test('execute_sql: the accepted retry runs only the fix SQL', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitation: RLS_FIX_ELICITATION,
+      });
+      const project = await createSupabaseLikeProject();
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const query = 'create table notes (id bigint primary key, body text);';
+      const args = { project_id: project.id, query };
+
+      const first = await callModernTool(client, {
+        name: 'execute_sql',
+        arguments: args,
+      });
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an RLS fix elicitation');
+      }
+      await callModernTool(client, {
+        name: 'execute_sql',
+        arguments: args,
+        requestState: first.requestState,
+        inputResponses: {
+          rls_fix: { action: 'accept', content: { choice: 'server_only' } },
+        },
+      });
+
+      const ranQueries = executeSql.mock.calls.map(([, options]) => options);
+      expect(ranQueries.filter((options) => options.query === query)).toEqual([
+        { query, read_only: undefined },
+      ]);
+      expect(ranQueries.at(-1)).toEqual({
+        query: 'alter table "public"."notes" enable row level security;',
+        read_only: false,
+      });
+      expect(await rlsState(project, 'public.notes')).toEqual({
+        rls_enabled: true,
+        policies: [],
+      });
+    });
+
+    test.each(['decline', 'cancel'] as const)(
+      '%s leaves the tables unchanged and does not re-run the migration',
+      async (action) => {
+        const { client, platform } = await setupModern({
+          clientCapabilities: FORM_CAPABLE,
+          elicitation: RLS_FIX_ELICITATION,
+        });
+        const project = await createSupabaseLikeProject();
+        const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+        const args = {
+          project_id: project.id,
+          name: 'create_todos',
+          query: 'create table todos (id bigint primary key);',
+        };
+
+        const first = await callModernTool(client, {
+          name: 'apply_migration',
+          arguments: args,
+        });
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected an RLS fix elicitation');
+        }
+        const second = await callModernTool(client, {
+          name: 'apply_migration',
+          arguments: args,
+          requestState: first.requestState,
+          inputResponses: { rls_fix: { action } },
+        });
+
+        expect(second).toMatchObject({
+          structuredContent: {
+            status: action === 'decline' ? 'declined' : 'cancelled',
+          },
+          content: [
+            {
+              type: 'text',
+              text: expect.stringContaining(
+                'The migration was applied. The user'
+              ),
+            },
+          ],
+        });
+        expect(applyMigration).toHaveBeenCalledOnce();
+        expect(await rlsState(project, 'public.todos')).toEqual({
+          rls_enabled: false,
+          policies: [],
+        });
+      }
+    );
+
+    test.each([
+      {
+        label: 'client without form elicitation',
+        clientCapabilities: {},
+        elicitation: RLS_FIX_ELICITATION,
+      },
+      {
+        label: 'rlsFix not enabled for the tool',
+        clientCapabilities: FORM_CAPABLE,
+        elicitation: {
+          ...RLS_FIX_ELICITATION,
+          rlsFix: { enabledTools: ['execute_sql'] as const },
+        },
+      },
+    ])(
+      '$label: the migration returns today’s result without a snapshot',
+      async ({ clientCapabilities, elicitation }) => {
+        const { client, platform } = await setupModern({
+          clientCapabilities,
+          elicitation,
+        });
+        const project = await createSupabaseLikeProject();
+        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+
+        const result = await callModernTool(client, {
+          name: 'apply_migration',
+          arguments: {
+            project_id: project.id,
+            name: 'create_todos',
+            query: 'create table todos (id bigint primary key);',
+          },
+        });
+
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect((result as CallToolResult).content).toEqual([
+          { type: 'text', text: JSON.stringify({ success: true }) },
+        ]);
+        expect(executeSql).not.toHaveBeenCalled();
+      }
+    );
+
+    test('flags only newly exposed tables and offers owner options only when every table has an owner column', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitation: RLS_FIX_ELICITATION,
+      });
+      const project = await createSupabaseLikeProject();
+      await project.db.exec('create table already_open (id bigint);');
+      const applyMigration = vi.spyOn(platform.database!, 'applyMigration');
+      const args = {
+        project_id: project.id,
+        name: 'create_tables',
+        query: `
+          create table posts (id bigint, created_by uuid references auth.users (id));
+          create table notes (id bigint, user_id text, owner uuid);
+          create table private.secrets (id bigint);
+        `,
+      };
+
+      const first = await callModernTool(client, {
+        name: 'apply_migration',
+        arguments: args,
+      });
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an RLS fix elicitation');
+      }
+      const { message, choices } = offeredChoices(first);
+      expect(message).toContain(
+        'left 2 table(s) without Row Level Security: public.notes, public.posts (owner column: created_by).'
+      );
+      expect(choices).toEqual(['server_only', 'leave_open']);
+
+      // An owner choice that wasn't offered re-prompts without running anything.
+      const second = await callModernTool(client, {
+        name: 'apply_migration',
+        arguments: args,
+        requestState: first.requestState,
+        inputResponses: {
+          rls_fix: { action: 'accept', content: { choice: 'owner_only' } },
+        },
+      });
+      if (!isInputRequiredResult(second)) {
+        throw new Error('expected the RLS fix elicitation again');
+      }
+      expect(offeredChoices(second).choices).toEqual([
+        'server_only',
+        'leave_open',
+      ]);
       expect(applyMigration).toHaveBeenCalledOnce();
     });
   });
