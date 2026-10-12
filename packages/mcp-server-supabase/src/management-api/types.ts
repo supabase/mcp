@@ -4775,6 +4775,10 @@ export interface components {
         PostgresConfigResponse_Output: {
             effective_cache_size?: string;
             logical_decoding_work_mem?: string;
+            "pg_stat_statements.max"?: number;
+            "pg_net.batch_size"?: number;
+            autovacuum_max_workers?: number;
+            autovacuum_work_mem?: string;
             "cron.log_statement"?: boolean;
             /** @description Default unit: ms */
             log_autovacuum_min_duration?: string;
@@ -4827,6 +4831,10 @@ export interface components {
         UpdatePostgresConfigBody: {
             effective_cache_size?: string;
             logical_decoding_work_mem?: string;
+            "pg_stat_statements.max"?: number;
+            "pg_net.batch_size"?: number;
+            autovacuum_max_workers?: number;
+            autovacuum_work_mem?: string;
             "cron.log_statement"?: boolean;
             /** @description Default unit: ms */
             log_autovacuum_min_duration?: string;
