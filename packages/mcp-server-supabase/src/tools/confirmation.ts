@@ -25,11 +25,11 @@ export const optionalConfirmCostIdDescription = `${confirmCostIdDescription} Onl
  * chat first would make form-capable clients confirm twice.
  */
 export const callBeforeConfirmingDescription =
-  'Unless `confirm_cost_id` is required, call this tool without it and without asking the user in chat first: the server asks the user to confirm the cost itself, or returns an error explaining how to get a confirmation ID.';
+  'Unless `confirm_cost_id` is required, call this tool without it and without asking for cost confirmation in chat first. The server handles cost confirmation, or returns instructions for obtaining a confirmation ID. If it requests an ID, follow those instructions and retry with it.';
 
 /** Returned when a create tool needs a `confirm_cost_id` the call left out. */
 export const missingConfirmCostIdMessage =
-  'This client needs a cost confirmation ID: call `get_cost`, tell the user the cost, call `confirm_cost` once they agree, then retry with the `confirm_cost_id` it returns.';
+  'This client needs a cost confirmation ID: call `get_cost`, tell the user the cost, call `confirm_cost` once they agree, then retry with its `confirmation_id` as `confirm_cost_id`.';
 
 /**
  * Signed `requestState` payload for the `create_project` cost-confirmation

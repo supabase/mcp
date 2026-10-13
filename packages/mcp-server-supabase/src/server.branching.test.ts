@@ -14,7 +14,6 @@ import {
 } from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, getBranchCost } from './pricing.js';
-import { missingConfirmCostIdMessage } from './tools/confirmation.js';
 import * as pricing from './pricing.js';
 import type { SupabaseMcpServerOptions } from './server.js';
 import { hashObject } from './util.js';
@@ -656,7 +655,7 @@ describe('tools', () => {
     });
 
     await expect(createBranchPromise).rejects.toThrow(
-      missingConfirmCostIdMessage
+      /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
     );
   });
 
@@ -773,7 +772,9 @@ describe('tools', () => {
           name: 'create_branch',
           arguments: { project_id: project.id, name: 'test-branch' },
         })
-      ).rejects.toThrow(missingConfirmCostIdMessage);
+      ).rejects.toThrow(
+        /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
+      );
       expect(
         Array.from(mockBranches.values()).filter(
           (branch) => branch.name === 'test-branch' && !branch.is_default

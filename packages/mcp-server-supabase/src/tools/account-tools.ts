@@ -209,7 +209,7 @@ export const accountToolDefs = {
     },
   },
   create_project: {
-    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to the cost before the project is created. ${callBeforeConfirmingDescription} Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use \`get_project\` to check the status.`,
+    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to any nonzero quoted cost before the project is created. ${callBeforeConfirmingDescription} A project quoted at $0 may be created without a cost-confirmation form. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use \`get_project\` to check the status.`,
     parameters: createProjectInputSchema,
     outputSchema: createProjectOutputSchema,
     annotations: {

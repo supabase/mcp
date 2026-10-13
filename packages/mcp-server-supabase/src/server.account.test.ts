@@ -12,7 +12,6 @@ import {
 } from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, PROJECT_COST_MONTHLY } from './pricing.js';
-import { missingConfirmCostIdMessage } from './tools/confirmation.js';
 import type { SupabaseMcpServerOptions } from './server.js';
 
 const harness = createServerHarness();
@@ -517,7 +516,7 @@ describe('tools', () => {
     });
 
     await expect(createProjectPromise).rejects.toThrow(
-      missingConfirmCostIdMessage
+      /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
     );
   });
 
@@ -730,7 +729,9 @@ describe('tools', () => {
             organization_id: org.id,
           },
         })
-      ).rejects.toThrow(missingConfirmCostIdMessage);
+      ).rejects.toThrow(
+        /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
+      );
       // Only the existing project that makes the next one billable.
       expect(mockProjects.size).toBe(1);
     });
