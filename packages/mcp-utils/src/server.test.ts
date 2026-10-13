@@ -383,3 +383,36 @@ describe('resources helper', () => {
     ]);
   });
 });
+
+describe('resources/read', () => {
+  function createResourceServer() {
+    return createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      resources: resources('my-scheme', [
+        resource('/failing', {
+          name: 'failing',
+          read: async () => {
+            throw new Error('upstream spec fetch failed');
+          },
+        }),
+      ]),
+    });
+  }
+
+  test('unknown resource rejects with a resource-not-found error', async () => {
+    const { client } = await setup({ server: createResourceServer() });
+
+    await expect(
+      client.readResource({ uri: 'my-scheme:///missing' })
+    ).rejects.toThrow('Resource not found: my-scheme:///missing');
+  });
+
+  test('error thrown by a resource read reaches the client', async () => {
+    const { client } = await setup({ server: createResourceServer() });
+
+    await expect(
+      client.readResource({ uri: 'my-scheme:///failing' })
+    ).rejects.toThrow('upstream spec fetch failed');
+  });
+});
