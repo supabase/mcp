@@ -17,6 +17,18 @@ export const confirmCostIdDescription =
 /** `confirm_cost_id` description when the create tool can also confirm inline. */
 export const optionalConfirmCostIdDescription = `${confirmCostIdDescription} Required unless this server shows the user its own cost-confirmation form when this tool runs. A client's regular tool-approval prompt does not count.`;
 
+/** Cost sentence in the `create_*` descriptions for clients that confirm through `confirm_cost`. */
+export function costAgreementDescription(resource: 'project' | 'branch') {
+  return `The user must agree to the cost before the ${resource} is created.`;
+}
+
+/**
+ * Replaces {@link costAgreementDescription} for form-capable clients, where the
+ * server shows its own cost form. Asking in chat first would confirm twice.
+ */
+export const inlineCostConfirmationDescription =
+  'This server asks the user to confirm the cost when the tool runs, so call it directly without asking them to agree first.';
+
 /**
  * Signed `requestState` payload for the `create_project` cost-confirmation
  * elicitation, bound to the project arguments and the cost quoted to the

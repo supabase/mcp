@@ -12,6 +12,10 @@ import {
 } from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, PROJECT_COST_MONTHLY } from './pricing.js';
+import {
+  costAgreementDescription,
+  inlineCostConfirmationDescription,
+} from './tools/confirmation.js';
 import type { SupabaseMcpServerOptions } from './server.js';
 
 const harness = createServerHarness();
@@ -609,6 +613,47 @@ describe('tools', () => {
         'confirm_cost_id'
       );
     });
+
+    test.each([
+      { tool: 'create_project', resource: 'project' },
+      { tool: 'create_branch', resource: 'branch' },
+    ] as const)(
+      'tells a form-capable client the server confirms $tool cost, so the user is not asked twice',
+      async ({ tool: toolName, resource }) => {
+        const { client } = await setupModern({
+          clientCapabilities: FORM_CAPABLE,
+        });
+        const { tools } = await client.listTools();
+        const description = tools.find(
+          (tool) => tool.name === toolName
+        )?.description;
+
+        expect(description).toContain(inlineCostConfirmationDescription);
+        expect(description).not.toContain(costAgreementDescription(resource));
+      }
+    );
+
+    test.each([
+      { tool: 'create_project', resource: 'project' },
+      { tool: 'create_branch', resource: 'branch' },
+    ] as const)(
+      'keeps the agree-first $tool wording for a client without forms',
+      async ({ tool: toolName, resource }) => {
+        const { client } = await setup({
+          elicitation: {
+            requestState: ELICITATION_REQUEST_STATE,
+            confirmation: COST_CONFIRMATION,
+          },
+        });
+        const { tools } = await client.listTools();
+        const description = tools.find(
+          (tool) => tool.name === toolName
+        )?.description;
+
+        expect(description).toContain(costAgreementDescription(resource));
+        expect(description).not.toContain(inlineCostConfirmationDescription);
+      }
+    );
 
     test('narrows cost tools to branch while create_branch still needs confirm_cost_id', async () => {
       const { client } = await setupModern({

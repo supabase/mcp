@@ -14,6 +14,7 @@ import {
   branchCostStateSchema,
   checkConfirmationState,
   confirmCostIdDescription,
+  costAgreementDescription,
   isFormCapable,
   optionalConfirmCostIdDescription,
   type ElicitationState,
@@ -103,8 +104,7 @@ const rebaseBranchOutputSchema = z.object({
 
 export const branchingToolDefs = {
   create_branch: {
-    description:
-      'Creates a development branch on a Supabase project, which can incur hourly compute and other usage charges. The user must agree to the cost before the branch is created. This will apply all migrations from the main project to a fresh branch database. Note that production data will not carry over. The branch will get its own project_id via the resulting project_ref. Use this ID to execute queries and migrations on the branch.',
+    description: `Creates a development branch on a Supabase project, which can incur hourly compute and other usage charges. ${costAgreementDescription('branch')} This will apply all migrations from the main project to a fresh branch database. Note that production data will not carry over. The branch will get its own project_id via the resulting project_ref. Use this ID to execute queries and migrations on the branch.`,
     parameters: createBranchInputSchema,
     outputSchema: createBranchOutputSchema,
     annotations: {
