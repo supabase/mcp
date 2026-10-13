@@ -14,6 +14,7 @@ import {
 } from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, getBranchCost } from './pricing.js';
+import { missingConfirmCostIdMessage } from './tools/confirmation.js';
 import * as pricing from './pricing.js';
 import type { SupabaseMcpServerOptions } from './server.js';
 import { hashObject } from './util.js';
@@ -655,7 +656,7 @@ describe('tools', () => {
     });
 
     await expect(createBranchPromise).rejects.toThrow(
-      'User must confirm understanding of costs before creating a branch.'
+      missingConfirmCostIdMessage
     );
   });
 
@@ -745,6 +746,39 @@ describe('tools', () => {
           (branch) => branch.name === branchName && !branch.is_default
         )
       ).toHaveLength(1);
+    });
+
+    test('client without forms that calls first gets the confirm_cost steps and no branch', async () => {
+      const { callTool } = await setup({
+        features: ['account', 'branching'],
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
+      });
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      await expect(
+        callTool({
+          name: 'create_branch',
+          arguments: { project_id: project.id, name: 'test-branch' },
+        })
+      ).rejects.toThrow(missingConfirmCostIdMessage);
+      expect(
+        Array.from(mockBranches.values()).filter(
+          (branch) => branch.name === 'test-branch' && !branch.is_default
+        )
+      ).toHaveLength(0);
     });
 
     test('form-capable client: accept creates the branch exactly once', async () => {

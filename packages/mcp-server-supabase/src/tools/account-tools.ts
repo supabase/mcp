@@ -8,10 +8,11 @@ import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
 import {
   actionOnlyElicitationSchema,
+  callBeforeConfirmingDescription,
   checkConfirmationState,
   confirmCostIdDescription,
-  costAgreementDescription,
   isFormCapable,
+  missingConfirmCostIdMessage,
   optionalConfirmCostIdDescription,
   projectCostStateSchema,
   type ElicitationState,
@@ -99,7 +100,7 @@ const createProjectInputSchema = z.object({
     .string({
       error: (issue) =>
         issue.input === undefined
-          ? 'User must confirm understanding of costs before creating a project.'
+          ? missingConfirmCostIdMessage
           : undefined,
     })
     .describe(confirmCostIdDescription),
@@ -210,7 +211,7 @@ export const accountToolDefs = {
     },
   },
   create_project: {
-    description: `Creates a new Supabase project, which can add to the organization's bill. ${costAgreementDescription('project')} Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use \`get_project\` to check the status.`,
+    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to the cost before the project is created. ${callBeforeConfirmingDescription} Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use \`get_project\` to check the status.`,
     parameters: createProjectInputSchema,
     outputSchema: createProjectOutputSchema,
     annotations: {
@@ -377,6 +378,10 @@ export function getAccountTools({
                 organization_id: confirmationState.state.organization_id,
               });
           }
+        }
+
+        if (!confirm_cost_id) {
+          throw new Error(missingConfirmCostIdMessage);
         }
 
         const cost = await getNextProjectCost(account, organization_id);

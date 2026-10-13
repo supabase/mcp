@@ -10,9 +10,7 @@ import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
 import { getBranchingTools } from './tools/branching-tools.js';
 import {
-  costAgreementDescription,
   type ElicitationState,
-  inlineCostConfirmationDescription,
   isFormCapable,
   isUrlCapable,
 } from './tools/confirmation.js';
@@ -333,9 +331,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       }
 
       // Form-capable clients confirm cost inside the create tools, so those
-      // drop `confirm_cost_id`, swap the agree-first sentence for one that
-      // says the server confirms (otherwise the model asks in chat and the
-      // user confirms twice), and the legacy cost tools only offer the types
+      // drop `confirm_cost_id` and the legacy cost tools only offer the types
       // that still need them. With nothing left to quote they are hidden
       // entirely.
       if (
@@ -351,18 +347,8 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
           if (!enabledConfirmationTools.includes(name)) {
             legacyCostTypes.push(type);
           } else if (tool) {
-            const { description } = tool;
-            const swapCostSentence = (text: string) =>
-              text.replace(
-                costAgreementDescription(type),
-                inlineCostConfirmationDescription
-              );
             tools[name] = {
               ...tool,
-              description:
-                typeof description === 'string'
-                  ? swapCostSentence(description)
-                  : async () => swapCostSentence(await description()),
               parameters: tool.parameters.omit({ confirm_cost_id: true }),
             };
           }

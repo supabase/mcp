@@ -12,10 +12,11 @@ import { hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
   branchCostStateSchema,
+  callBeforeConfirmingDescription,
   checkConfirmationState,
   confirmCostIdDescription,
-  costAgreementDescription,
   isFormCapable,
+  missingConfirmCostIdMessage,
   optionalConfirmCostIdDescription,
   type ElicitationState,
 } from './confirmation.js';
@@ -43,7 +44,7 @@ const createBranchInputSchema = z.object({
     .string({
       error: (issue) =>
         issue.input === undefined
-          ? 'User must confirm understanding of costs before creating a branch.'
+          ? missingConfirmCostIdMessage
           : undefined,
     })
     .describe(confirmCostIdDescription),
@@ -104,7 +105,7 @@ const rebaseBranchOutputSchema = z.object({
 
 export const branchingToolDefs = {
   create_branch: {
-    description: `Creates a development branch on a Supabase project, which can incur hourly compute and other usage charges. ${costAgreementDescription('branch')} This will apply all migrations from the main project to a fresh branch database. Note that production data will not carry over. The branch will get its own project_id via the resulting project_ref. Use this ID to execute queries and migrations on the branch.`,
+    description: `Creates a development branch on a Supabase project, which can incur hourly compute and other usage charges. The user must agree to the cost before the branch is created. ${callBeforeConfirmingDescription} This will apply all migrations from the main project to a fresh branch database. Note that production data will not carry over. The branch will get its own project_id via the resulting project_ref. Use this ID to execute queries and migrations on the branch.`,
     parameters: createBranchInputSchema,
     outputSchema: createBranchOutputSchema,
     annotations: {
@@ -258,6 +259,10 @@ export function getBranchingTools({
                 { name: confirmationState.state.name }
               );
           }
+        }
+
+        if (!confirm_cost_id) {
+          throw new Error(missingConfirmCostIdMessage);
         }
 
         const cost = getBranchCost();

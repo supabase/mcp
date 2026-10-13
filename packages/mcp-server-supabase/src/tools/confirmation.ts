@@ -15,19 +15,21 @@ export const confirmCostIdDescription =
   'The ID returned by `confirm_cost`. To get it, call `get_cost`, tell the user the cost, and call `confirm_cost` once they agree.';
 
 /** `confirm_cost_id` description when the create tool can also confirm inline. */
-export const optionalConfirmCostIdDescription = `${confirmCostIdDescription} Required unless this server shows the user its own cost-confirmation form when this tool runs. A client's regular tool-approval prompt does not count.`;
-
-/** Cost sentence in the `create_*` descriptions for clients that confirm through `confirm_cost`. */
-export function costAgreementDescription(resource: 'project' | 'branch') {
-  return `The user must agree to the cost before the ${resource} is created.`;
-}
+export const optionalConfirmCostIdDescription = `${confirmCostIdDescription} Only needed when a call without it returns an error asking for it.`;
 
 /**
- * Replaces {@link costAgreementDescription} for form-capable clients, where the
- * server shows its own cost form. Asking in chat first would confirm twice.
+ * Shared by `create_project` and `create_branch`. Clients that read a cached
+ * tool list (e.g. OpenAI's connector) may get another client shape's schema,
+ * so the wording works for all shapes: the model calls first and the server
+ * either shows its own cost form or asks for a `confirm_cost_id`. Asking in
+ * chat first would make form-capable clients confirm twice.
  */
-export const inlineCostConfirmationDescription =
-  'This server asks the user to confirm the cost when the tool runs, so call it directly without asking them to agree first.';
+export const callBeforeConfirmingDescription =
+  'Unless `confirm_cost_id` is required, call this tool without it and without asking the user in chat first: the server asks the user to confirm the cost itself, or returns an error explaining how to get a confirmation ID.';
+
+/** Returned when a create tool needs a `confirm_cost_id` the call left out. */
+export const missingConfirmCostIdMessage =
+  'This client needs a cost confirmation ID: call `get_cost`, tell the user the cost, call `confirm_cost` once they agree, then retry with the `confirm_cost_id` it returns.';
 
 /**
  * Signed `requestState` payload for the `create_project` cost-confirmation
