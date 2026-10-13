@@ -378,6 +378,8 @@ export function getAccountTools({
           }
         }
 
+        // Legacy clients only: form-capable clients returned above. Without
+        // this, a missing ID would hit the opaque hash-mismatch error below.
         if (!confirm_cost_id) {
           throw new Error(missingConfirmCostIdMessage);
         }
