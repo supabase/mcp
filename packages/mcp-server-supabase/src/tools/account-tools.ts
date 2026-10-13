@@ -99,9 +99,7 @@ const createProjectInputSchema = z.object({
   confirm_cost_id: z
     .string({
       error: (issue) =>
-        issue.input === undefined
-          ? missingConfirmCostIdMessage
-          : undefined,
+        issue.input === undefined ? missingConfirmCostIdMessage : undefined,
     })
     .describe(confirmCostIdDescription),
 });
