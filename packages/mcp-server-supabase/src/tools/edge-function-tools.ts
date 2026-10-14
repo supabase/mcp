@@ -43,7 +43,7 @@ const deployEdgeFunctionInputSchema = z.object({
     .boolean()
     .default(true)
     .describe(
-      "Whether to require a valid JWT in the Authorization header. You SHOULD ALWAYS enable this to ensure authorized access. ONLY disable if the function previously had it disabled OR you've confirmed the function body implements custom authentication (e.g., API keys, webhooks) OR the user explicitly requested it be disabled."
+      'Whether to require a valid JWT in the Authorization header. Keep this `true` unless the user asks to turn it off, the function previously had it turned off, or the function body does its own authentication (e.g. API keys, webhooks).'
     ),
   files: z
     .array(
@@ -86,7 +86,7 @@ export const edgeFunctionToolDefs = {
     },
   },
   deploy_edge_function: {
-    description: `Deploys an Edge Function to a Supabase project. If the function already exists, this will create a new version. Example:\n\n${edgeFunctionExample}`,
+    description: `Deploys an Edge Function to a Supabase project. If a function with this name already exists, this replaces it with a new version that starts serving requests at the function's public URL right away. Example:\n\n${edgeFunctionExample}`,
     parameters: deployEdgeFunctionInputSchema,
     outputSchema: deployEdgeFunctionOutputSchema,
     annotations: {
