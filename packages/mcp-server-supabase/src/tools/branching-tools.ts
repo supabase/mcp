@@ -12,8 +12,12 @@ import { hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
   branchCostStateSchema,
+  callBeforeConfirmingDescription,
   checkConfirmationState,
+  confirmCostIdDescription,
   isFormCapable,
+  missingConfirmCostIdMessage,
+  optionalConfirmCostIdDescription,
   type ElicitationState,
 } from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
@@ -39,20 +43,16 @@ const createBranchInputSchema = z.object({
   confirm_cost_id: z
     .string({
       error: (issue) =>
-        issue.input === undefined
-          ? 'User must confirm understanding of costs before creating a branch.'
-          : undefined,
+        issue.input === undefined ? missingConfirmCostIdMessage : undefined,
     })
-    .describe('The cost confirmation ID. Call `confirm_cost` first.'),
+    .describe(confirmCostIdDescription),
 });
 
 const createBranchInputSchemaWithElicitation = createBranchInputSchema.extend({
   confirm_cost_id: z
     .string()
     .optional()
-    .describe(
-      'The cost confirmation ID. Only required for clients without per-request form-elicitation capability; those clients must call `confirm_cost` first. Form-capable clients are asked to confirm the cost inline when creating the branch.'
-    ),
+    .describe(optionalConfirmCostIdDescription),
 });
 
 const createBranchOutputSchema = branchSchema;
@@ -103,8 +103,7 @@ const rebaseBranchOutputSchema = z.object({
 
 export const branchingToolDefs = {
   create_branch: {
-    description:
-      'Creates a development branch on a Supabase project. This will apply all migrations from the main project to a fresh branch database. Note that production data will not carry over. The branch will get its own project_id via the resulting project_ref. Use this ID to execute queries and migrations on the branch.',
+    description: `Creates a development branch on a Supabase project, which can incur hourly compute and other usage charges. The user must agree to the cost before the branch is created. ${callBeforeConfirmingDescription} This will apply all migrations from the main project to a fresh branch database. Note that production data will not carry over. The branch will get its own project_id via the resulting project_ref. Use this ID to execute queries and migrations on the branch.`,
     parameters: createBranchInputSchema,
     outputSchema: createBranchOutputSchema,
     annotations: {
@@ -258,6 +257,12 @@ export function getBranchingTools({
                 { name: confirmationState.state.name }
               );
           }
+        }
+
+        // Legacy clients only: form-capable clients returned above. Without
+        // this, a missing ID would hit the opaque hash-mismatch error below.
+        if (!confirm_cost_id) {
+          throw new Error(missingConfirmCostIdMessage);
         }
 
         const cost = getBranchCost();

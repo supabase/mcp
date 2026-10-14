@@ -1425,14 +1425,7 @@ export interface paths {
         /**
          * Gets project's logs
          * @deprecated
-         * @description Executes a SQL query on the project's logs.
-         *
-         *     Either the `iso_timestamp_start` and `iso_timestamp_end` parameters must be provided.
-         *     If both are not provided, only the last 1 minute of logs will be queried.
-         *     The timestamp range must be no more than 24 hours and is rounded to the nearest minute. If the range is more than 24 hours, a validation error will be thrown.
-         *
-         *     Note: Unless the `sql` parameter is provided, only edge_logs will be queried. See the [log query docs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#logs-explorer) for all available sources.
-         *
+         * @description This endpoint has been removed and always responds with `410 Gone`. Use `GET /v1/projects/{ref}/analytics/endpoints/logs` instead. See the [migration guide](https://supabase.com/changelog/48235-migration-of-supabase-management-api-logs-all-analytics-endpoint-to-logs-endpoint).
          */
         get: operations["v1-get-project-logs-all"];
         put?: never;
@@ -4782,6 +4775,10 @@ export interface components {
         PostgresConfigResponse_Output: {
             effective_cache_size?: string;
             logical_decoding_work_mem?: string;
+            "pg_stat_statements.max"?: number;
+            "pg_net.batch_size"?: number;
+            autovacuum_max_workers?: number;
+            autovacuum_work_mem?: string;
             "cron.log_statement"?: boolean;
             /** @description Default unit: ms */
             log_autovacuum_min_duration?: string;
@@ -4834,6 +4831,10 @@ export interface components {
         UpdatePostgresConfigBody: {
             effective_cache_size?: string;
             logical_decoding_work_mem?: string;
+            "pg_stat_statements.max"?: number;
+            "pg_net.batch_size"?: number;
+            autovacuum_max_workers?: number;
+            autovacuum_work_mem?: string;
             "cron.log_statement"?: boolean;
             /** @description Default unit: ms */
             log_autovacuum_min_duration?: string;
@@ -4903,6 +4904,11 @@ export interface components {
             suspend: boolean | null;
             /** @description Whether to enable presence */
             presence_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description If set, the Realtime service has been suspended by an admin.
+             */
+            admin_suspended_at: string | null;
         };
         /** @example {
          *       "private_only": false,
@@ -10265,12 +10271,7 @@ export interface operations {
     };
     "v1-get-project-logs-all": {
         parameters: {
-            query?: {
-                /** @description Custom SQL query to execute on the logs. See [querying logs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#querying-with-the-logs-explorer) for more details. */
-                sql?: string;
-                iso_timestamp_start?: string;
-                iso_timestamp_end?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Project ref */
@@ -10280,14 +10281,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalyticsResponse_Output"];
-                };
-            };
             /** @description Unauthorized */
             401: {
                 headers: {
@@ -10295,15 +10288,15 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Usage exceeded. Enable additional usage to continue querying */
-            402: {
+            /** @description Forbidden action */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Forbidden action */
-            403: {
+            /** @description This endpoint has been removed */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };

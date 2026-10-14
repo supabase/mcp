@@ -10,6 +10,27 @@ import { z } from 'zod/v4';
 import type { BranchCost, Cost } from '../pricing.js';
 import { AWS_REGION_CODES } from '../regions.js';
 
+/** `confirm_cost_id` description for clients that must call `confirm_cost`. */
+export const confirmCostIdDescription =
+  'The ID returned by `confirm_cost`. To get it, call `get_cost`, tell the user the cost, and call `confirm_cost` once they agree.';
+
+/** `confirm_cost_id` description when the create tool can also confirm inline. */
+export const optionalConfirmCostIdDescription = `${confirmCostIdDescription} Only needed when a call without it returns an error asking for it.`;
+
+/**
+ * Shared by `create_project` and `create_branch`. Clients that read a cached
+ * tool list (e.g. OpenAI's connector) may get another client shape's schema,
+ * so the wording works for all shapes: the model calls first and the server
+ * either shows its own cost form or asks for a `confirm_cost_id`. Asking in
+ * chat first would make form-capable clients confirm twice.
+ */
+export const callBeforeConfirmingDescription =
+  'Unless `confirm_cost_id` is required, call this tool without it and without asking for cost confirmation in chat first. The server handles cost confirmation, or returns instructions for obtaining a confirmation ID. If it requests an ID, follow those instructions and retry with it.';
+
+/** Returned when a create tool needs a `confirm_cost_id` the call left out. */
+export const missingConfirmCostIdMessage =
+  'This client needs a cost confirmation ID: call `get_cost`, tell the user the cost, call `confirm_cost` once they agree, then retry with its `confirmation_id` as `confirm_cost_id`.';
+
 /**
  * Signed `requestState` payload for the `create_project` cost-confirmation
  * elicitation, bound to the project arguments and the cost quoted to the

@@ -8,8 +8,12 @@ import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
 import {
   actionOnlyElicitationSchema,
+  callBeforeConfirmingDescription,
   checkConfirmationState,
+  confirmCostIdDescription,
   isFormCapable,
+  missingConfirmCostIdMessage,
+  optionalConfirmCostIdDescription,
   projectCostStateSchema,
   type ElicitationState,
 } from './confirmation.js';
@@ -95,11 +99,9 @@ const createProjectInputSchema = z.object({
   confirm_cost_id: z
     .string({
       error: (issue) =>
-        issue.input === undefined
-          ? 'User must confirm understanding of costs before creating a project.'
-          : undefined,
+        issue.input === undefined ? missingConfirmCostIdMessage : undefined,
     })
-    .describe('The cost confirmation ID. Call `confirm_cost` first.'),
+    .describe(confirmCostIdDescription),
 });
 
 const createProjectOutputSchema = projectSchema;
@@ -109,9 +111,7 @@ const createProjectInputSchemaWithElicitation = createProjectInputSchema.extend(
     confirm_cost_id: z
       .string()
       .optional()
-      .describe(
-        'The cost confirmation ID. Only required for clients without per-request form-elicitation capability; those clients must call `confirm_cost` first. Form-capable clients are asked to confirm the cost inline when creating the project.'
-      ),
+      .describe(optionalConfirmCostIdDescription),
   }
 );
 
@@ -197,7 +197,7 @@ export const accountToolDefs = {
   },
   confirm_cost: {
     description:
-      'Ask the user to confirm their understanding of the cost of creating a new project or branch. Call `get_cost` first. Returns a unique ID for this confirmation which should be passed to `create_project` or `create_branch`.',
+      'Returns a confirmation ID for the cost of a new project or branch returned by `get_cost`. Only call this after the user has explicitly agreed to that cost in the conversation. Pass the ID to `create_project` or `create_branch`.',
     parameters: confirmCostInputSchema,
     outputSchema: confirmCostOutputSchema,
     annotations: {
@@ -209,8 +209,7 @@ export const accountToolDefs = {
     },
   },
   create_project: {
-    description:
-      'Creates a new Supabase project. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use `get_project` to check the status.',
+    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to any nonzero quoted cost before the project is created. ${callBeforeConfirmingDescription} A project quoted at $0 may be created without a cost-confirmation form. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use \`get_project\` to check the status.`,
     parameters: createProjectInputSchema,
     outputSchema: createProjectOutputSchema,
     annotations: {
@@ -377,6 +376,12 @@ export function getAccountTools({
                 organization_id: confirmationState.state.organization_id,
               });
           }
+        }
+
+        // Legacy clients only: form-capable clients returned above. Without
+        // this, a missing ID would hit the opaque hash-mismatch error below.
+        if (!confirm_cost_id) {
+          throw new Error(missingConfirmCostIdMessage);
         }
 
         const cost = await getNextProjectCost(account, organization_id);
