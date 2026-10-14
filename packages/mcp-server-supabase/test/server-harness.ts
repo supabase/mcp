@@ -41,6 +41,7 @@ type ModernSetupOptions = {
   clientCapabilities?: ClientCapabilities;
   readOnly?: boolean;
   projectId?: string;
+  features?: string[];
   secretCollection?: NonNullable<
     NonNullable<SupabaseMcpServerOptions['elicitation']>['secretCollection']
   >;
@@ -178,6 +179,7 @@ export function createServerHarness() {
             'create_branch',
             'execute_sql',
             'apply_migration',
+            'run_notebook',
           ],
         },
       },
@@ -186,6 +188,7 @@ export function createServerHarness() {
       elicitationAction,
       readOnly,
       projectId,
+      features,
     } = options;
     const platform = createSupabaseApiPlatform({
       accessToken: ACCESS_TOKEN,
@@ -202,6 +205,7 @@ export function createServerHarness() {
       platform,
       projectId,
       readOnly,
+      features,
       elicitation: secretCollection
         ? { ...elicitation, secretCollection }
         : elicitation,

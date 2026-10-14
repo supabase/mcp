@@ -119,6 +119,12 @@ export const executeSqlOptionsSchema = z.object({
   query: z.string().min(1),
   parameters: z.array(z.unknown()).optional(),
   read_only: z.boolean().optional(),
+  /**
+   * Largest result, in bytes of JSON, the caller will use. Platforms that
+   * buffer results in shared server memory should stop reading and throw once
+   * it's exceeded. Callers still check the rows they get back.
+   */
+  max_result_bytes: z.number().int().nonnegative().optional(),
 });
 
 export const applyMigrationOptionsSchema = z.object({
