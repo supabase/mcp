@@ -20,6 +20,7 @@ import type { components as ManagementApiV2Components } from '../management-api-
 import { generatePassword } from '../password.js';
 import {
   applyMigrationOptionsSchema,
+  createNotebookOptionsSchema,
   createBranchOptionsSchema,
   createProjectOptionsSchema,
   deployEdgeFunctionOptionsSchema,
@@ -898,6 +899,21 @@ export function createSupabaseApiPlatform(
   };
 
   const notebooks: NotebookOperations = {
+    async createNotebook(projectId, options) {
+      const attributes = createNotebookOptionsSchema.parse(options);
+      const response = await managementApiV2Client.POST(
+        '/v2/projects/{ref}/notebooks',
+        {
+          params: { path: { ref: projectId } },
+          body: { data: { type: 'notebook', attributes } },
+        }
+      );
+
+      assertSuccessV2(response, 'Failed to create notebook');
+
+      const { id, attributes: notebook } = response.data.data;
+      return { id, ...notebook };
+    },
     async listNotebooks(projectId: string) {
       const notebooks: Notebook[] = [];
       let cursor: string | undefined;

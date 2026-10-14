@@ -935,6 +935,32 @@ describe('startLocalHttpEntry', () => {
     }
   );
 
+  test('notebook creation never elicits over HTTP', async () => {
+    const { project } = await createProjectFixture();
+    const client = await connect(
+      { pin: MODERN_PROTOCOL_VERSION },
+      `project_ref=${project.id}&features=notebooks`,
+      {
+        capabilities: { elicitation: { form: {} } },
+        inputRequired: { autoFulfill: false },
+      }
+    );
+    const result = (await client.request(
+      {
+        method: 'tools/call',
+        params: {
+          name: 'create_notebook',
+          arguments: { name: 'HTTP notebook', content: { cells: [] } },
+        },
+      },
+      { allowInputRequired: true }
+    )) as CallToolResult | InputRequiredResult;
+    if (isInputRequiredResult(result))
+      throw new Error('unexpected confirmation');
+    expect(toolOutput(result).name).toBe('HTTP notebook');
+    expect(project.notebooks.size).toBe(1);
+  });
+
   test.each(['', ' , '])(
     'keeps elicitation defaults for blank CSV %j',
     async (skip) => {
