@@ -155,3 +155,44 @@ describe('isDestructiveSql', () => {
     expect(isDestructiveSql(sql)).toBe(true);
   });
 });
+
+describe('semicolons inside quoted text', () => {
+  test.each([
+    "UPDATE notes SET body = 'done; ok' WHERE id = 1;",
+    "UPDATE notes SET body = 'done; delete later' WHERE id = 1;",
+    "UPDATE notes SET body = 'a; drop table x; truncate y' WHERE id = 1;",
+    'UPDATE "odd;name" SET body = 1 WHERE id = 1;',
+    "UPDATE notes SET body = 'it''s; fine' WHERE id = 1;",
+    "UPDATE notes SET body = E'it\\'s; delete me' WHERE id = 1;",
+    "INSERT INTO notes (body) VALUES ('done; delete later');",
+    "SELECT 'a; truncate b';",
+  ])('is not destructive: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(false);
+  });
+
+  test.each([
+    "UPDATE notes SET body = 'done; ok';",
+    "UPDATE notes SET body = 'a;b'; DROP TABLE notes;",
+    "SELECT 'a;b'; DELETE FROM notes;",
+    "SELECT 'a;b'; UPDATE notes SET body = null;",
+    "UPDATE notes SET body = 'x'; UPDATE notes SET body = 'y; z' WHERE id = 1; TRUNCATE notes;",
+    "UPDATE notes SET body = E'a\\\\'; DROP TABLE notes;",
+  ])('is still destructive: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+
+  test.each([
+    "SELECT 'unterminated; DROP TABLE notes",
+    "UPDATE notes SET body = 'unterminated; UPDATE notes SET body = 1",
+  ])('fails closed on an unterminated quote: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+
+  test.each([
+    "EXECUTE 'SELECT 1; DROP TABLE films';",
+    "EXECUTE 'SELECT 1; DELETE FROM films';",
+    "EXECUTE 'SELECT 1; UPDATE films SET title = null';",
+  ])('dynamic SQL with a semicolon is still destructive: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+});

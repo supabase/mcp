@@ -34,6 +34,72 @@ function hasDestructiveStart(sql: string, starts: RegExp): boolean {
 const updateWithoutWhereRegex =
   /(?:^|;)\s*update\s+(?:"(?:[^"]|"")+"|[\w]+)(?:\.(?:"(?:[^"]|"")+"|[\w]+))?\s+set\s+[\w\W]+?(?!\s*where\s)/is;
 
+// Split SQL on semicolons that sit outside single-quoted strings and
+// double-quoted identifiers. Doubled quotes (`''`, `""`) stay inside the span,
+// and backslash escapes apply inside E'...' strings. Dollar-quoted bodies are
+// still split, so a destructive statement inside a function body is still seen.
+// An unterminated quote returns undefined so callers fall back to a plain split.
+function splitOutsideQuotes(sql: string): string[] | undefined {
+  const statements: string[] = [];
+  let start = 0;
+  let i = 0;
+  while (i < sql.length) {
+    const char = sql[i]!;
+    if (char === "'" || char === '"') {
+      const escapes =
+        char === "'" &&
+        i > 0 &&
+        /[eE]/.test(sql[i - 1]!) &&
+        !/[\w$\u0080-\uffff]/.test(sql[i - 2] ?? ' ');
+      i++;
+      let closed = false;
+      while (i < sql.length) {
+        if (escapes && sql[i] === '\\') {
+          i += 2;
+          continue;
+        }
+        if (sql[i] === char) {
+          if (sql[i + 1] === char) {
+            i += 2;
+            continue;
+          }
+          closed = true;
+          i++;
+          break;
+        }
+        i++;
+      }
+      if (!closed) {
+        return undefined;
+      }
+      continue;
+    }
+    if (char === ';') {
+      statements.push(sql.slice(start, i));
+      start = i + 1;
+    }
+    i++;
+  }
+  statements.push(sql.slice(start));
+  return statements;
+}
+
+// Statements to inspect. Real statement boundaries come from the quote-aware
+// split. A statement that runs dynamic SQL (EXECUTE) is also inspected as plain
+// fragments, because its string argument can itself hold several statements.
+function candidateStatements(sql: string): string[] {
+  const plain = sql.split(';');
+  const statements = splitOutsideQuotes(sql);
+  if (!statements) {
+    return plain;
+  }
+  return statements.flatMap((statement) =>
+    /execute\s/i.test(statement)
+      ? [statement, ...statement.split(';')]
+      : [statement]
+  );
+}
+
 export function removeCommentsFromSql(sql: string): string {
   // Removing single-line comments:
   let cleanedSql = sql.replace(/--.*$/gm, '');
@@ -72,7 +138,7 @@ export function checkDestructiveQuery(sql: string): boolean {
     return true;
   }
 
-  for (const statement of cleanedSql.split(';')) {
+  for (const statement of candidateStatements(cleanedSql)) {
     if (
       /^\s*(drop|delete|truncate)\s/i.test(statement) ||
       directDropColumnRegex.test(statement)
@@ -121,9 +187,9 @@ const stripQuotedSpans = (sql: string) =>
   sql.replace(/'(?:''|[^'])*'/g, "''").replace(/"(?:""|[^"])*"/g, '""');
 
 export function isUpdateWithoutWhere(sql: string): boolean {
-  const updateStatements = sql
-    .split(';')
-    .filter((statement) => statement.trim().toLowerCase().startsWith('update'));
+  const updateStatements = candidateStatements(sql).filter((statement) =>
+    statement.trim().toLowerCase().startsWith('update')
+  );
   return updateStatements.some(
     (statement) =>
       updateWithoutWhereRegex.test(statement) &&
