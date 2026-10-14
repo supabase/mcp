@@ -3989,7 +3989,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponseBody"];
                 };
             };
-            /** @description This feature requires the Enterprise organization plan. */
+            /** @description This feature requires the Team, or Enterprise organization plan. */
             402: {
                 headers: {
                     [name: string]: unknown;
@@ -4109,7 +4109,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponseBody"];
                 };
             };
-            /** @description This feature requires the Enterprise organization plan. */
+            /** @description This feature requires the Team, or Enterprise organization plan. */
             402: {
                 headers: {
                     [name: string]: unknown;
@@ -4171,7 +4171,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponseBody"];
                 };
             };
-            /** @description This feature requires the Enterprise organization plan. */
+            /** @description This feature requires the Team, or Enterprise organization plan. */
             402: {
                 headers: {
                     [name: string]: unknown;
