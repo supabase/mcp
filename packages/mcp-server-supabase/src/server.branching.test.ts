@@ -655,7 +655,7 @@ describe('tools', () => {
     });
 
     await expect(createBranchPromise).rejects.toThrow(
-      'User must confirm understanding of costs before creating a branch.'
+      /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
     );
   });
 
@@ -745,6 +745,41 @@ describe('tools', () => {
           (branch) => branch.name === branchName && !branch.is_default
         )
       ).toHaveLength(1);
+    });
+
+    test('client without forms that calls first gets the confirm_cost steps and no branch', async () => {
+      const { callTool } = await setup({
+        features: ['account', 'branching'],
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
+      });
+      const org = await createOrganization({
+        name: 'My Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+      const project = await createProject({
+        name: 'Project 1',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      project.status = 'ACTIVE_HEALTHY';
+
+      await expect(
+        callTool({
+          name: 'create_branch',
+          arguments: { project_id: project.id, name: 'test-branch' },
+        })
+      ).rejects.toThrow(
+        /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
+      );
+      expect(
+        Array.from(mockBranches.values()).filter(
+          (branch) => branch.name === 'test-branch' && !branch.is_default
+        )
+      ).toHaveLength(0);
     });
 
     test('form-capable client: accept creates the branch exactly once', async () => {

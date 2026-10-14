@@ -9,10 +9,12 @@ import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
 import {
   actionOnlyElicitationSchema,
+  callBeforeConfirmingDescription,
   checkConfirmationState,
   confirmCostIdDescription,
   isFormCapable,
   observeOperation,
+  missingConfirmCostIdMessage,
   optionalConfirmCostIdDescription,
   projectCostStateSchema,
   type ElicitationState,
@@ -99,9 +101,7 @@ const createProjectInputSchema = z.object({
   confirm_cost_id: z
     .string({
       error: (issue) =>
-        issue.input === undefined
-          ? 'User must confirm understanding of costs before creating a project.'
-          : undefined,
+        issue.input === undefined ? missingConfirmCostIdMessage : undefined,
     })
     .describe(confirmCostIdDescription),
 });
@@ -211,8 +211,7 @@ export const accountToolDefs = {
     },
   },
   create_project: {
-    description:
-      "Creates a new Supabase project, which can add to the organization's bill. The user must agree to the cost before the project is created. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use `get_project` to check the status.",
+    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to any nonzero quoted cost before the project is created. ${callBeforeConfirmingDescription} A project quoted at $0 may be created without a cost-confirmation form. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use \`get_project\` to check the status.`,
     parameters: createProjectInputSchema,
     outputSchema: createProjectOutputSchema,
     annotations: {
@@ -400,6 +399,12 @@ export function getAccountTools({
                 })
               );
           }
+        }
+
+        // Legacy clients only: form-capable clients returned above. Without
+        // this, a missing ID would hit the opaque hash-mismatch error below.
+        if (!confirm_cost_id) {
+          throw new Error(missingConfirmCostIdMessage);
         }
 
         const cost = await getNextProjectCost(account, organization_id);

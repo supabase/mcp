@@ -4405,7 +4405,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -4709,7 +4709,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret: string;
                         };
@@ -4775,7 +4775,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -5070,7 +5070,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -5367,7 +5367,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -5701,7 +5701,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -6019,7 +6019,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret?: string;
                         };
@@ -6085,7 +6085,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -6408,15 +6408,38 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
                                  */
                                 attempt_timestamp: string;
+                                event: {
+                                    /**
+                                     * @description Webhook event type.
+                                     * @enum {string}
+                                     */
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
+                                    /** @description Final data sent to the consumer. */
+                                    payload: {
+                                        /**
+                                         * @description Organization slug
+                                         * @example tsrqponmlkjihgfedcba
+                                         */
+                                        organization_slug: string;
+                                        project_ref: string | null;
+                                    };
+                                    /**
+                                     * Format: date-time
+                                     * @description Timestamp of event publication.
+                                     */
+                                    timestamp: string;
+                                };
                             };
                         }[];
                         links: {
@@ -6717,7 +6740,7 @@ export interface operations {
                              * @description Webhook event type.
                              * @enum {string}
                              */
-                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                         };
                     };
                 };
@@ -7102,10 +7125,12 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
@@ -7116,7 +7141,7 @@ export interface operations {
                                      * @description Webhook event type.
                                      * @enum {string}
                                      */
-                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                                     /** @description Final data sent to the consumer. */
                                     payload: {
                                         /**
@@ -7739,7 +7764,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -8043,7 +8068,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret: string;
                         };
@@ -8109,7 +8134,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -8404,7 +8429,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -8701,7 +8726,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -9035,7 +9060,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -9353,7 +9378,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret?: string;
                         };
@@ -9419,7 +9444,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -9742,15 +9767,38 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
                                  */
                                 attempt_timestamp: string;
+                                event: {
+                                    /**
+                                     * @description Webhook event type.
+                                     * @enum {string}
+                                     */
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
+                                    /** @description Final data sent to the consumer. */
+                                    payload: {
+                                        /**
+                                         * @description Organization slug
+                                         * @example tsrqponmlkjihgfedcba
+                                         */
+                                        organization_slug: string;
+                                        project_ref: string | null;
+                                    };
+                                    /**
+                                     * Format: date-time
+                                     * @description Timestamp of event publication.
+                                     */
+                                    timestamp: string;
+                                };
                             };
                         }[];
                         links: {
@@ -10051,7 +10099,7 @@ export interface operations {
                              * @description Webhook event type.
                              * @enum {string}
                              */
-                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                         };
                     };
                 };
@@ -10436,10 +10484,12 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
@@ -10450,7 +10500,7 @@ export interface operations {
                                      * @description Webhook event type.
                                      * @enum {string}
                                      */
-                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                                     /** @description Final data sent to the consumer. */
                                     payload: {
                                         /**
