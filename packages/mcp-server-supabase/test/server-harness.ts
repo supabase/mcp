@@ -36,6 +36,8 @@ type SetupOptions = {
   readOnly?: boolean;
   features?: string[];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
+  observer?: SupabaseMcpServerOptions['observer'];
+  onToolCall?: SupabaseMcpServerOptions['onToolCall'];
   clientCapabilities?: ClientCapabilities;
   versionNegotiation?: ClientOptions['versionNegotiation'];
   /** Observes every raw JSON-RPC message the server sends to the client. */
@@ -43,6 +45,10 @@ type SetupOptions = {
 };
 
 type ModernSetupOptions = {
+  platform?: SupabasePlatform;
+  features?: string[];
+  observer?: SupabaseMcpServerOptions['observer'];
+  onToolCall?: SupabaseMcpServerOptions['onToolCall'];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
   clientCapabilities?: ClientCapabilities;
   readOnly?: boolean;
@@ -166,6 +172,8 @@ export function createServerHarness() {
       readOnly,
       features,
       elicitation,
+      observer: options.observer,
+      onToolCall: options.onToolCall,
     }));
 
     await server.connect(serverTransport);
@@ -212,10 +220,12 @@ export function createServerHarness() {
       readOnly,
       projectId,
     } = options;
-    const platform = createSupabaseApiPlatform({
-      accessToken: ACCESS_TOKEN,
-      apiUrl: API_URL,
-    });
+    const platform =
+      options.platform ??
+      createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      });
     // Modern requests do not perform an initialize handshake. Keep the
     // management API User-Agent initialization separate from client capabilities.
     await platform.init?.({
@@ -227,6 +237,9 @@ export function createServerHarness() {
       platform,
       projectId,
       readOnly,
+      features: options.features,
+      observer: options.observer,
+      onToolCall: options.onToolCall,
       elicitation: secretCollection
         ? { ...elicitation, secretCollection }
         : elicitation,

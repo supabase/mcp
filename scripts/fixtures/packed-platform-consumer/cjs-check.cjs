@@ -6,4 +6,11 @@ if (typeof createSupabaseMcpHandler !== 'function') {
   );
 }
 
-console.log('CJS_OK');
+// Exercise the require()-loaded implementation, not merely its export shape.
+import('./modern-call.mjs')
+  .then(({ runConsumer }) => runConsumer(createSupabaseMcpHandler))
+  .then(() => console.log('CJS_OK'))
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });

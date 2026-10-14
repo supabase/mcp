@@ -3,7 +3,8 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { tool } from '@supabase/mcp-utils';
+import { type ToolObservation, tool } from '@supabase/mcp-utils';
+import type { ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
 import {
@@ -12,6 +13,7 @@ import {
   checkConfirmationState,
   confirmCostIdDescription,
   isFormCapable,
+  observeOperation,
   missingConfirmCostIdMessage,
   optionalConfirmCostIdDescription,
   projectCostStateSchema,
@@ -307,9 +309,16 @@ export function getAccountTools({
           organization_id,
           confirm_cost_id,
         }: z.infer<typeof createProjectInputSchemaWithElicitation>,
-        ctx: ServerContext
+        ctx: ServerContext,
+        observation?: ToolObservation<ObservationFact>
       ) => {
         if (readOnly) {
+          observation?.record({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'blocked',
+            reason: 'read_only',
+          });
           throw new Error('Cannot create a project in read-only mode.');
         }
 
@@ -318,17 +327,28 @@ export function getAccountTools({
           const cost = await getNextProjectCost(account, organization_id);
           const state = ctx.mcpReq.requestState<unknown>();
           if (!state && cost.amount === 0) {
-            return await account.createProject({
-              name,
-              region,
-              organization_id,
+            observation?.record({
+              kind: 'confirmation_decision',
+              feature: 'cost',
+              route: 'bypass',
+              reason: 'zero_cost',
             });
+            return await observeOperation('cost', observation?.record, () =>
+              account.createProject({ name, region, organization_id })
+            );
           }
+
+          observation?.record({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'inline',
+            reason: 'eligible',
+          });
 
           const costSuffix = cost.recurrence === 'monthly' ? '/month' : '/hr';
 
-          const askForConfirmation = async () =>
-            inputRequired({
+          const askForConfirmation = async () => {
+            return inputRequired({
               inputRequests: {
                 confirm_cost: inputRequired.elicit({
                   mode: 'form',
@@ -345,6 +365,7 @@ export function getAccountTools({
                 ctx
               ),
             });
+          };
 
           const confirmationState = await checkConfirmationState({
             ctx,
@@ -352,6 +373,7 @@ export function getAccountTools({
             schema: projectCostStateSchema,
             requestKey: 'confirm_cost',
             askForConfirmation,
+            observation,
             argsMatch: (state) =>
               state.name === name &&
               state.region === region &&
@@ -364,17 +386,18 @@ export function getAccountTools({
             declinedText: 'Project creation was declined.',
             cancelledText: 'Project creation was cancelled.',
           });
-
           switch (confirmationState.kind) {
             case 'reprompt':
             case 'terminal':
               return confirmationState.result;
             case 'proceed':
-              return await account.createProject({
-                name: confirmationState.state.name,
-                region: confirmationState.state.region,
-                organization_id: confirmationState.state.organization_id,
-              });
+              return await observeOperation('cost', observation?.record, () =>
+                account.createProject({
+                  name: confirmationState.state.name,
+                  region: confirmationState.state.region,
+                  organization_id: confirmationState.state.organization_id,
+                })
+              );
           }
         }
 
@@ -385,6 +408,14 @@ export function getAccountTools({
         }
 
         const cost = await getNextProjectCost(account, organization_id);
+        // confirmation is the server option enabling inline confirmation; legacy means no form support or no configuration.
+        const reason = confirmation ? 'capability_missing' : 'not_configured';
+        observation?.record({
+          kind: 'confirmation_decision',
+          feature: 'cost',
+          route: 'legacy',
+          reason,
+        });
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
           throw new Error(
@@ -392,11 +423,9 @@ export function getAccountTools({
           );
         }
 
-        return await account.createProject({
-          name,
-          region,
-          organization_id,
-        });
+        return await observeOperation('cost', observation?.record, () =>
+          account.createProject({ name, region, organization_id })
+        );
       },
     }),
     pause_project: tool({

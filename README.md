@@ -147,15 +147,13 @@ const server = createServer((req, res) => {
 
 ## Observability
 
-Pass an `observer` to `createMcpServer` to collect request lifecycle results and facts recorded by your tools:
+Pass an `observer` to `createSupabaseMcpServer` to collect request lifecycle results and Supabase's built-in facts. Here, `platform` is your existing platform adapter:
 
 ```ts
-import { createMcpServer } from '@supabase/mcp-utils';
+import { createSupabaseMcpServer } from '@supabase/mcp-server-supabase';
 
-const server = createMcpServer({
-  name: 'example',
-  version: '1.0.0',
-  tools: {},
+const server = createSupabaseMcpServer({
+  platform,
   observer: (context) => ({
     record(fact) {
       console.info(fact);
@@ -167,7 +165,7 @@ const server = createMcpServer({
 });
 ```
 
-The server does not automatically forward request or response payloads to the observer. Custom fact producers own their privacy checks. Omitting `observer` skips all observation work. Observer, classifier and sink failures don't change request behavior, but synchronous observer and classifier work can block requests.
+The server does not automatically forward request or response payloads to the observer. Supabase's built-in facts use a closed set of bounded fields and values; custom facts receive no automatic privacy validation. Omitting `observer` skips all observation work. Observer, classifier and sink failures don't change request behavior, but synchronous observer and classifier work can block requests.
 
 ## Other MCP servers
 
