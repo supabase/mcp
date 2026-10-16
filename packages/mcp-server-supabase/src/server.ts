@@ -11,7 +11,10 @@ import type {
   ObservedTool,
   RequestObserver,
 } from './observation.js';
-import { createContentApiClient } from './content-api/index.js';
+import {
+  CONTENT_API_SCHEMA_TTL_MS,
+  createContentApiClient,
+} from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
 import { getBranchingTools } from './tools/branching-tools.js';
@@ -226,6 +229,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     requestState: elicitationCodec && {
       verify: elicitationCodec.verify,
     },
+    toolsListTtlMs: CONTENT_API_SCHEMA_TTL_MS,
     tools: async (ctx) => {
       const contentApiClient = await contentApiClientPromise;
       const {
