@@ -57,6 +57,7 @@ describe('createToolSchemas', () => {
         'list_migrations',
         'list_tables',
         'search_docs',
+        'search_knowledge_base',
       ]);
     });
 
@@ -74,7 +75,10 @@ describe('createToolSchemas', () => {
 
     test('single feature', () => {
       const schemas = createToolSchemas({ features: ['docs'] });
-      expect(Object.keys(schemas)).toEqual(['search_docs']);
+      expect(Object.keys(schemas)).toEqual([
+        'search_docs',
+        'search_knowledge_base',
+      ]);
 
       // Type narrows to only search_docs
       expectTypeOf(schemas).toHaveProperty('search_docs');
@@ -231,6 +235,7 @@ describe('createToolSchemas', () => {
         'list_migrations',
         'list_tables',
         'search_docs',
+        'search_knowledge_base',
       ]);
     });
 

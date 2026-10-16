@@ -27,6 +27,7 @@ export type LocalHttpEntryOptions = {
   port: number;
   apiUrl?: string;
   contentApiUrl?: string;
+  knowledgeBaseApiUrl?: string;
   secretUrlTemplate?: string;
   log?: (line: string) => void;
 };
@@ -98,6 +99,7 @@ export async function startLocalHttpEntry({
   port,
   apiUrl,
   contentApiUrl,
+  knowledgeBaseApiUrl,
   secretUrlTemplate,
   log = (line) =>
     console.error(`[${new Date().toLocaleTimeString('en-GB')}] ${line}`),
@@ -191,6 +193,7 @@ export async function startLocalHttpEntry({
                 readOnly,
                 features,
                 contentApiUrl,
+                knowledgeBaseApiUrl,
                 elicitation: {
                   requestState: {
                     key: requestStateKey,

@@ -23,6 +23,7 @@ const nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz', 20);
 
 export const API_URL = 'https://api.supabase.com';
 export const CONTENT_API_URL = 'https://supabase.com/docs/api/graphql';
+export const KNOWLEDGE_BASE_API_URL = 'https://supabase.com/kb/api/search';
 export const MCP_SERVER_NAME = 'supabase-mcp';
 export const MCP_SERVER_VERSION = version;
 export const MCP_CLIENT_NAME = 'test-client';
@@ -140,6 +141,30 @@ export const mockContentApi = [
         dummy: true,
       },
     });
+  }),
+];
+
+// Mirrors the KB search endpoint: `q` is required, the body is an array of results.
+export const mockKnowledgeBaseApi = [
+  http.get(KNOWLEDGE_BASE_API_URL, ({ request }) => {
+    const query = new URL(request.url).searchParams.get('q');
+
+    if (!query) {
+      return HttpResponse.json(
+        { error: 'Missing q parameter' },
+        { status: 400 }
+      );
+    }
+
+    return HttpResponse.json([
+      {
+        title: 'Edge Function WORKER_ERROR',
+        href: 'https://supabase.com/kb/troubleshooting/edge-function-worker-error',
+        heading: 'Check the function logs',
+        excerpt: 'A WORKER_ERROR means the function threw before responding.',
+        score: 900,
+      },
+    ]);
   }),
 ];
 
@@ -1107,7 +1132,11 @@ export function setupMockApis({
   mockSecrets.clear();
   mockContentApiSchemaLoadCount.value = 0;
 
-  const mockServer = setupServer(...mockContentApi, ...mockManagementApi);
+  const mockServer = setupServer(
+    ...mockContentApi,
+    ...mockKnowledgeBaseApi,
+    ...mockManagementApi
+  );
   mockServer.listen({ onUnhandledRequest: 'error' });
 
   return mockServer;
