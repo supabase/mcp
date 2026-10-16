@@ -12,6 +12,7 @@ import type {
   RequestObserver,
 } from './observation.js';
 import { createContentApiClient } from './content-api/index.js';
+import { createKnowledgeBaseClient } from './content-api/knowledge-base.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
 import { getBranchingTools } from './tools/branching-tools.js';
@@ -51,6 +52,11 @@ export type SupabaseMcpServerOptions = {
    * The API URL for the Supabase Content API.
    */
   contentApiUrl?: string;
+
+  /**
+   * The search URL for the Supabase Knowledge Base.
+   */
+  knowledgeBaseApiUrl?: string;
 
   /**
    * The project ID to scope the server to.
@@ -159,6 +165,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     readOnly,
     features,
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
+    knowledgeBaseApiUrl = 'https://supabase.com/kb/api/search',
     onToolCall,
     observer,
     elicitation,
@@ -170,6 +177,9 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     );
   }
   const contentApiClientPromise = createContentApiClient(contentApiUrl, {
+    'User-Agent': `supabase-mcp/${version}`,
+  });
+  const knowledgeBaseClient = createKnowledgeBaseClient(knowledgeBaseApiUrl, {
     'User-Agent': `supabase-mcp/${version}`,
   });
 
@@ -245,7 +255,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       > = {};
 
       if (enabledFeatures.has('docs')) {
-        Object.assign(tools, getDocsTools({ contentApiClient }));
+        Object.assign(
+          tools,
+          getDocsTools({ contentApiClient, knowledgeBaseClient })
+        );
       }
 
       if (!projectId && account && enabledFeatures.has('account')) {

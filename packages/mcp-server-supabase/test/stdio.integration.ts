@@ -263,6 +263,7 @@ describe('stdio', () => {
         'reset_branch',
         'restore_project',
         'search_docs',
+        'search_knowledge_base',
       ]);
       expect(client.getServerVersion()).toEqual({
         name: 'supabase',

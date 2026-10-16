@@ -19,6 +19,7 @@ async function main() {
       ['read-only']: readOnly,
       ['api-url']: apiUrl,
       ['content-api-url']: cliContentApiUrl,
+      ['knowledge-base-api-url']: cliKnowledgeBaseApiUrl,
       ['secret-url-template']: secretUrlTemplate,
       ['version']: showVersion,
       ['features']: cliFeatures,
@@ -41,6 +42,9 @@ async function main() {
         type: 'string',
       },
       ['content-api-url']: {
+        type: 'string',
+      },
+      ['knowledge-base-api-url']: {
         type: 'string',
       },
       ['secret-url-template']: {
@@ -78,6 +82,8 @@ async function main() {
 
   const contentApiUrl =
     cliContentApiUrl ?? process.env.SUPABASE_CONTENT_API_URL;
+  const knowledgeBaseApiUrl =
+    cliKnowledgeBaseApiUrl ?? process.env.SUPABASE_KNOWLEDGE_BASE_API_URL;
 
   if (http) {
     try {
@@ -85,6 +91,7 @@ async function main() {
         port: Number(cliPort),
         apiUrl,
         contentApiUrl,
+        knowledgeBaseApiUrl,
         secretUrlTemplate,
       });
       console.error(`Supabase MCP server listening on ${entry.url}`);
