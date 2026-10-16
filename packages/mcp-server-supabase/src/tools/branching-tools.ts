@@ -182,6 +182,36 @@ export const branchingToolDefs = {
   },
 } as const satisfies ToolDefs;
 
+/**
+ * When the MCP server is scoped to a single project, destructive branch tools
+ * must not accept branch IDs that belong to another parent project.
+ *
+ * create_branch / list_branches already inject project_id; delete/merge/reset/
+ * rebase only take branch_id and previously forwarded it unchecked.
+ *
+ * branch_id_or_ref may be either the branch UUID or the branch project_ref.
+ */
+async function assertBranchBelongsToScopedProject(
+  branching: BranchingOperations,
+  branchId: string,
+  projectId: string | undefined
+) {
+  if (!projectId) {
+    return;
+  }
+
+  const branches = await branching.listBranches(projectId);
+  const belongs = branches.some(
+    (branch) => branch.id === branchId || branch.project_ref === branchId
+  );
+
+  if (!belongs) {
+    throw new Error(
+      `Branch '${branchId}' is not a development branch of the scoped project '${projectId}'.`
+    );
+  }
+}
+
 export function getBranchingTools({
   branching,
   projectId,
@@ -316,6 +346,11 @@ export function getBranchingTools({
           throw new Error('Cannot delete a branch in read-only mode.');
         }
 
+        await assertBranchBelongsToScopedProject(
+          branching,
+          branch_id,
+          project_id
+        );
         await branching.deleteBranch(branch_id);
         return { success: true };
       },
@@ -327,6 +362,11 @@ export function getBranchingTools({
           throw new Error('Cannot merge a branch in read-only mode.');
         }
 
+        await assertBranchBelongsToScopedProject(
+          branching,
+          branch_id,
+          project_id
+        );
         await branching.mergeBranch(branch_id);
         return { success: true };
       },
@@ -338,6 +378,11 @@ export function getBranchingTools({
           throw new Error('Cannot reset a branch in read-only mode.');
         }
 
+        await assertBranchBelongsToScopedProject(
+          branching,
+          branch_id,
+          project_id
+        );
         await branching.resetBranch(branch_id, {
           migration_version,
         });
@@ -351,6 +396,11 @@ export function getBranchingTools({
           throw new Error('Cannot rebase a branch in read-only mode.');
         }
 
+        await assertBranchBelongsToScopedProject(
+          branching,
+          branch_id,
+          project_id
+        );
         await branching.rebaseBranch(branch_id);
         return { success: true };
       },
