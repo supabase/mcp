@@ -58,6 +58,7 @@ export function matchUriTemplate<Templates extends string[]>(
       const segment = segments[i];
 
       if (!resourceSegment || !segment) {
+        isMatch = false;
         break;
       }
 
@@ -65,6 +66,7 @@ export function matchUriTemplate<Templates extends string[]>(
         const paramKey = resourceSegment.slice(1, -1);
 
         if (!paramKey) {
+          isMatch = false;
           break;
         }
 
