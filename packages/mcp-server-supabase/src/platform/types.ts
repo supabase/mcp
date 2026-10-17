@@ -338,7 +338,8 @@ export type DevelopmentOperations = {
   getProjectUrl(projectId: string): Promise<string>;
   getPublishableKeys(projectId: string): Promise<ApiKey[]>;
   generateTypescriptTypes(
-    projectId: string
+    projectId: string,
+    includedSchemas?: string[]
   ): Promise<GenerateTypescriptTypesResult>;
 };
 

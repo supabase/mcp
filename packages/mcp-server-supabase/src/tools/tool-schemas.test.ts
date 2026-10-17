@@ -127,6 +127,11 @@ describe('createToolSchemas', () => {
       const { shape } = schemas.execute_sql.inputSchema;
       expect(shape).not.toHaveProperty('project_id');
       expect(shape).toHaveProperty('query');
+
+      // generate_typescript_types should omit project_id but retain included_schemas
+      const { shape: tsShape } = schemas.generate_typescript_types.inputSchema;
+      expect(tsShape).not.toHaveProperty('project_id');
+      expect(tsShape).toHaveProperty('included_schemas');
     });
 
     test('type reflects project_id omission', () => {
