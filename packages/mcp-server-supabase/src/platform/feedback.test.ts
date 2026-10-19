@@ -109,6 +109,39 @@ describe('createFeedbackOperations', () => {
     ).toBeUndefined();
   });
 
+  test('submit rejects when the backend returns an error', async () => {
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response('boom', { status: 500 }));
+    const feedback = createFeedbackOperations({ fetch: fakeFetch });
+
+    await expect(feedback.submit({ feedback: 'hi' })).rejects.toThrow(
+      'Failed to submit feedback: 500 boom'
+    );
+  });
+
+  test('submit rejects when no delete token comes back', async () => {
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json(null));
+    const feedback = createFeedbackOperations({ fetch: fakeFetch });
+
+    await expect(feedback.submit({ feedback: 'hi' })).rejects.toThrow(
+      'no delete token returned'
+    );
+  });
+
+  test('delete rejects when the backend returns an error', async () => {
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response('denied', { status: 403 }));
+    const feedback = createFeedbackOperations({ fetch: fakeFetch });
+
+    await expect(feedback.delete({ deleteToken: 'tok' })).rejects.toThrow(
+      'Failed to delete feedback: 403 denied'
+    );
+  });
+
   test('delete sends the token headers and reads the row count', async () => {
     const fakeFetch = vi
       .fn<typeof fetch>()
