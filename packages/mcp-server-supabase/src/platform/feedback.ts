@@ -2,7 +2,7 @@ import packageJson from '../../package.json' with { type: 'json' };
 import type { FeedbackOperations } from './types.js';
 
 // Publishable keys copied from the CLI client:
-// https://github.com/supabase/cli/blob/104f1fb14d2e856828292b54c95eda8b8125c07a/apps/cli/src/shared/feedback/feedback-client.layer.ts#L130-L168
+// https://github.com/supabase/cli/blob/104f1fb14d2e856828292b54c95eda8b8125c07a/apps/cli/src/shared/feedback/feedback-client.layer.ts#L22-L30
 const FEEDBACK_ENVIRONMENTS = {
   production: {
     url: 'https://xguihxuzqibwxjnimxev.supabase.co',
