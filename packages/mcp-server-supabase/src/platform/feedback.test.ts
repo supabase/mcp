@@ -2,19 +2,12 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createSupabaseApiPlatform } from './api-platform.js';
 import { createFeedbackOperations } from './feedback.js';
 
-function createFakeFetch(response: Response) {
-  const calls: { url: string; init: RequestInit }[] = [];
-  const fakeFetch: typeof fetch = async (input, init = {}) => {
-    calls.push({ url: String(input), init });
-    return response;
-  };
-  return { calls, fakeFetch };
-}
-
 describe('createFeedbackOperations', () => {
   test('submit posts to the RPC and returns the delete token', async () => {
     const token = '5d6d3b3e-4b2f-4a52-9b77-0f0e6a4f6a11';
-    const { calls, fakeFetch } = createFakeFetch(Response.json(token));
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json(token));
     const feedback = createFeedbackOperations({ fetch: fakeFetch });
 
     const result = await feedback.submit({
@@ -23,18 +16,22 @@ describe('createFeedbackOperations', () => {
     });
 
     expect(result).toEqual({ deleteToken: token });
-    expect(calls[0]!.url).toMatch(
+    expect(String(fakeFetch.mock.calls[0]![0])).toMatch(
       /\/rest\/v1\/rpc\/submit_interfaces_feedback$/
     );
-    expect(JSON.parse(String(calls[0]!.init.body))).toMatchObject({
-      feedback: 'Missing a tool',
-      project_ref: 'abc',
-      metadata: { source: 'mcp' },
-    });
+    expect(JSON.parse(String(fakeFetch.mock.calls[0]![1]?.body))).toMatchObject(
+      {
+        feedback: 'Missing a tool',
+        project_ref: 'abc',
+        metadata: { source: 'mcp' },
+      }
+    );
   });
 
   test('submit adds client info to metadata when available', async () => {
-    const { calls, fakeFetch } = createFakeFetch(Response.json('tok'));
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json('tok'));
     const feedback = createFeedbackOperations({ fetch: fakeFetch });
 
     await feedback.submit({
@@ -42,7 +39,9 @@ describe('createFeedbackOperations', () => {
       clientInfo: { name: 'claude-code', version: '1.2.3' },
     });
 
-    expect(JSON.parse(String(calls[0]!.init.body)).metadata).toEqual({
+    expect(
+      JSON.parse(String(fakeFetch.mock.calls[0]![1]?.body)).metadata
+    ).toEqual({
       source: 'mcp',
       client_name: 'claude-code',
       client_version: '1.2.3',
@@ -50,42 +49,52 @@ describe('createFeedbackOperations', () => {
   });
 
   test('submit omits client info when unavailable', async () => {
-    const { calls, fakeFetch } = createFakeFetch(Response.json('tok'));
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json('tok'));
     const feedback = createFeedbackOperations({ fetch: fakeFetch });
 
     await feedback.submit({ feedback: 'hi' });
 
-    expect(JSON.parse(String(calls[0]!.init.body)).metadata).toEqual({
+    expect(
+      JSON.parse(String(fakeFetch.mock.calls[0]![1]?.body)).metadata
+    ).toEqual({
       source: 'mcp',
     });
   });
 
   test('submit includes the user id and delete sends it as a header', async () => {
-    const submitFetch = createFakeFetch(Response.json('tok'));
-    const deleteFetch = createFakeFetch(
-      new Response(null, { status: 204, headers: { 'Content-Range': '*/1' } })
-    );
+    const submitFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json('tok'));
+    const deleteFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(null, { status: 204, headers: { 'Content-Range': '*/1' } })
+      );
     const getUserId = async () => 'user-1';
 
     await createFeedbackOperations({
-      fetch: submitFetch.fakeFetch,
+      fetch: submitFetch,
       getUserId,
     }).submit({ feedback: 'hi' });
     await createFeedbackOperations({
-      fetch: deleteFetch.fakeFetch,
+      fetch: deleteFetch,
       getUserId,
     }).delete({ deleteToken: 'tok' });
 
-    expect(JSON.parse(String(submitFetch.calls[0]!.init.body)).user_id).toBe(
-      'user-1'
-    );
-    expect(deleteFetch.calls[0]!.init.headers).toMatchObject({
+    expect(
+      JSON.parse(String(submitFetch.mock.calls[0]![1]?.body)).user_id
+    ).toBe('user-1');
+    expect(deleteFetch.mock.calls[0]![1]?.headers).toMatchObject({
       'x-feedback-user-id': 'user-1',
     });
   });
 
   test('submit still sends when the user id lookup fails', async () => {
-    const { calls, fakeFetch } = createFakeFetch(Response.json('tok'));
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json('tok'));
     const feedback = createFeedbackOperations({
       fetch: fakeFetch,
       getUserId: async () => {
@@ -95,13 +104,17 @@ describe('createFeedbackOperations', () => {
 
     await feedback.submit({ feedback: 'hi' });
 
-    expect(JSON.parse(String(calls[0]!.init.body)).user_id).toBeUndefined();
+    expect(
+      JSON.parse(String(fakeFetch.mock.calls[0]![1]?.body)).user_id
+    ).toBeUndefined();
   });
 
   test('delete sends the token headers and reads the row count', async () => {
-    const { calls, fakeFetch } = createFakeFetch(
-      new Response(null, { status: 204, headers: { 'Content-Range': '*/1' } })
-    );
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(null, { status: 204, headers: { 'Content-Range': '*/1' } })
+      );
     const feedback = createFeedbackOperations({ fetch: fakeFetch });
 
     const result = await feedback.delete({
@@ -110,16 +123,18 @@ describe('createFeedbackOperations', () => {
     });
 
     expect(result).toEqual({ deleted: true });
-    expect(calls[0]!.init.headers).toMatchObject({
+    expect(fakeFetch.mock.calls[0]![1]?.headers).toMatchObject({
       'x-feedback-token': 'tok',
       'x-feedback-project-ref': 'abc',
     });
   });
 
   test('delete reports false when no row matched', async () => {
-    const { fakeFetch } = createFakeFetch(
-      new Response(null, { status: 204, headers: { 'Content-Range': '*/0' } })
-    );
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(null, { status: 204, headers: { 'Content-Range': '*/0' } })
+      );
     const feedback = createFeedbackOperations({ fetch: fakeFetch });
 
     expect(await feedback.delete({ deleteToken: 'tok' })).toEqual({
