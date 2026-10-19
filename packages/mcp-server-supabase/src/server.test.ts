@@ -407,7 +407,7 @@ describe('feature groups', () => {
     const { tools } = await client.listTools();
     const toolNames = tools.map((tool) => tool.name);
 
-    expect(toolNames).toEqual(['search_docs']);
+    expect(toolNames).toEqual(['search_docs', 'search_knowledge_base']);
   });
 
   test('functions tools', async () => {
@@ -519,6 +519,7 @@ describe('feature groups', () => {
 
     expect(toolNames).toEqual([
       'search_docs',
+      'search_knowledge_base',
       'list_tables',
       'list_extensions',
       'list_migrations',
@@ -748,6 +749,27 @@ describe('docs tools', () => {
     // Additional "tools/list" requests fetch the schema again
     await client.listTools();
     expect(mockContentApiSchemaLoadCount.value).toBe(2);
+  });
+
+  test('searches the knowledge base', async () => {
+    const { callTool } = await setup();
+
+    const result = await callTool({
+      name: 'search_knowledge_base',
+      arguments: { query: 'WORKER_ERROR', limit: 5 },
+    });
+
+    expect(result).toEqual({
+      results: [
+        {
+          title: 'Edge Function WORKER_ERROR',
+          href: 'https://supabase.com/kb/troubleshooting/edge-function-worker-error',
+          heading: 'Check the function logs',
+          excerpt: 'A WORKER_ERROR means the function threw before responding.',
+          score: 900,
+        },
+      ],
+    });
   });
 });
 
