@@ -2603,7 +2603,7 @@ export interface components {
             /** @enum {string} */
             status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
         };
-        RegionsInfo_Output: {
+        RegionsInfoV1_Output: {
             recommendations: {
                 smartGroup: {
                     name: string;
@@ -5866,7 +5866,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RegionsInfo_Output"];
+                    "application/json": components["schemas"]["RegionsInfoV1_Output"];
                 };
             };
         };
