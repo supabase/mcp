@@ -503,22 +503,6 @@ describe('feature groups', () => {
     );
   });
 
-  test('submit_feedback passes the handshake client info', async () => {
-    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
-    const { callTool } = await setup({
-      platform: { feedback: { submit, delete: vi.fn() } },
-      features: ['feedback'],
-    });
-
-    await callTool({ name: 'submit_feedback', arguments: { feedback: 'hi' } });
-
-    expect(submit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
-      })
-    );
-  });
-
   test('submit_feedback prefers the handshake over the host client info', async () => {
     const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
     const { callTool } = await setup({

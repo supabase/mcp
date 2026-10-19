@@ -50,9 +50,9 @@ const { version } = packageJson;
 
 // Clients on protocol 2026-07-28 send their info in each request instead of an initialize handshake
 function getRequestClientInfo(ctx: ServerContext | undefined) {
-  const client = Object.entries(ctx?.mcpReq.envelope ?? {}).find(
-    ([key]) => key === CLIENT_INFO_META_KEY
-  )?.[1];
+  const envelope = ctx?.mcpReq.envelope;
+  if (!envelope || !(CLIENT_INFO_META_KEY in envelope)) return undefined;
+  const client = envelope[CLIENT_INFO_META_KEY];
   return isSpecType.Implementation(client) ? client : undefined;
 }
 
