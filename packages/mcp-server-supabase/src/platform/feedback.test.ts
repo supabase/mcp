@@ -1,0 +1,209 @@
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import { createSupabaseApiPlatform } from './api-platform.js';
+import { createFeedbackOperations } from './feedback.js';
+
+function createFakeFetch(response: Response) {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const fakeFetch: typeof fetch = async (input, init = {}) => {
+    calls.push({ url: String(input), init });
+    return response;
+  };
+  return { calls, fakeFetch };
+}
+
+describe('createFeedbackOperations', () => {
+  test('submit posts to the RPC and returns the delete token', async () => {
+    const token = '5d6d3b3e-4b2f-4a52-9b77-0f0e6a4f6a11';
+    const { calls, fakeFetch } = createFakeFetch(Response.json(token));
+    const feedback = createFeedbackOperations({ fetch: fakeFetch });
+
+    const result = await feedback.submit({
+      feedback: 'Missing a tool',
+      projectId: 'abc',
+    });
+
+    expect(result).toEqual({ deleteToken: token });
+    expect(calls[0]!.url).toMatch(
+      /\/rest\/v1\/rpc\/submit_interfaces_feedback$/
+    );
+    expect(JSON.parse(String(calls[0]!.init.body))).toMatchObject({
+      feedback: 'Missing a tool',
+      project_ref: 'abc',
+      metadata: { source: 'mcp' },
+    });
+  });
+
+  test('submit adds client info to metadata when available', async () => {
+    const { calls, fakeFetch } = createFakeFetch(Response.json('tok'));
+    const feedback = createFeedbackOperations({ fetch: fakeFetch });
+
+    await feedback.submit({
+      feedback: 'hi',
+      clientInfo: { name: 'claude-code', version: '1.2.3' },
+    });
+
+    expect(JSON.parse(String(calls[0]!.init.body)).metadata).toEqual({
+      source: 'mcp',
+      client_name: 'claude-code',
+      client_version: '1.2.3',
+    });
+  });
+
+  test('submit omits client info when unavailable', async () => {
+    const { calls, fakeFetch } = createFakeFetch(Response.json('tok'));
+    const feedback = createFeedbackOperations({ fetch: fakeFetch });
+
+    await feedback.submit({ feedback: 'hi' });
+
+    expect(JSON.parse(String(calls[0]!.init.body)).metadata).toEqual({
+      source: 'mcp',
+    });
+  });
+
+  test('submit includes the user id and delete sends it as a header', async () => {
+    const submitFetch = createFakeFetch(Response.json('tok'));
+    const deleteFetch = createFakeFetch(
+      new Response(null, { status: 204, headers: { 'Content-Range': '*/1' } })
+    );
+    const getUserId = async () => 'user-1';
+
+    await createFeedbackOperations({
+      fetch: submitFetch.fakeFetch,
+      getUserId,
+    }).submit({ feedback: 'hi' });
+    await createFeedbackOperations({
+      fetch: deleteFetch.fakeFetch,
+      getUserId,
+    }).delete({ deleteToken: 'tok' });
+
+    expect(JSON.parse(String(submitFetch.calls[0]!.init.body)).user_id).toBe(
+      'user-1'
+    );
+    expect(deleteFetch.calls[0]!.init.headers).toMatchObject({
+      'x-feedback-user-id': 'user-1',
+    });
+  });
+
+  test('submit still sends when the user id lookup fails', async () => {
+    const { calls, fakeFetch } = createFakeFetch(Response.json('tok'));
+    const feedback = createFeedbackOperations({
+      fetch: fakeFetch,
+      getUserId: async () => {
+        throw new Error('profile unavailable');
+      },
+    });
+
+    await feedback.submit({ feedback: 'hi' });
+
+    expect(JSON.parse(String(calls[0]!.init.body)).user_id).toBeUndefined();
+  });
+
+  test('delete sends the token headers and reads the row count', async () => {
+    const { calls, fakeFetch } = createFakeFetch(
+      new Response(null, { status: 204, headers: { 'Content-Range': '*/1' } })
+    );
+    const feedback = createFeedbackOperations({ fetch: fakeFetch });
+
+    const result = await feedback.delete({
+      deleteToken: 'tok',
+      projectId: 'abc',
+    });
+
+    expect(result).toEqual({ deleted: true });
+    expect(calls[0]!.init.headers).toMatchObject({
+      'x-feedback-token': 'tok',
+      'x-feedback-project-ref': 'abc',
+    });
+  });
+
+  test('delete reports false when no row matched', async () => {
+    const { fakeFetch } = createFakeFetch(
+      new Response(null, { status: 204, headers: { 'Content-Range': '*/0' } })
+    );
+    const feedback = createFeedbackOperations({ fetch: fakeFetch });
+
+    expect(await feedback.delete({ deleteToken: 'tok' })).toEqual({
+      deleted: false,
+    });
+  });
+});
+
+describe('API platform feedback environment', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  test.each([
+    [undefined, 'xguihxuzqibwxjnimxev'],
+    ['https://api.supabase.com', 'xguihxuzqibwxjnimxev'],
+    ['https://api.supabase.green', 'actixlblmrqglneypada'],
+    ['http://localhost:8080', 'actixlblmrqglneypada'],
+  ])('apiUrl %s sends feedback to %s', async (apiUrl, projectRef) => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => Response.json('tok'));
+    const platform = createSupabaseApiPlatform({ accessToken: 'x', apiUrl });
+
+    await platform.feedback!.submit({ feedback: 'hi' });
+
+    const feedbackCall = fetchSpy.mock.calls.find(([input]) =>
+      String(input instanceof Request ? input.url : input).includes(
+        'submit_interfaces_feedback'
+      )
+    );
+    expect(String(feedbackCall![0])).toContain(projectRef);
+  });
+});
+
+describe('API platform user id', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  test('feedback includes the gotrue id header, even when the profile is forbidden', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        const url = String(input instanceof Request ? input.url : input);
+        return url.includes('/v1/profile')
+          ? Response.json(
+              { message: 'This endpoint requires a user-scoped access token' },
+              { status: 403, headers: { 'X-Gotrue-Id': 'user-1' } }
+            )
+          : Response.json('tok');
+      });
+    const platform = createSupabaseApiPlatform({ accessToken: 'x' });
+
+    await platform.feedback!.submit({ feedback: 'hi' });
+
+    const feedbackCall = fetchSpy.mock.calls.find(([input]) =>
+      String(input instanceof Request ? input.url : input).includes(
+        'submit_interfaces_feedback'
+      )
+    );
+    expect(JSON.parse(String(feedbackCall![1]!.body)).user_id).toBe('user-1');
+  });
+});
+
+describe('API platform user id timeout', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  test('feedback still sends when the profile lookup times out', async () => {
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(AbortSignal.abort());
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        if (input instanceof Request && input.url.includes('/v1/profile')) {
+          input.signal.throwIfAborted();
+          return Response.json({}, { headers: { 'X-Gotrue-Id': 'user-1' } });
+        }
+        return Response.json('tok');
+      });
+    const platform = createSupabaseApiPlatform({ accessToken: 'x' });
+
+    await platform.feedback!.submit({ feedback: 'hi' });
+
+    const feedbackCall = fetchSpy.mock.calls.find(([input]) =>
+      String(input instanceof Request ? input.url : input).includes(
+        'submit_interfaces_feedback'
+      )
+    );
+    expect(JSON.parse(String(feedbackCall![1]!.body)).user_id).toBeUndefined();
+  });
+});

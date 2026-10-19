@@ -376,6 +376,18 @@ export type NotebookOperations = {
   ): Promise<NotebookWithContent>;
 };
 
+export type FeedbackOperations = {
+  submit(input: {
+    feedback: string;
+    projectId?: string;
+    clientInfo?: { name: string; version: string };
+  }): Promise<{ deleteToken: string }>;
+  delete(input: {
+    deleteToken: string;
+    projectId?: string;
+  }): Promise<{ deleted: boolean }>;
+};
+
 export type SupabasePlatform = {
   init?(info: InitData): Promise<void>;
   account?: AccountOperations;
@@ -387,4 +399,5 @@ export type SupabasePlatform = {
   branching?: BranchingOperations;
   secrets?: SecretOperations;
   notebooks?: NotebookOperations;
+  feedback?: FeedbackOperations;
 };

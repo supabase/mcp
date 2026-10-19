@@ -1,4 +1,10 @@
-import { createRequestStateCodec } from '@modelcontextprotocol/server';
+import {
+  CLIENT_INFO_META_KEY,
+  createRequestStateCodec,
+  type Implementation,
+  isSpecType,
+  type ServerContext,
+} from '@modelcontextprotocol/server';
 import {
   createMcpServer,
   type Tool,
@@ -25,6 +31,7 @@ import { getDebuggingTools } from './tools/debugging-tools.js';
 import { getDevelopmentTools } from './tools/development-tools.js';
 import { getDocsTools } from './tools/docs-tools.js';
 import { getEdgeFunctionTools } from './tools/edge-function-tools.js';
+import { getFeedbackTools } from './tools/feedback-tools.js';
 import { getNotebookTools } from './tools/notebook-tools.js';
 import {
   assertValidConnectUrlTemplate,
@@ -40,6 +47,14 @@ import {
 import { parseFeatureGroups } from './util.js';
 
 const { version } = packageJson;
+
+// Clients on protocol 2026-07-28 send their info in each request instead of an initialize handshake
+function getRequestClientInfo(ctx: ServerContext | undefined) {
+  const client = Object.entries(ctx?.mcpReq.envelope ?? {}).find(
+    ([key]) => key === CLIENT_INFO_META_KEY
+  )?.[1];
+  return isSpecType.Implementation(client) ? client : undefined;
+}
 
 export type SupabaseMcpServerOptions = {
   /**
@@ -67,7 +82,7 @@ export type SupabaseMcpServerOptions = {
 
   /**
    * Features to enable.
-   * Options: 'account', 'branching', 'database', 'debugging', 'development', 'docs', 'functions', 'notebooks', 'storage'
+   * Options: 'account', 'branching', 'database', 'debugging', 'development', 'docs', 'feedback', 'functions', 'notebooks', 'storage'
    */
   features?: string[];
 
@@ -75,6 +90,13 @@ export type SupabaseMcpServerOptions = {
    * Callback for after a supabase tool is called.
    */
   onToolCall?: ToolCallCallback;
+
+  /**
+   * The connected MCP client. Hosts that serve legacy clients statelessly must
+   * pass the client from their restored session, since a fresh server never
+   * sees `initialize`. Requests and handshakes the server sees take precedence.
+   */
+  clientInfo?: Implementation;
 
   /** Optional per-request observer; see ObservedMethod for covered handlers. */
   observer?: RequestObserver;
@@ -127,6 +149,7 @@ const DEFAULT_FEATURES: FeatureGroup[] = [
   'development',
   'functions',
   'branching',
+  'feedback',
 ];
 
 export const PLATFORM_INDEPENDENT_FEATURES: FeatureGroup[] = ['docs'];
@@ -199,12 +222,15 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         })
       : undefined;
 
+  let handshakeClientInfo: Implementation | undefined;
+
   const server = createMcpServer<ObservedTool, ObservationFact>({
     name: 'supabase',
     title: 'Supabase',
     version,
     instructions,
     async onInitialize(info) {
+      handshakeClientInfo = info.clientInfo;
       // Note: in stateless HTTP mode, `onInitialize` will not always be called
       // so we cannot rely on it for initialization. It's still useful for telemetry.
       const { clientInfo } = info;
@@ -227,6 +253,8 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       verify: elicitationCodec.verify,
     },
     tools: async (ctx) => {
+      const clientInfo =
+        getRequestClientInfo(ctx) ?? handshakeClientInfo ?? options.clientInfo;
       const contentApiClient = await contentApiClientPromise;
       const {
         account,
@@ -238,6 +266,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         branching,
         secrets,
         notebooks,
+        feedback,
       } = platform;
       const tools: Record<
         string,
@@ -323,6 +352,13 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
       if (notebooks && enabledFeatures.has('notebooks')) {
         Object.assign(tools, getNotebookTools({ notebooks, projectId }));
+      }
+
+      if (feedback && enabledFeatures.has('feedback')) {
+        Object.assign(
+          tools,
+          getFeedbackTools({ feedback, projectId, clientInfo })
+        );
       }
 
       if (

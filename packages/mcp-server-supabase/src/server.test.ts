@@ -3,11 +3,14 @@ import {
   createOrganization,
   createProject,
   createProjectFixture,
+  MCP_CLIENT_NAME,
+  MCP_CLIENT_VERSION,
   mockContentApiSchemaLoadCount,
 } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
 import type { SupabasePlatform } from './platform/types.js';
-import { instructions } from './server.js';
+import { createMcpHandler } from '@modelcontextprotocol/server';
+import { createSupabaseMcpServer, instructions } from './server.js';
 import { supabaseMcpToolSchemas } from './tools/tool-schemas.js';
 import { stripIndent } from 'common-tags';
 import gqlmin from 'gqlmin';
@@ -96,6 +99,7 @@ describe('tools', () => {
         'branching',
         'storage',
         'notebooks',
+        'feedback',
       ],
     });
 
@@ -467,6 +471,128 @@ describe('feature groups', () => {
     const toolNames = tools.map((tool) => tool.name);
 
     expect(toolNames).toEqual(['list_notebooks', 'get_notebook']);
+  });
+
+  test('feedback tools', async () => {
+    const { client } = await setup({
+      features: ['feedback'],
+    });
+
+    const { tools } = await client.listTools();
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toEqual(['submit_feedback', 'delete_feedback']);
+  });
+
+  test('submit_feedback passes the request client info', async () => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const { client } = await harness.setupModern({
+      platform: { feedback: { submit, delete: vi.fn() } },
+      features: ['feedback'],
+    });
+
+    await client.callTool({
+      name: 'submit_feedback',
+      arguments: { feedback: 'hi' },
+    });
+
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      })
+    );
+  });
+
+  test('submit_feedback passes the handshake client info', async () => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const { callTool } = await setup({
+      platform: { feedback: { submit, delete: vi.fn() } },
+      features: ['feedback'],
+    });
+
+    await callTool({ name: 'submit_feedback', arguments: { feedback: 'hi' } });
+
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      })
+    );
+  });
+
+  test('submit_feedback prefers the handshake over the host client info', async () => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const { callTool } = await setup({
+      platform: { feedback: { submit, delete: vi.fn() } },
+      features: ['feedback'],
+      clientInfo: { name: 'host', version: '0.0.1' },
+    });
+
+    await callTool({ name: 'submit_feedback', arguments: { feedback: 'hi' } });
+
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      })
+    );
+  });
+
+  test('submit_feedback falls back to the host client info', async () => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const handler = createMcpHandler(
+      () =>
+        createSupabaseMcpServer({
+          platform: { feedback: { submit, delete: vi.fn() } },
+          features: ['feedback'],
+          clientInfo: { name: 'host', version: '0.0.1' },
+        }),
+      { legacy: 'stateless' }
+    );
+
+    // A stateless legacy follow-up request, with no initialize and no _meta
+    await handler.fetch(
+      new Request('https://mcp.test', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'submit_feedback', arguments: { feedback: 'hi' } },
+        }),
+      })
+    );
+    await handler.close();
+
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientInfo: { name: 'host', version: '0.0.1' },
+      })
+    );
+  });
+
+  test('feedback tools are hidden in read-only mode', async () => {
+    const { client } = await setup({
+      features: ['feedback'],
+      readOnly: true,
+    });
+
+    const { tools } = await client.listTools();
+
+    expect(tools).toEqual([]);
+  });
+
+  test('feedback group needs the feedback platform operation', async () => {
+    const setupPromise = setup({
+      platform: {},
+      features: ['feedback'],
+    });
+
+    await expect(setupPromise).rejects.toThrow(
+      "This platform does not support the 'feedback' feature group"
+    );
   });
 
   test('invalid group fails', async () => {

@@ -30,6 +30,7 @@ type SetupOptions = {
   accessToken?: string;
   projectId?: string;
   platform?: SupabasePlatform;
+  clientInfo?: SupabaseMcpServerOptions['clientInfo'];
   readOnly?: boolean;
   features?: string[];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
@@ -147,6 +148,7 @@ export function createServerHarness() {
       readOnly,
       features,
       elicitation,
+      clientInfo: options.clientInfo,
       observer: options.observer,
       onToolCall: options.onToolCall,
     }));
