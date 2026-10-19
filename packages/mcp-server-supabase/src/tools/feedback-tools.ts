@@ -7,6 +7,7 @@ type FeedbackToolsOptions = {
   feedback: FeedbackOperations;
   projectId?: string;
   clientInfo?: Implementation;
+  readOnly?: boolean;
 };
 
 const submitFeedbackInputSchema = z.object({
@@ -60,6 +61,7 @@ export function getFeedbackTools({
   feedback,
   projectId,
   clientInfo,
+  readOnly,
 }: FeedbackToolsOptions) {
   const project_id = projectId;
 
@@ -68,6 +70,10 @@ export function getFeedbackTools({
       ...feedbackToolDefs.submit_feedback,
       inject: { project_id },
       execute: async ({ feedback: message, project_id }) => {
+        if (readOnly) {
+          throw new Error('Cannot submit feedback in read-only mode.');
+        }
+
         const { deleteToken } = await feedback.submit({
           feedback: message,
           projectId: project_id,
@@ -80,6 +86,10 @@ export function getFeedbackTools({
       ...feedbackToolDefs.delete_feedback,
       inject: { project_id },
       execute: async ({ delete_token, project_id }) => {
+        if (readOnly) {
+          throw new Error('Cannot delete feedback in read-only mode.');
+        }
+
         return feedback.delete({
           deleteToken: delete_token,
           projectId: project_id,

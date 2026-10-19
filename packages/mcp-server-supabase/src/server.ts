@@ -357,7 +357,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       if (feedback && enabledFeatures.has('feedback')) {
         Object.assign(
           tools,
-          getFeedbackTools({ feedback, projectId, clientInfo })
+          getFeedbackTools({ feedback, projectId, clientInfo, readOnly })
         );
       }
 

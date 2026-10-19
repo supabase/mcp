@@ -573,6 +573,30 @@ describe('feature groups', () => {
     );
   });
 
+  test('feedback tools refuse direct calls in read-only mode', async () => {
+    const feedback = {
+      submit: vi.fn().mockResolvedValue({ deleteToken: 'tok' }),
+      delete: vi.fn().mockResolvedValue({ deleted: true }),
+    };
+    const { callTool } = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+      readOnly: true,
+    });
+
+    await expect(
+      callTool({ name: 'submit_feedback', arguments: { feedback: 'hi' } })
+    ).rejects.toThrow('Cannot submit feedback in read-only mode.');
+    await expect(
+      callTool({
+        name: 'delete_feedback',
+        arguments: { delete_token: '5d6d3b3e-4b2f-4a52-9b77-0f0e6a4f6a11' },
+      })
+    ).rejects.toThrow('Cannot delete feedback in read-only mode.');
+    expect(feedback.submit).not.toHaveBeenCalled();
+    expect(feedback.delete).not.toHaveBeenCalled();
+  });
+
   test('feedback tools are hidden in read-only mode', async () => {
     const { client } = await setup({
       features: ['feedback'],
