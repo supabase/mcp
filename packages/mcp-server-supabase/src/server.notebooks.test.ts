@@ -257,6 +257,8 @@ describe('log-cell guidance', () => {
     expect(tools.map((tool) => tool.name)).not.toContain('query_logs');
     const notebook = tools.find((tool) => tool.name === 'run_notebook');
     expect(notebook?.description).toContain('unnest(metadata) as m');
+    const create = tools.find((tool) => tool.name === 'create_notebook');
+    expect(create?.description).toContain('unnest(metadata) as m');
   });
 });
 
@@ -1471,12 +1473,15 @@ describe('create_notebook', () => {
       id: expect.any(String),
       name: proposal.name,
       updated_at: expect.any(String),
+      url: `https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${created.id}`,
     });
     const listed = await callTool({
       name: 'list_notebooks',
       arguments: { project_id: project.id },
     });
-    expect(listed.notebooks).toContainEqual(expect.objectContaining(created));
+    expect(listed.notebooks).toContainEqual(
+      expect.objectContaining({ id: created.id, name: proposal.name })
+    );
     const fetched = await callTool({
       name: 'get_notebook',
       arguments: { project_id: project.id, notebook_id: created.id },
@@ -1524,6 +1529,9 @@ describe('create_notebook', () => {
     });
     expect(project.notebooks.has(created.id)).toBe(true);
     expect(other.notebooks.size).toBe(0);
+    expect(created.url).toBe(
+      `https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${created.id}`
+    );
     const fetched = await callTool({
       name: 'get_notebook',
       arguments: { notebook_id: created.id },

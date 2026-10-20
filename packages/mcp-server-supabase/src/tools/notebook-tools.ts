@@ -58,6 +58,10 @@ type NotebookToolsOptions = {
   };
 };
 
+function notebookUrl(projectId: string, notebookId: string) {
+  return `https://supabase.com/dashboard/project/${encodeURIComponent(projectId)}/explorer/notebook/${encodeURIComponent(notebookId)}`;
+}
+
 // Reuses the platform's validation, adding the descriptions shown to models.
 const createNotebookInputSchema = z.object({
   project_id: z.string(),
@@ -72,11 +76,9 @@ const createNotebookInputSchema = z.object({
   ),
 });
 
-const createNotebookOutputSchema = notebookSchema.pick({
-  id: true,
-  name: true,
-  updated_at: true,
-});
+const createNotebookOutputSchema = notebookSchema
+  .pick({ id: true, name: true, updated_at: true })
+  .extend({ url: z.string() });
 
 const listNotebooksInputSchema = z.object({
   project_id: z.string(),
@@ -283,6 +285,7 @@ export function getNotebookTools({
     ...(createNotebook && {
       create_notebook: injectableTool({
         ...notebookToolDefs.create_notebook,
+        description: `${notebookToolDefs.create_notebook.description} For log-cell SQL: ${queryLogsByDialect[debugging?.logsDialect ?? 'clickhouse'].schemaHint}`,
         inject: { project_id },
         execute: async ({ project_id, ...options }) => {
           if (readOnly) {
@@ -293,7 +296,7 @@ export function getNotebookTools({
             project_id,
             options
           );
-          return { id, name, updated_at };
+          return { id, name, updated_at, url: notebookUrl(project_id, id) };
         },
       }),
     }),
@@ -392,7 +395,7 @@ export function getNotebookTools({
                             `This notebook modifies data or schema in ${mutatingCells.length} of ${queryCells.length} query cells${destructiveCells.length ? `, ${destructiveCells.length} destructive (DROP, DELETE, TRUNCATE or UPDATE without WHERE)` : ''}.`,
                             'It may permanently remove data, tables, schemas or other objects.',
                           ]),
-                      `Run notebook? https://supabase.com/dashboard/project/${encodeURIComponent(project_id)}/explorer/notebook/${encodeURIComponent(notebook_id)}`,
+                      `Run notebook? ${notebookUrl(project_id, notebook_id)}`,
                     ].join('\n'),
                     requestedSchema: actionOnlyElicitationSchema,
                   }),
