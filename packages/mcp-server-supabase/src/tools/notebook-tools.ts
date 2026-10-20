@@ -19,7 +19,7 @@ import {
   runNotebookStateSchema,
   type ElicitationState,
 } from './confirmation.js';
-import { queryLogsByDialect } from './debugging-tools.js';
+import { DEFAULT_LOGS_DIALECT, queryLogsByDialect } from './debugging-tools.js';
 import { isDestructiveSql, removeCommentsFromSql } from './destructive-sql.js';
 import {
   applyRowLimit,
@@ -45,6 +45,7 @@ type NotebookToolsOptions = {
   /** Runs log cells. Without `queryLogs`, log cells return an error. */
   debugging?: DebuggingOperations;
   projectId?: string;
+  dashboardUrl?: string;
   readOnly?: boolean;
   /**
    * Requires confirmation for mutating database cells. Clients without
@@ -239,6 +240,7 @@ export function getNotebookTools({
   projectId,
   readOnly,
   confirmation,
+  dashboardUrl = 'https://supabase.com/dashboard',
 }: NotebookToolsOptions) {
   const project_id = projectId;
 
@@ -271,7 +273,7 @@ export function getNotebookTools({
     ...((database || debugging?.queryLogs) && {
       run_notebook: injectableTool({
         ...notebookToolDefs.run_notebook,
-        description: `${notebookToolDefs.run_notebook.description} For log-cell SQL: ${queryLogsByDialect[debugging?.logsDialect ?? 'clickhouse'].schemaHint}`,
+        description: `${notebookToolDefs.run_notebook.description} For log-cell SQL: ${queryLogsByDialect[debugging?.logsDialect ?? DEFAULT_LOGS_DIALECT].schemaHint}`,
         annotations: {
           ...notebookToolDefs.run_notebook.annotations,
           readOnlyHint: readOnly ?? false,
@@ -336,9 +338,13 @@ export function getNotebookTools({
                         ? ['Database queries run read-only.']
                         : [
                             `This notebook modifies data or schema in ${mutatingCells.length} of ${queryCells.length} query cells${destructiveCells.length ? `, ${destructiveCells.length} destructive (DROP, DELETE, TRUNCATE or UPDATE without WHERE)` : ''}.`,
-                            'It may permanently remove data, tables, schemas or other objects.',
+                            ...(destructiveCells.length
+                              ? [
+                                  'It may permanently remove data, tables, schemas or other objects.',
+                                ]
+                              : []),
                           ]),
-                      `Run notebook? https://supabase.com/dashboard/project/${encodeURIComponent(project_id)}/explorer/notebook/${encodeURIComponent(notebook_id)}`,
+                      `Run notebook? ${dashboardUrl}/project/${encodeURIComponent(project_id)}/explorer/notebook/${encodeURIComponent(notebook_id)}`,
                     ].join('\n'),
                     requestedSchema: actionOnlyElicitationSchema,
                   }),

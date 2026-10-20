@@ -935,6 +935,72 @@ describe('startLocalHttpEntry', () => {
     }
   );
 
+  test('a green API URL sends notebook confirmation to the green dashboard', async () => {
+    await entry.close();
+    entry = await startEntry({ apiUrl: 'https://api.supabase.green' });
+    const { project } = await createProjectFixture();
+    const notebook = project.createNotebook({
+      name: 'Green notebook',
+      content: {
+        schema_version: 1,
+        cells: [
+          {
+            id: 'update',
+            type: 'database',
+            sql: "update films set title = 'x' where id = 1",
+            row_limit: 100,
+          },
+        ],
+      },
+    });
+    mockServer.use(
+      http.get(
+        'https://api.supabase.green/v2/projects/:ref/notebooks/:id',
+        () =>
+          HttpResponse.json({
+            data: {
+              type: 'notebook',
+              id: notebook.id,
+              attributes: { ...notebook.attributes, content: notebook.content },
+            },
+          })
+      )
+    );
+    const client = await connect(
+      { pin: MODERN_PROTOCOL_VERSION },
+      `project_ref=${project.id}&features=notebooks&read_only=false`,
+      {
+        capabilities: { elicitation: { form: {} } },
+        inputRequired: { autoFulfill: false },
+      }
+    );
+
+    const result = (await client.request(
+      {
+        method: 'tools/call',
+        params: {
+          name: 'run_notebook',
+          arguments: {
+            notebook_id: notebook.id,
+            expected_updated_at: notebook.attributes.updated_at,
+          },
+        },
+      },
+      { allowInputRequired: true }
+    )) as CallToolResult | InputRequiredResult;
+
+    if (!isInputRequiredResult(result)) {
+      throw new Error('expected notebook confirmation');
+    }
+    const params = result.inputRequests?.confirm_run?.params;
+    if (!params || !('message' in params)) {
+      throw new Error('expected form confirmation');
+    }
+    expect(params.message.split('\n').at(-1)).toBe(
+      `Run notebook? https://supabase.green/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`
+    );
+  });
+
   test.each(['', ' , '])(
     'keeps elicitation defaults for blank CSV %j',
     async (skip) => {

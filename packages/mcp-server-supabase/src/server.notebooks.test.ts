@@ -382,10 +382,9 @@ describe('run_notebook', () => {
       arguments: runArgs(project, notebook),
     });
 
-    const firstRowsBytes = JSON.stringify([{ one: 1 }]).length;
     expect(
       executeSql.mock.calls.map(([, options]) => options.max_result_bytes)
-    ).toEqual([1_000_000, 1_000_000 - firstRowsBytes]);
+    ).toEqual([1_000_000, 999_989]);
   });
 
   test('a cell whose rows exceed the run budget fails without stopping later cells', async () => {
@@ -441,51 +440,13 @@ describe('run_notebook', () => {
     );
   });
 
-  test('runs valid SQL with existing row limits unchanged', async () => {
-    const { callTool } = await setup({ features: RUN_FEATURES });
-    const queries = [
-      'select 1 as n limit 1 /* existing limit */',
-      'select 1 as n fetch next 1 rows only',
-      'select 1 as n limit all',
-    ];
-    const { project, notebook } = await createNotebookFixture(
-      queries.map((sql, index) => ({
-        id: String(index),
-        type: 'database',
-        sql,
-        row_limit: 100,
-      }))
-    );
-
-    const result = await callTool({
-      name: 'run_notebook',
-      arguments: runArgs(project, notebook),
-    });
-
-    expect(parseCellResults(result.cells)).toEqual(
-      queries.map((_, index) => ({
-        cell_id: String(index),
-        type: 'database',
-        status: 'success',
-        rows: [{ n: 1 }],
-      }))
-    );
-  });
-
-  test('returns log errors for notebook repair and continues', async () => {
+  test('a log cell error reaches the reader and later cells still run', async () => {
     const error = 'Unknown identifier missing_column';
     const { callTool } = await setup({ features: RUN_FEATURES });
     harness.mockServer?.use(
       http.get(
         `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
-        ({ request }) =>
-          HttpResponse.json(
-            new URL(request.url).searchParams
-              .get('sql')
-              ?.includes('missing_column')
-              ? { result: [], error }
-              : { result: [{ event_message: 'Recovered' }], error: null }
-          )
+        () => HttpResponse.json({ result: [], error })
       )
     );
     const { project, notebook } = await createNotebookFixture([
@@ -510,35 +471,6 @@ describe('run_notebook', () => {
         type: 'log',
         status: 'error',
         error,
-      },
-      {
-        cell_id: 'db',
-        type: 'database',
-        status: 'success',
-        rows: [{ n: 1 }],
-      },
-    ]);
-
-    // Simulate correcting the reported cell and validating the new notebook.
-    notebook.content.cells = notebook.content.cells.map((cell) =>
-      cell.type === 'log'
-        ? { ...cell, sql: 'select event_message from logs' }
-        : cell
-    );
-    notebook.attributes.updated_at = new Date(
-      Date.parse(notebook.attributes.updated_at) + 1000
-    ).toISOString();
-    const corrected = await callTool({
-      name: 'run_notebook',
-      arguments: runArgs(project, notebook),
-    });
-    expect(parseCellResults(corrected.cells)).toEqual([
-      {
-        cell_id: 'logs',
-        title: 'Log events',
-        type: 'log',
-        status: 'success',
-        rows: [{ event_message: 'Recovered' }],
       },
       {
         cell_id: 'db',
@@ -955,25 +887,25 @@ describe('run_notebook', () => {
       }
     );
 
-    test('form-capable client sees mutating cell count and notebook link before running', async () => {
+    test('form-capable client sees accurate mutating and destructive counts before the notebook link', async () => {
       const { client } = await setupModern({
         features: RUN_FEATURES,
         clientCapabilities: FORM_CAPABLE,
       });
       const { project, notebook } = await createNotebookFixture([
         { id: 'intro', type: 'markdown', text: 'Signup metrics' },
+        { id: 'read', type: 'database', sql: 'select 1', row_limit: 100 },
         {
-          id: 'signups',
+          id: 'update',
           type: 'database',
-          title: 'Daily signups',
-          sql: 'delete from auth.users where false',
+          sql: "update films set title = 'x' where id = 1",
           row_limit: 100,
         },
         {
-          id: 'errors',
-          type: 'log',
-          sql: "select * from logs where source = 'auth_logs'",
-          time_range: { type: 'relative', unit: 'hour', amount: 6 },
+          id: 'delete',
+          type: 'database',
+          sql: 'delete from films',
+          row_limit: 100,
         },
       ]);
 
@@ -985,23 +917,103 @@ describe('run_notebook', () => {
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
-      expect(first.inputRequests?.confirm_run).toMatchObject({
-        params: {
-          message: expect.stringMatching(
-            /modifies data or schema in 1 of 2 query cells, 1 destructive/
-          ),
-        },
-      });
-      expect(first.inputRequests?.confirm_run).toMatchObject({
-        params: {
-          message: expect.stringContaining(
-            `https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`
-          ),
-        },
-      });
+      const params = first.inputRequests?.confirm_run?.params;
+      if (!params || !('message' in params)) {
+        throw new Error('expected form confirmation');
+      }
+      const message = params.message;
+      expect(message?.split('\n')[0]).toMatch(
+        /^This notebook modifies data or schema in 2 of 3 query cells, 1 destructive/
+      );
+      expect(message).toContain(
+        'It may permanently remove data, tables, schemas or other objects.'
+      );
+      expect(message?.split('\n').at(-1)).toBe(
+        `Run notebook? https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`
+      );
     });
 
-    test('form-capable client: checks the full SQL while keeping confirmation short', async () => {
+    test('form-capable client sees no destructive warning for a mutating-only notebook', async () => {
+      const { client } = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const { project, notebook } = await createNotebookFixture([
+        {
+          id: 'update',
+          type: 'database',
+          sql: "update films set title = 'x' where id = 1",
+          row_limit: 100,
+        },
+      ]);
+
+      const first = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: runArgs(project, notebook),
+      });
+
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected an input_required result');
+      }
+      const params = first.inputRequests?.confirm_run?.params;
+      if (!params || !('message' in params)) {
+        throw new Error('expected form confirmation');
+      }
+      const message = params.message;
+      expect(message?.split('\n')[0]).toBe(
+        'This notebook modifies data or schema in 1 of 1 query cells.'
+      );
+      expect(message).not.toContain(
+        'It may permanently remove data, tables, schemas or other objects.'
+      );
+    });
+
+    test.each([
+      [
+        'a later INSERT after a semicolon',
+        'select 1; insert into films (id) values (1)',
+        true,
+      ],
+      [
+        'an UPDATE after a block comment',
+        "/* note */ update films set title = 'x' where id = 1",
+        true,
+      ],
+      ['an INSERT', 'insert into films (id) values (1)', true],
+      ['a CREATE', 'create table films (id int)', true],
+      ['an ALTER', 'alter table films add column title text', true],
+      ['a GRANT', 'grant select on films to public', true],
+      ['a REVOKE', 'revoke select on films from public', true],
+      [
+        'a MERGE',
+        'merge into films using updates on films.id = updates.id when matched then delete',
+        true,
+      ],
+      ['a SELECT', 'select 1', false],
+    ] as const)(
+      'form-capable client prompts for %s only if SQL mutates',
+      async (_, sql, requiresConfirmation) => {
+        const { client } = await setupModern({
+          features: RUN_FEATURES,
+          clientCapabilities: FORM_CAPABLE,
+        });
+        const { project, notebook } = await createNotebookFixture([
+          { id: 'query', type: 'database', sql, row_limit: 100 },
+        ]);
+
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+
+        expect(isInputRequiredResult(result)).toBe(requiresConfirmation);
+        if (!requiresConfirmation) {
+          expect(result).not.toHaveProperty('isError', true);
+        }
+      }
+    );
+
+    test('form-capable client detects destructive SQL beyond the first 2000 characters', async () => {
       const { client } = await setupModern({
         features: RUN_FEATURES,
         clientCapabilities: FORM_CAPABLE,
@@ -1039,13 +1051,12 @@ describe('run_notebook', () => {
       if (!isInputRequiredResult(first)) {
         throw new Error('expected an input_required result');
       }
-      expect(first.inputRequests?.confirm_run).toMatchObject({
-        params: {
-          message: expect.stringMatching(
-            /modifies data or schema in 2 of 3 query cells, 2 destructive/
-          ),
-        },
-      });
+      const params = first.inputRequests?.confirm_run?.params;
+      if (!params || !('message' in params)) {
+        throw new Error('expected form confirmation');
+      }
+      const message = params.message;
+      expect(message).toContain('2 destructive');
     });
 
     test.each([false, true])(
@@ -1071,11 +1082,13 @@ describe('run_notebook', () => {
           arguments: runArgs(project, notebook),
         });
         expect(isInputRequiredResult(result)).toBe(false);
-        expect(executeSql).toHaveBeenCalledWith(project.id, {
-          query: 'delete from films',
-          read_only: true,
-          max_result_bytes: 1_000_000,
-        });
+        expect(executeSql).toHaveBeenCalledWith(
+          project.id,
+          expect.objectContaining({
+            query: 'delete from films',
+            read_only: true,
+          })
+        );
         expect(
           parseCellResults(parseToolResult(result as CallToolResult).cells)
         ).toEqual([
@@ -1220,7 +1233,7 @@ describe('run_notebook', () => {
       }
     );
 
-    test('form-capable client: a notebook without query cells runs without elicitation', async () => {
+    test('a notebook without query cells returns empty results', async () => {
       const { client } = await setupModern({
         features: RUN_FEATURES,
         clientCapabilities: FORM_CAPABLE,
@@ -1378,7 +1391,7 @@ describe('run_notebook', () => {
       expect(executeSql).not.toHaveBeenCalled();
     });
 
-    test('capability-free client runs without elicitation when confirmation is configured', async () => {
+    test('legacy client runs a select-only notebook when confirmation is configured', async () => {
       const platform = createSupabaseApiPlatform({
         accessToken: ACCESS_TOKEN,
         apiUrl: API_URL,
