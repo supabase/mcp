@@ -3,13 +3,19 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { tool } from '@supabase/mcp-utils';
+import { type ToolObservation, tool } from '@supabase/mcp-utils';
+import type { ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
 import {
   actionOnlyElicitationSchema,
+  callBeforeConfirmingDescription,
   checkConfirmationState,
+  confirmCostIdDescription,
   isFormCapable,
+  observeOperation,
+  missingConfirmCostIdMessage,
+  optionalConfirmCostIdDescription,
   projectCostStateSchema,
   type ElicitationState,
 } from './confirmation.js';
@@ -95,11 +101,9 @@ const createProjectInputSchema = z.object({
   confirm_cost_id: z
     .string({
       error: (issue) =>
-        issue.input === undefined
-          ? 'User must confirm understanding of costs before creating a project.'
-          : undefined,
+        issue.input === undefined ? missingConfirmCostIdMessage : undefined,
     })
-    .describe('The cost confirmation ID. Call `confirm_cost` first.'),
+    .describe(confirmCostIdDescription),
 });
 
 const createProjectOutputSchema = projectSchema;
@@ -109,9 +113,7 @@ const createProjectInputSchemaWithElicitation = createProjectInputSchema.extend(
     confirm_cost_id: z
       .string()
       .optional()
-      .describe(
-        'The cost confirmation ID. Only required for clients without per-request form-elicitation capability; those clients must call `confirm_cost` first. Form-capable clients are asked to confirm the cost inline when creating the project.'
-      ),
+      .describe(optionalConfirmCostIdDescription),
   }
 );
 
@@ -197,7 +199,7 @@ export const accountToolDefs = {
   },
   confirm_cost: {
     description:
-      'Ask the user to confirm their understanding of the cost of creating a new project or branch. Call `get_cost` first. Returns a unique ID for this confirmation which should be passed to `create_project` or `create_branch`.',
+      'Returns a confirmation ID for the cost of a new project or branch returned by `get_cost`. Only call this after the user has explicitly agreed to that cost in the conversation. Pass the ID to `create_project` or `create_branch`.',
     parameters: confirmCostInputSchema,
     outputSchema: confirmCostOutputSchema,
     annotations: {
@@ -209,8 +211,7 @@ export const accountToolDefs = {
     },
   },
   create_project: {
-    description:
-      'Creates a new Supabase project. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use `get_project` to check the status.',
+    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to any nonzero quoted cost before the project is created. ${callBeforeConfirmingDescription} A project quoted at $0 may be created without a cost-confirmation form. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use \`get_project\` to check the status.`,
     parameters: createProjectInputSchema,
     outputSchema: createProjectOutputSchema,
     annotations: {
@@ -308,9 +309,16 @@ export function getAccountTools({
           organization_id,
           confirm_cost_id,
         }: z.infer<typeof createProjectInputSchemaWithElicitation>,
-        ctx: ServerContext
+        ctx: ServerContext,
+        observation?: ToolObservation<ObservationFact>
       ) => {
         if (readOnly) {
+          observation?.record({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'blocked',
+            reason: 'read_only',
+          });
           throw new Error('Cannot create a project in read-only mode.');
         }
 
@@ -319,17 +327,28 @@ export function getAccountTools({
           const cost = await getNextProjectCost(account, organization_id);
           const state = ctx.mcpReq.requestState<unknown>();
           if (!state && cost.amount === 0) {
-            return await account.createProject({
-              name,
-              region,
-              organization_id,
+            observation?.record({
+              kind: 'confirmation_decision',
+              feature: 'cost',
+              route: 'bypass',
+              reason: 'zero_cost',
             });
+            return await observeOperation('cost', observation?.record, () =>
+              account.createProject({ name, region, organization_id })
+            );
           }
+
+          observation?.record({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'inline',
+            reason: 'eligible',
+          });
 
           const costSuffix = cost.recurrence === 'monthly' ? '/month' : '/hr';
 
-          const askForConfirmation = async () =>
-            inputRequired({
+          const askForConfirmation = async () => {
+            return inputRequired({
               inputRequests: {
                 confirm_cost: inputRequired.elicit({
                   mode: 'form',
@@ -346,6 +365,7 @@ export function getAccountTools({
                 ctx
               ),
             });
+          };
 
           const confirmationState = await checkConfirmationState({
             ctx,
@@ -353,6 +373,7 @@ export function getAccountTools({
             schema: projectCostStateSchema,
             requestKey: 'confirm_cost',
             askForConfirmation,
+            observation,
             argsMatch: (state) =>
               state.name === name &&
               state.region === region &&
@@ -365,21 +386,36 @@ export function getAccountTools({
             declinedText: 'Project creation was declined.',
             cancelledText: 'Project creation was cancelled.',
           });
-
           switch (confirmationState.kind) {
             case 'reprompt':
             case 'terminal':
               return confirmationState.result;
             case 'proceed':
-              return await account.createProject({
-                name: confirmationState.state.name,
-                region: confirmationState.state.region,
-                organization_id: confirmationState.state.organization_id,
-              });
+              return await observeOperation('cost', observation?.record, () =>
+                account.createProject({
+                  name: confirmationState.state.name,
+                  region: confirmationState.state.region,
+                  organization_id: confirmationState.state.organization_id,
+                })
+              );
           }
         }
 
+        // Legacy clients only: form-capable clients returned above. Without
+        // this, a missing ID would hit the opaque hash-mismatch error below.
+        if (!confirm_cost_id) {
+          throw new Error(missingConfirmCostIdMessage);
+        }
+
         const cost = await getNextProjectCost(account, organization_id);
+        // confirmation is the server option enabling inline confirmation; legacy means no form support or no configuration.
+        const reason = confirmation ? 'capability_missing' : 'not_configured';
+        observation?.record({
+          kind: 'confirmation_decision',
+          feature: 'cost',
+          route: 'legacy',
+          reason,
+        });
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
           throw new Error(
@@ -387,11 +423,9 @@ export function getAccountTools({
           );
         }
 
-        return await account.createProject({
-          name,
-          region,
-          organization_id,
-        });
+        return await observeOperation('cost', observation?.record, () =>
+          account.createProject({ name, region, organization_id })
+        );
       },
     }),
     pause_project: tool({

@@ -2603,7 +2603,7 @@ export interface components {
             /** @enum {string} */
             status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
         };
-        RegionsInfo_Output: {
+        RegionsInfoV1_Output: {
             recommendations: {
                 smartGroup: {
                     name: string;
@@ -4775,6 +4775,10 @@ export interface components {
         PostgresConfigResponse_Output: {
             effective_cache_size?: string;
             logical_decoding_work_mem?: string;
+            "pg_stat_statements.max"?: number;
+            "pg_net.batch_size"?: number;
+            autovacuum_max_workers?: number;
+            autovacuum_work_mem?: string;
             "cron.log_statement"?: boolean;
             /** @description Default unit: ms */
             log_autovacuum_min_duration?: string;
@@ -4827,6 +4831,10 @@ export interface components {
         UpdatePostgresConfigBody: {
             effective_cache_size?: string;
             logical_decoding_work_mem?: string;
+            "pg_stat_statements.max"?: number;
+            "pg_net.batch_size"?: number;
+            autovacuum_max_workers?: number;
+            autovacuum_work_mem?: string;
             "cron.log_statement"?: boolean;
             /** @description Default unit: ms */
             log_autovacuum_min_duration?: string;
@@ -4896,6 +4904,11 @@ export interface components {
             suspend: boolean | null;
             /** @description Whether to enable presence */
             presence_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description If set, the Realtime service has been suspended by an admin.
+             */
+            admin_suspended_at: string | null;
         };
         /** @example {
          *       "private_only": false,
@@ -5853,7 +5866,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RegionsInfo_Output"];
+                    "application/json": components["schemas"]["RegionsInfoV1_Output"];
                 };
             };
         };

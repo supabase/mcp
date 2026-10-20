@@ -849,7 +849,8 @@ export interface components {
         };
         ErrorResponseBodyAPIErrorObject: {
             id?: string;
-            code: string;
+            /** @enum {string} */
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
             message: string;
             description?: string;
             links?: {
@@ -867,7 +868,27 @@ export interface components {
             meta?: {
                 [key: string]: unknown;
             };
-            issues?: components["schemas"]["ErrorResponseBodyAPIErrorObject"][];
+            issues?: {
+                id?: string;
+                code: string;
+                message: string;
+                description?: string;
+                links?: {
+                    [key: string]: {
+                        href: string;
+                        rel?: string;
+                        title?: string;
+                        type?: string;
+                        describedby?: string;
+                        meta?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                meta?: {
+                    [key: string]: unknown;
+                };
+            }[];
         };
         ErrorResponseBody: {
             error: components["schemas"]["ErrorResponseBodyAPIErrorObject"];
@@ -1260,6 +1281,8 @@ export interface components {
                         postgres_settings: {
                             effective_cache_size?: string;
                             logical_decoding_work_mem?: string;
+                            autovacuum_max_workers?: number;
+                            autovacuum_work_mem?: string;
                             /** @description Default unit: ms */
                             log_autovacuum_min_duration?: string;
                             log_checkpoints?: boolean;
@@ -1302,6 +1325,8 @@ export interface components {
                             checkpoint_timeout?: string;
                             hot_standby_feedback?: boolean;
                             cron_log_statement?: boolean;
+                            pg_net_batch_size?: number;
+                            pg_stat_statements_max?: number;
                         };
                     };
                     pooler: {
@@ -1821,6 +1846,8 @@ export interface components {
                     database_type: "PRIMARY" | "READ_REPLICA";
                     /** @description Identifier of the database this PrivateLink share targets - the project ref for the primary, or the read replica identifier. */
                     database_identifier: string;
+                    /** @description The custom DNS name configured on the AWS VPC Lattice resource configuration. */
+                    custom_dns_name: string;
                     /** @description ID of the AWS VPC Lattice resource configuration backing this PrivateLink share. */
                     resource_access_manager_resource_config_id?: string;
                     /** @description ARN of the AWS VPC Lattice resource configuration backing this PrivateLink share. */
@@ -1884,6 +1911,8 @@ export interface components {
                     database_type: "PRIMARY" | "READ_REPLICA";
                     /** @description Identifier of the database this PrivateLink share targets - the project ref for the primary, or the read replica identifier. */
                     database_identifier: string;
+                    /** @description The custom DNS name configured on the AWS VPC Lattice resource configuration. */
+                    custom_dns_name: string;
                     /** @description ID of the AWS VPC Lattice resource configuration backing this PrivateLink share. */
                     resource_access_manager_resource_config_id?: string;
                     /** @description ARN of the AWS VPC Lattice resource configuration backing this PrivateLink share. */
@@ -2092,7 +2121,7 @@ export interface components {
                      * @example developer
                      * @enum {string}
                      */
-                    role: "owner" | "administrator" | "developer" | "read-only";
+                    role: "owner" | "administrator" | "developer" | "read-only" | "no-access";
                     /** @description The projects to assign a project-scoped role for. If omitted, assigns an org-wide role. */
                     projects?: {
                         /**
@@ -2161,11 +2190,11 @@ export interface components {
                      */
                     email: string;
                     /**
-                     * @description Role name to assign. Must be on a Team or Enterprise plan to use the read-only role.
+                     * @description Role name to assign. Must be on an Enterprise plan to use the read-only or no-access roles. no-access grants no project visibility until project-scoped roles are assigned separately.
                      * @example developer
                      * @enum {string}
                      */
-                    role: "owner" | "administrator" | "developer" | "read-only";
+                    role: "owner" | "administrator" | "developer" | "read-only" | "no-access";
                     /**
                      * @description The projects to limit a user to. If omitted, user will have org-wide access with the provided role.
                      * @example {
@@ -2186,7 +2215,8 @@ export interface components {
         V2CreateInvitationsResponse_Output: {
             error?: {
                 id?: string;
-                code: string;
+                /** @enum {string} */
+                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
                 message: string;
                 description?: string;
                 links?: {
@@ -2424,7 +2454,8 @@ export interface components {
         };
         APIErrorObject: {
             id?: string;
-            code: string;
+            /** @enum {string} */
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
             message: string;
             description?: string;
             links?: {
@@ -2442,7 +2473,27 @@ export interface components {
             meta?: {
                 [key: string]: unknown;
             };
-            issues?: components["schemas"]["APIErrorObject"][];
+            issues?: {
+                id?: string;
+                code: string;
+                message: string;
+                description?: string;
+                links?: {
+                    [key: string]: {
+                        href: string;
+                        rel?: string;
+                        title?: string;
+                        type?: string;
+                        describedby?: string;
+                        meta?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                meta?: {
+                    [key: string]: unknown;
+                };
+            }[];
         };
     };
     responses: never;
@@ -3938,7 +3989,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponseBody"];
                 };
             };
-            /** @description This feature requires the Enterprise organization plan. */
+            /** @description This feature requires the Team, or Enterprise organization plan. */
             402: {
                 headers: {
                     [name: string]: unknown;
@@ -4058,7 +4109,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponseBody"];
                 };
             };
-            /** @description This feature requires the Enterprise organization plan. */
+            /** @description This feature requires the Team, or Enterprise organization plan. */
             402: {
                 headers: {
                     [name: string]: unknown;
@@ -4120,7 +4171,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponseBody"];
                 };
             };
-            /** @description This feature requires the Enterprise organization plan. */
+            /** @description This feature requires the Team, or Enterprise organization plan. */
             402: {
                 headers: {
                     [name: string]: unknown;
@@ -4354,7 +4405,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -4439,9 +4490,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -4462,9 +4513,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -4501,7 +4552,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -4536,9 +4587,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -4658,7 +4709,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret: string;
                         };
@@ -4724,7 +4775,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -4787,9 +4838,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -4810,9 +4861,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -4849,7 +4900,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -4884,9 +4935,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5019,7 +5070,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -5082,9 +5133,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5105,9 +5156,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5144,7 +5195,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5179,9 +5230,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5316,7 +5367,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -5379,9 +5430,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5402,9 +5453,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5439,9 +5490,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.endpoint";
+                            code: "endpoint_not_found";
                             /** @constant */
-                            message: "Not Found: Endpoint not found";
+                            message: "Webhook endpoint not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5478,7 +5529,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5513,9 +5564,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5650,7 +5701,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -5713,9 +5764,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5736,9 +5787,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5773,9 +5824,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.endpoint";
+                            code: "endpoint_not_found";
                             /** @constant */
-                            message: "Not Found: Endpoint not found";
+                            message: "Webhook endpoint not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5812,7 +5863,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5847,9 +5898,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -5968,7 +6019,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret?: string;
                         };
@@ -6034,7 +6085,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -6097,9 +6148,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6120,9 +6171,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6157,9 +6208,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.endpoint";
+                            code: "endpoint_not_found";
                             /** @constant */
-                            message: "Not Found: Endpoint not found";
+                            message: "Webhook endpoint not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6196,7 +6247,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6231,9 +6282,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6357,15 +6408,38 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
                                  */
                                 attempt_timestamp: string;
+                                event: {
+                                    /**
+                                     * @description Webhook event type.
+                                     * @enum {string}
+                                     */
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
+                                    /** @description Final data sent to the consumer. */
+                                    payload: {
+                                        /**
+                                         * @description Organization slug
+                                         * @example tsrqponmlkjihgfedcba
+                                         */
+                                        organization_slug: string;
+                                        project_ref: string | null;
+                                    };
+                                    /**
+                                     * Format: date-time
+                                     * @description Timestamp of event publication.
+                                     */
+                                    timestamp: string;
+                                };
                             };
                         }[];
                         links: {
@@ -6440,9 +6514,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6463,9 +6537,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6500,9 +6574,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.endpoint";
+                            code: "endpoint_not_found";
                             /** @constant */
-                            message: "Not Found: Endpoint not found";
+                            message: "Webhook endpoint not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6539,7 +6613,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6574,9 +6648,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6666,7 +6740,7 @@ export interface operations {
                              * @description Webhook event type.
                              * @enum {string}
                              */
-                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                         };
                     };
                 };
@@ -6701,9 +6775,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "bad_request.endpoint.test.disabled";
+                            code: "endpoint_disabled";
                             /** @constant */
-                            message: "Bad Request: Endpoint is disabled";
+                            message: "Webhook endpoint is disabled";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6724,9 +6798,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "bad_request.endpoint.test.wrong_event_type";
+                            code: "endpoint_event_type_not_subscribed";
                             /** @constant */
-                            message: "Bad Request: Provided event type is not subscribed to by the endpoint";
+                            message: "Webhook endpoint is not subscribed to this event type";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6798,9 +6872,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6821,9 +6895,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6858,9 +6932,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.endpoint";
+                            code: "endpoint_not_found";
                             /** @constant */
-                            message: "Not Found: Endpoint not found";
+                            message: "Webhook endpoint not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6897,7 +6971,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -6932,9 +7006,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7051,10 +7125,12 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
@@ -7065,7 +7141,7 @@ export interface operations {
                                      * @description Webhook event type.
                                      * @enum {string}
                                      */
-                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                                     /** @description Final data sent to the consumer. */
                                     payload: {
                                         /**
@@ -7133,9 +7209,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7156,9 +7232,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7193,9 +7269,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.delivery";
+                            code: "delivery_not_found";
                             /** @constant */
-                            message: "Not Found: Delivery not found";
+                            message: "Webhook delivery not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7232,7 +7308,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7267,9 +7343,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7412,9 +7488,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7435,9 +7511,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7472,9 +7548,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.delivery";
+                            code: "delivery_not_found";
                             /** @constant */
-                            message: "Not Found: Delivery not found";
+                            message: "Webhook delivery not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7511,7 +7587,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7546,9 +7622,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7688,7 +7764,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -7773,9 +7849,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7796,9 +7872,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7835,7 +7911,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7870,9 +7946,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -7992,7 +8068,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret: string;
                         };
@@ -8058,7 +8134,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -8121,9 +8197,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8144,9 +8220,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8183,7 +8259,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8218,9 +8294,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8353,7 +8429,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -8416,9 +8492,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8439,9 +8515,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8478,7 +8554,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8513,9 +8589,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8650,7 +8726,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -8713,9 +8789,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8736,9 +8812,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8773,9 +8849,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.endpoint";
+                            code: "endpoint_not_found";
                             /** @constant */
-                            message: "Not Found: Endpoint not found";
+                            message: "Webhook endpoint not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8812,7 +8888,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8847,9 +8923,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -8984,7 +9060,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -9047,9 +9123,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9070,9 +9146,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9107,9 +9183,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.endpoint";
+                            code: "endpoint_not_found";
                             /** @constant */
-                            message: "Not Found: Endpoint not found";
+                            message: "Webhook endpoint not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9146,7 +9222,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9181,9 +9257,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9302,7 +9378,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret?: string;
                         };
@@ -9368,7 +9444,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -9431,9 +9507,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9454,9 +9530,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9491,9 +9567,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.endpoint";
+                            code: "endpoint_not_found";
                             /** @constant */
-                            message: "Not Found: Endpoint not found";
+                            message: "Webhook endpoint not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9530,7 +9606,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9565,9 +9641,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9691,15 +9767,38 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
                                  */
                                 attempt_timestamp: string;
+                                event: {
+                                    /**
+                                     * @description Webhook event type.
+                                     * @enum {string}
+                                     */
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
+                                    /** @description Final data sent to the consumer. */
+                                    payload: {
+                                        /**
+                                         * @description Organization slug
+                                         * @example tsrqponmlkjihgfedcba
+                                         */
+                                        organization_slug: string;
+                                        project_ref: string | null;
+                                    };
+                                    /**
+                                     * Format: date-time
+                                     * @description Timestamp of event publication.
+                                     */
+                                    timestamp: string;
+                                };
                             };
                         }[];
                         links: {
@@ -9774,9 +9873,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9797,9 +9896,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9834,9 +9933,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.endpoint";
+                            code: "endpoint_not_found";
                             /** @constant */
-                            message: "Not Found: Endpoint not found";
+                            message: "Webhook endpoint not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9873,7 +9972,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -9908,9 +10007,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10000,7 +10099,7 @@ export interface operations {
                              * @description Webhook event type.
                              * @enum {string}
                              */
-                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                         };
                     };
                 };
@@ -10035,9 +10134,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "bad_request.endpoint.test.disabled";
+                            code: "endpoint_disabled";
                             /** @constant */
-                            message: "Bad Request: Endpoint is disabled";
+                            message: "Webhook endpoint is disabled";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10058,9 +10157,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "bad_request.endpoint.test.wrong_event_type";
+                            code: "endpoint_event_type_not_subscribed";
                             /** @constant */
-                            message: "Bad Request: Provided event type is not subscribed to by the endpoint";
+                            message: "Webhook endpoint is not subscribed to this event type";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10132,9 +10231,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10155,9 +10254,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10192,9 +10291,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.endpoint";
+                            code: "endpoint_not_found";
                             /** @constant */
-                            message: "Not Found: Endpoint not found";
+                            message: "Webhook endpoint not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10231,7 +10330,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10266,9 +10365,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10385,10 +10484,12 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
@@ -10399,7 +10500,7 @@ export interface operations {
                                      * @description Webhook event type.
                                      * @enum {string}
                                      */
-                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                                     /** @description Final data sent to the consumer. */
                                     payload: {
                                         /**
@@ -10467,9 +10568,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10490,9 +10591,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10527,9 +10628,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.delivery";
+                            code: "delivery_not_found";
                             /** @constant */
-                            message: "Not Found: Delivery not found";
+                            message: "Webhook delivery not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10566,7 +10667,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10601,9 +10702,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10746,9 +10847,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.permission_denied";
+                            code: "forbidden";
                             /** @constant */
-                            message: "Forbidden: Permission denied";
+                            message: "Forbidden";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10769,9 +10870,9 @@ export interface operations {
                         } | {
                             id?: string;
                             /** @constant */
-                            code: "forbidden.access_disabled";
+                            code: "webhooks_access_disabled";
                             /** @constant */
-                            message: "Forbidden: Access disabled";
+                            message: "Webhooks access is disabled for this organization or project";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10806,9 +10907,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "not_found.delivery";
+                            code: "delivery_not_found";
                             /** @constant */
-                            message: "Not Found: Delivery not found";
+                            message: "Webhook delivery not found";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10845,7 +10946,7 @@ export interface operations {
                             /** @constant */
                             code: "request_timeout";
                             /** @constant */
-                            message: "Request Timeout";
+                            message: "Request timed out";
                             description?: string;
                             links?: {
                                 [key: string]: {
@@ -10880,9 +10981,9 @@ export interface operations {
                         error: {
                             id?: string;
                             /** @constant */
-                            code: "too_many_requests";
+                            code: "rate_limit_exceeded";
                             /** @constant */
-                            message: "Too Many Requests";
+                            message: "Rate limit exceeded";
                             description?: string;
                             links?: {
                                 [key: string]: {

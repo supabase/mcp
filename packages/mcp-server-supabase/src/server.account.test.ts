@@ -516,7 +516,7 @@ describe('tools', () => {
     });
 
     await expect(createProjectPromise).rejects.toThrow(
-      'User must confirm understanding of costs before creating a project.'
+      /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
     );
   });
 
@@ -708,6 +708,31 @@ describe('tools', () => {
         region: 'us-east-1',
         organization_id: freeOrg.id,
       });
+      expect(mockProjects.size).toBe(1);
+    });
+
+    test('client without forms that calls first gets the confirm_cost steps and no project', async () => {
+      const { callTool } = await setup({
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
+      });
+      const { org } = await createOrganizationWithBillableNextProject();
+
+      await expect(
+        callTool({
+          name: 'create_project',
+          arguments: {
+            name: 'New Project',
+            region: 'us-east-1',
+            organization_id: org.id,
+          },
+        })
+      ).rejects.toThrow(
+        /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
+      );
+      // Only the existing project that makes the next one billable.
       expect(mockProjects.size).toBe(1);
     });
 
