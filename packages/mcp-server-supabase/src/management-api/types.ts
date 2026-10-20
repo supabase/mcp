@@ -4587,11 +4587,44 @@ export interface components {
          *       "body": "Deno.serve(() => new Response('Hello again!'))",
          *       "verify_jwt": true
          *     } */
-        V1UpdateFunctionBody: {
+        V1UpdateFunctionBodyJson: {
             name?: string;
             body?: string;
             verify_jwt?: boolean;
         };
+        /**
+         * Format: binary
+         * @description Raw Brotli-compressed ESZIP binary file.
+         *
+         *     **Validation requirements** - The file must start with the four magic bytes `EZBR` (hex: `45 5A 42 52`).
+         *     - The `ezbr_sha256` query parameter must contain the SHA-256 hash of the uploaded ESZIP payload.
+         *
+         *     **Example**
+         *     ```javascript
+         *     import { readFile } from 'node:fs/promises';
+         *     import { brotliCompress } from 'node:zlib';
+         *     import { promisify } from 'node:util';
+         *     import { createHash } from 'node:crypto';
+         *
+         *     const compress = promisify(brotliCompress);
+         *     const marker = Buffer.from('EZBR', 'ascii');
+         *
+         *     const file = await readFile('./function.eszip');
+         *     const compressed = await compress(file);
+         *
+         *     const payload = Buffer.concat([marker, compressed]);
+         *
+         *     const ezbr_sha256 = createHash('sha256')
+         *       .update(payload)
+         *       .digest('hex');
+         *
+         *     console.log(ezbr_sha256);
+         *     ```
+         *
+         *
+         * @example Binary Brotli-compressed ESZIP file
+         */
+        V1UpdateFunctionBodyEszip: string;
         V1StorageBucketResponse_Output: {
             id: string;
             name: string;
@@ -12063,8 +12096,8 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/vnd.denoland.eszip": string;
-                "application/json": components["schemas"]["V1UpdateFunctionBody"];
+                "application/vnd.denoland.eszip": components["schemas"]["V1UpdateFunctionBodyEszip"];
+                "application/json": components["schemas"]["V1UpdateFunctionBodyJson"];
             };
         };
         responses: {
