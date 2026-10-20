@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.13.0...mcp-server-supabase-v0.14.0) (2026-10-14)
+
+
+### Features
+
+* **advisors:** add health advisor support ([#420](https://github.com/supabase/mcp/issues/420)) ([8a26508](https://github.com/supabase/mcp/commit/8a2650891e2fa6e5e895075663ba4f35867083d6))
+* **mcp-server-supabase:** add bounded cost lifecycle observations ([#428](https://github.com/supabase/mcp/issues/428)) ([657d1f3](https://github.com/supabase/mcp/commit/657d1f30cac0f24242db1c3402e15800cfd4504c))
+* **mcp-server-supabase:** add destructive SQL observations ([#455](https://github.com/supabase/mcp/issues/455)) ([4595698](https://github.com/supabase/mcp/commit/4595698ced4b14080c2c2d4d958d8678387f3694))
+
+
+### Bug Fixes
+
+* **mcp:** clarify cost and deploy tool descriptions for OpenAI scanner ([#467](https://github.com/supabase/mcp/issues/467)) ([1f9da03](https://github.com/supabase/mcp/commit/1f9da038a07767b594d241cbfe2076a9a9631e47))
+* **mcp:** stop double cost confirmation on create_project and create_branch ([#468](https://github.com/supabase/mcp/issues/468)) ([3c3b1fc](https://github.com/supabase/mcp/commit/3c3b1fce89c43324b316a76db6d9fb0cf475f344))
+
 ## [0.13.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.12.0...mcp-server-supabase-v0.13.0) (2026-09-17)
 
 

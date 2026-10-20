@@ -5,6 +5,12 @@ import {
   type ToolCallCallback,
 } from '@supabase/mcp-utils';
 import packageJson from '../package.json' with { type: 'json' };
+import { z } from 'zod/v4';
+import type {
+  ObservationFact,
+  ObservedTool,
+  RequestObserver,
+} from './observation.js';
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
@@ -26,9 +32,12 @@ import {
 } from './tools/secret-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
 import { writeToolSet } from './tools/tool-schemas.js';
-import type { ElicitationToolName, FeatureGroup } from './types.js';
+import {
+  CURRENT_ELICITATION_TOOLS,
+  type ElicitationToolName,
+  type FeatureGroup,
+} from './types.js';
 import { parseFeatureGroups } from './util.js';
-import { z } from 'zod/v4';
 
 const { version } = packageJson;
 
@@ -67,6 +76,9 @@ export type SupabaseMcpServerOptions = {
    */
   onToolCall?: ToolCallCallback;
 
+  /** Optional per-request observer; see ObservedMethod for covered handlers. */
+  observer?: RequestObserver;
+
   /**
    * Signed multi-round-trip elicitation config. `requestState` is the shared
    * HMAC codec config used by every elicitation feature this server issues;
@@ -84,7 +96,7 @@ export type SupabaseMcpServerOptions = {
     /**
      * Form confirmation for the listed cost, destructive SQL and notebook
      * tools. Clients without form capability run raw SQL without a prompt,
-     * but cannot run destructive notebook cells when confirmation is enabled.
+     * but cannot run mutating notebook cells when confirmation is enabled.
      * Cost tools keep the legacy `get_cost` -> `confirm_cost` ->
      * `confirm_cost_id` flow.
      */
@@ -125,7 +137,7 @@ export const instructions = `
 Here are guidelines for using Supabase tools effectively:
 
 - Before making schema changes, inspect the existing tables so you understand the current structure
-- When debugging issues, start by reading the project's logs and its security and performance advisories before making changes
+- When debugging issues, start by reading the project's logs and its security, performance, and health advisories before making changes
 - Look up the project's API URL and its publishable API keys when helping users configure client-side integrations
 - SQL runs on the project's database server. Never read server-side files or run OS commands via SQL.
 
@@ -150,6 +162,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     features,
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
     onToolCall,
+    observer,
     elicitation,
   } = options;
 
@@ -188,7 +201,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         })
       : undefined;
 
-  const server = createMcpServer({
+  const server = createMcpServer<ObservedTool, ObservationFact>({
     name: 'supabase',
     title: 'Supabase',
     version,
@@ -207,6 +220,11 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       ]);
     },
     onToolCall,
+    observer,
+    classifyTool: (name) =>
+      (CURRENT_ELICITATION_TOOLS as readonly string[]).includes(name)
+        ? (name as ElicitationToolName)
+        : 'other',
     requestState: elicitationCodec && {
       verify: elicitationCodec.verify,
     },
@@ -223,7 +241,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         secrets,
         notebooks,
       } = platform;
-      const tools: Record<string, Tool> = {};
+      const tools: Record<
+        string,
+        Tool<z.ZodObject<any>, z.ZodObject<any>, ObservationFact>
+      > = {};
 
       if (enabledFeatures.has('docs')) {
         Object.assign(tools, getDocsTools({ contentApiClient }));
@@ -307,10 +328,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
           tools,
           getNotebookTools({
             notebooks,
-            // Running cells executes SQL and log queries, so it is gated on
-            // the feature groups that own those capabilities.
-            database: enabledFeatures.has('database') ? database : undefined,
-            debugging: enabledFeatures.has('debugging') ? debugging : undefined,
+            // Feature groups control tool discovery, not the operations that
+            // notebook cells can run. The notebooks group owns this tool.
+            database,
+            debugging,
             projectId,
             readOnly,
             confirmation:

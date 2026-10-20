@@ -74,6 +74,7 @@ function buildQueryLogsCopy({
   schemaHint: string;
 }) {
   return {
+    schemaHint,
     description: `Runs a custom read-only ${name} SQL query against a Supabase project's ${logsNoun}, for filtering, aggregating, or joining across log fields more precisely than a simple per-service log dump. When the user asks about a specific time range, always pass iso_timestamp_start and iso_timestamp_end to match it; otherwise the query defaults to the last 24 hours and will return results from a wider window than intended. The window can be up to 24 hours. Do not poll this tool in a loop.`,
     parameters: buildQueryLogsInputSchema(
       `A read-only ${name} SQL query to run against the project's ${logsNoun}. ${schemaHint}`
@@ -93,7 +94,7 @@ function buildQueryLogsCopy({
  * registry, so rebuilding them per `getDebuggingTools` call would grow it
  * unboundedly.
  */
-const queryLogsByDialect = {
+export const queryLogsByDialect = {
   clickhouse: buildQueryLogsCopy({
     name: 'ClickHouse',
     logsNoun: 'unified logs stream',
@@ -109,8 +110,9 @@ const queryLogsByDialect = {
 } as const satisfies Record<
   LogsDialect,
   {
+    schemaHint: string;
     description: string;
-    parameters: ReturnType<typeof buildQueryLogsInputSchema>;
+    parameters: z.ZodType;
   }
 >;
 
@@ -120,6 +122,12 @@ const queryLogsOutputSchema = z.object({
 
 const getAdvisorsInputSchema = z.object({
   project_id: z.string(),
+  type: z
+    .enum(['security', 'performance', 'health'])
+    .describe('The type of advisors to fetch'),
+});
+
+const legacyAdvisorsInputSchema = getAdvisorsInputSchema.extend({
   type: z
     .enum(['security', 'performance'])
     .describe('The type of advisors to fetch'),
@@ -244,7 +252,7 @@ export const debuggingToolDefs = {
   },
   get_advisors: {
     description:
-      "Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities or performance improvements. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
+      "Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
     parameters: getAdvisorsInputSchema,
     outputSchema: getAdvisorsOutputSchema,
     annotations: {
@@ -309,8 +317,14 @@ export function getDebuggingTools({
     }),
     get_advisors: injectableTool({
       ...debuggingToolDefs.get_advisors,
+      parameters: debugging.getHealthAdvisors
+        ? getAdvisorsInputSchema
+        : legacyAdvisorsInputSchema,
       inject: { project_id },
-      execute: async ({ project_id, type }) => {
+      execute: async ({
+        project_id,
+        type,
+      }: z.infer<typeof getAdvisorsInputSchema>) => {
         let result: unknown;
         switch (type) {
           case 'security':
@@ -318,6 +332,14 @@ export function getDebuggingTools({
             break;
           case 'performance':
             result = await debugging.getPerformanceAdvisors(project_id);
+            break;
+          case 'health':
+            if (!debugging.getHealthAdvisors) {
+              throw new Error(
+                'Health advisors are not supported by this platform'
+              );
+            }
+            result = await debugging.getHealthAdvisors(project_id);
             break;
           default:
             throw new Error(`Unknown advisor type: ${type}`);
