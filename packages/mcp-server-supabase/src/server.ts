@@ -51,6 +51,8 @@ export type SupabaseMcpServerOptions = {
    * The API URL for the Supabase Content API.
    */
   contentApiUrl?: string;
+  /** Dashboard base URL for notebook links. Defaults to the production dashboard. */
+  dashboardUrl?: string;
 
   /**
    * The project ID to scope the server to.
@@ -161,6 +163,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     readOnly,
     features,
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
+    dashboardUrl,
     onToolCall,
     observer,
     elicitation,
@@ -333,6 +336,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             database,
             debugging,
             projectId,
+            dashboardUrl,
             readOnly,
             confirmation:
               elicitationCodec &&

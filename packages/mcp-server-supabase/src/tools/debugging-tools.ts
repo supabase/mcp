@@ -11,7 +11,7 @@ import {
   wrapWithUntrustedDataBoundary,
 } from './util.js';
 
-const DEFAULT_LOGS_DIALECT: LogsDialect = 'clickhouse';
+export const DEFAULT_LOGS_DIALECT: LogsDialect = 'clickhouse';
 
 type DebuggingToolsOptions = {
   debugging: DebuggingOperations;

@@ -61,9 +61,7 @@ describe('resolveLogWindow', () => {
     );
 
     expect(iso_timestamp_end).toBe(end);
-    expect(iso_timestamp_start).toBe(
-      new Date(Date.parse(end) - DAY_MS).toISOString()
-    );
+    expect(iso_timestamp_start).toBe('2024-01-31T11:00:00.000Z');
   });
 
   test('normalizes accepted timestamps to canonical UTC ISO strings', () => {

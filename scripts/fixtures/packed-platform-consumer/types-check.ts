@@ -155,6 +155,7 @@ const supabaseObserver: Supabase.RequestObserver = (context) => {
       | 'create_branch'
       | 'execute_sql'
       | 'apply_migration'
+      | 'run_notebook'
       | 'other' = context.tool;
     void tool;
   } else {

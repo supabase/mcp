@@ -235,8 +235,8 @@ export const notebookCellSchema = z.discriminatedUnion('type', [
   notebookLogCellSchema,
 ]);
 
-// Cells to create, without server-assigned ids. Stricter than the read schemas
-// above, so a misspelled key fails instead of being silently dropped.
+// Cell keys to create, without server-assigned ids. Stricter than the read
+// schemas above, so a misspelled cell key fails instead of being dropped.
 const newNotebookChartConfigSchema = notebookChartConfigSchema
   .extend({
     y_series: z.array(

@@ -22,7 +22,7 @@ import {
   runNotebookStateSchema,
   type ElicitationState,
 } from './confirmation.js';
-import { queryLogsByDialect } from './debugging-tools.js';
+import { DEFAULT_LOGS_DIALECT, queryLogsByDialect } from './debugging-tools.js';
 import { isDestructiveSql, removeCommentsFromSql } from './destructive-sql.js';
 import {
   applyRowLimit,
@@ -48,6 +48,7 @@ type NotebookToolsOptions = {
   /** Runs log cells. Without `queryLogs`, log cells return an error. */
   debugging?: DebuggingOperations;
   projectId?: string;
+  dashboardUrl?: string;
   readOnly?: boolean;
   /**
    * Requires confirmation for mutating database cells. Clients without
@@ -58,8 +59,12 @@ type NotebookToolsOptions = {
   };
 };
 
-function notebookUrl(projectId: string, notebookId: string) {
-  return `https://supabase.com/dashboard/project/${encodeURIComponent(projectId)}/explorer/notebook/${encodeURIComponent(notebookId)}`;
+function notebookUrl(
+  dashboardUrl: string,
+  projectId: string,
+  notebookId: string
+) {
+  return `${dashboardUrl}/project/${encodeURIComponent(projectId)}/explorer/notebook/${encodeURIComponent(notebookId)}`;
 }
 
 // Reuses the platform's validation, adding the descriptions shown to models.
@@ -78,7 +83,11 @@ const createNotebookInputSchema = z.object({
 
 const createNotebookOutputSchema = notebookSchema
   .pick({ id: true, name: true, updated_at: true })
-  .extend({ url: z.string() });
+  .extend({
+    url: z
+      .string()
+      .describe('Dashboard link to give the user for this notebook.'),
+  });
 
 const listNotebooksInputSchema = z.object({
   project_id: z.string(),
@@ -277,6 +286,7 @@ export function getNotebookTools({
   projectId,
   readOnly,
   confirmation,
+  dashboardUrl = 'https://supabase.com/dashboard',
 }: NotebookToolsOptions) {
   const project_id = projectId;
   const createNotebook = notebooks.createNotebook?.bind(notebooks);
@@ -285,7 +295,7 @@ export function getNotebookTools({
     ...(createNotebook && {
       create_notebook: injectableTool({
         ...notebookToolDefs.create_notebook,
-        description: `${notebookToolDefs.create_notebook.description} For log-cell SQL: ${queryLogsByDialect[debugging?.logsDialect ?? 'clickhouse'].schemaHint}`,
+        description: `${notebookToolDefs.create_notebook.description} For log-cell SQL: ${queryLogsByDialect[debugging?.logsDialect ?? DEFAULT_LOGS_DIALECT].schemaHint}`,
         inject: { project_id },
         execute: async ({ project_id, ...options }) => {
           if (readOnly) {
@@ -296,7 +306,12 @@ export function getNotebookTools({
             project_id,
             options
           );
-          return { id, name, updated_at, url: notebookUrl(project_id, id) };
+          return {
+            id,
+            name,
+            updated_at,
+            url: notebookUrl(dashboardUrl, project_id, id),
+          };
         },
       }),
     }),
@@ -328,7 +343,7 @@ export function getNotebookTools({
     ...((database || debugging?.queryLogs) && {
       run_notebook: injectableTool({
         ...notebookToolDefs.run_notebook,
-        description: `${notebookToolDefs.run_notebook.description} For log-cell SQL: ${queryLogsByDialect[debugging?.logsDialect ?? 'clickhouse'].schemaHint}`,
+        description: `${notebookToolDefs.run_notebook.description} For log-cell SQL: ${queryLogsByDialect[debugging?.logsDialect ?? DEFAULT_LOGS_DIALECT].schemaHint}`,
         annotations: {
           ...notebookToolDefs.run_notebook.annotations,
           readOnlyHint: readOnly ?? false,
@@ -393,9 +408,13 @@ export function getNotebookTools({
                         ? ['Database queries run read-only.']
                         : [
                             `This notebook modifies data or schema in ${mutatingCells.length} of ${queryCells.length} query cells${destructiveCells.length ? `, ${destructiveCells.length} destructive (DROP, DELETE, TRUNCATE or UPDATE without WHERE)` : ''}.`,
-                            'It may permanently remove data, tables, schemas or other objects.',
+                            ...(destructiveCells.length
+                              ? [
+                                  'It may permanently remove data, tables, schemas or other objects.',
+                                ]
+                              : []),
                           ]),
-                      `Run notebook? ${notebookUrl(project_id, notebook_id)}`,
+                      `Run notebook? ${notebookUrl(dashboardUrl, project_id, notebook_id)}`,
                     ].join('\n'),
                     requestedSchema: actionOnlyElicitationSchema,
                   }),
