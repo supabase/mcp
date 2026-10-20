@@ -3,7 +3,9 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
+import type { ToolObservation } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
+import type { ObservationFact } from '../observation.js';
 import { resolveLogWindow } from '../logs.js';
 import type {
   DatabaseOperations,
@@ -19,6 +21,7 @@ import {
   actionOnlyElicitationSchema,
   checkConfirmationState,
   isFormCapable,
+  observeOperation,
   runNotebookStateSchema,
   type ElicitationState,
 } from './confirmation.js';
@@ -336,8 +339,10 @@ export function getNotebookTools({
         inject: { project_id },
         execute: async (
           { project_id, notebook_id, expected_updated_at },
-          ctx: ServerContext
+          ctx: ServerContext,
+          observation?: ToolObservation<ObservationFact>
         ) => {
+          const record = observation?.record;
           const notebook = await notebooks.getNotebook(project_id, notebook_id);
 
           if (notebook.updated_at !== expected_updated_at) {
@@ -376,12 +381,24 @@ export function getNotebookTools({
               ctx.mcpReq.requestState() !== undefined)
           ) {
             if (!isFormCapable(ctx)) {
+              record?.({
+                kind: 'confirmation_decision',
+                feature: 'notebook',
+                route: 'blocked',
+                reason: 'capability_missing',
+              });
               throw new Error(
                 'Notebook run requires confirmation, but this client does not support form elicitation. No cells were run. Use a client with form elicitation support or run in read-only mode.'
               );
             }
             const { codec } = confirmation;
             const cellsHash = await hashObject({ cells: queryCells });
+            record?.({
+              kind: 'confirmation_decision',
+              feature: 'notebook',
+              route: 'inline',
+              reason: 'eligible',
+            });
 
             const askForConfirmation = async () =>
               inputRequired({
@@ -427,38 +444,52 @@ export function getNotebookTools({
                 state.readOnly === (readOnly ?? false),
               declinedText: 'Notebook run was declined.',
               cancelledText: 'Notebook run was cancelled.',
+              observation,
             });
 
             if (confirmationState.kind !== 'proceed') {
               return confirmationState.result;
             }
+          } else {
+            record?.({
+              kind: 'confirmation_decision',
+              feature: 'notebook',
+              route: 'bypass',
+              reason: readOnly
+                ? 'read_only'
+                : confirmation
+                  ? 'not_mutating'
+                  : 'not_configured',
+            });
           }
 
           // Run sequentially to preserve notebook order, since later cells may
           // depend on writes made by earlier ones.
-          const results: CellResult[] = [];
-          let remainingBytes = MAX_RUN_RESULT_BYTES;
-          for (const cell of queryCells) {
-            const { result, bytes } = await runQueryCell(cell, {
-              projectId: project_id,
-              database,
-              debugging,
-              readOnly,
-              maxResultBytes: remainingBytes,
-            });
-            results.push(result);
-            remainingBytes -= bytes;
-          }
+          return observeOperation('notebook', record, async () => {
+            const results: CellResult[] = [];
+            let remainingBytes = MAX_RUN_RESULT_BYTES;
+            for (const cell of queryCells) {
+              const { result, bytes } = await runQueryCell(cell, {
+                projectId: project_id,
+                database,
+                debugging,
+                readOnly,
+                maxResultBytes: remainingBytes,
+              });
+              results.push(result);
+              remainingBytes -= bytes;
+            }
 
-          return {
-            id: notebook.id,
-            name: notebook.name,
-            updated_at: notebook.updated_at,
-            cells: wrapWithUntrustedDataBoundary(
-              results,
-              'the results of the notebook query cells'
-            ),
-          };
+            return {
+              id: notebook.id,
+              name: notebook.name,
+              updated_at: notebook.updated_at,
+              cells: wrapWithUntrustedDataBoundary(
+                results,
+                'the results of the notebook query cells'
+              ),
+            };
+          });
         },
       }),
     }),

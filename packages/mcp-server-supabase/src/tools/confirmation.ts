@@ -198,7 +198,7 @@ const FEATURE = {
   create_branch: 'cost',
   execute_sql: 'destructive_sql',
   apply_migration: 'destructive_sql',
-  run_notebook: 'destructive_sql',
+  run_notebook: 'notebook',
 } as const satisfies Record<ConfirmationState['tool'], ConfirmationFeature>;
 
 export async function checkConfirmationState<S extends ConfirmationState>(

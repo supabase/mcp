@@ -9,7 +9,7 @@ export type { ObservationEnd, ObservedMethod } from '@supabase/mcp-utils';
 
 export type ObservedTool = ElicitationToolName | 'other';
 
-export type ConfirmationFeature = 'cost' | 'destructive_sql';
+export type ConfirmationFeature = 'cost' | 'destructive_sql' | 'notebook';
 
 /** Payload-free facts recorded by Supabase tools. */
 export type ObservationFact =
@@ -23,7 +23,8 @@ export type ObservationFact =
         | 'capability_missing'
         | 'read_only'
         | 'zero_cost'
-        | 'not_destructive';
+        | 'not_destructive'
+        | 'not_mutating';
     }>
   | Readonly<{
       kind: 'input_required';
