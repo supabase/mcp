@@ -26,8 +26,8 @@ afterEach(() => harness.close());
 
 const FORM_CAPABLE: ClientCapabilities = { elicitation: { form: {} } };
 
-/** Feature groups that offer `run_notebook` and let it run log cells. */
-const RUN_FEATURES = ['notebooks', 'database', 'debugging'];
+/** The notebooks group alone offers and runs all supported cell types. */
+const RUN_FEATURES = ['notebooks'];
 
 async function createNotebookFixture(cells: NotebookCell[]) {
   const { project } = await createProjectFixture();
@@ -236,6 +236,27 @@ describe('tools', () => {
     });
 
     await expect(result).rejects.toThrow('Notebook not found');
+  });
+});
+
+describe('log-cell guidance', () => {
+  test('notebooks-only tool uses the platform logs dialect when explaining log SQL', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const { client } = await setup({
+      platform: {
+        ...platform,
+        debugging: { ...platform.debugging!, logsDialect: 'bigquery' },
+      },
+      features: ['notebooks'],
+    });
+
+    const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name)).not.toContain('query_logs');
+    const notebook = tools.find((tool) => tool.name === 'run_notebook');
+    expect(notebook?.description).toContain('unnest(metadata) as m');
   });
 });
 
@@ -650,22 +671,17 @@ describe('run_notebook', () => {
     }
   );
 
-  test.each([
-    ['the debugging feature is disabled', ['notebooks', 'database'], false],
-    ['the platform cannot query logs', RUN_FEATURES, true],
-  ])('log cells fail when %s', async (_, features, withoutQueryLogs) => {
+  test('log cells fail when the platform cannot query logs', async () => {
     const platform = createSupabaseApiPlatform({
       accessToken: ACCESS_TOKEN,
       apiUrl: API_URL,
     });
     const { callTool } = await setup({
-      platform: withoutQueryLogs
-        ? {
-            ...platform,
-            debugging: { ...platform.debugging!, queryLogs: undefined },
-          }
-        : platform,
-      features,
+      platform: {
+        ...platform,
+        debugging: { ...platform.debugging!, queryLogs: undefined },
+      },
+      features: RUN_FEATURES,
     });
     const { project, notebook } = await createNotebookFixture([
       {
@@ -694,8 +710,15 @@ describe('run_notebook', () => {
     ]);
   });
 
-  test('database cells fail when the database feature is disabled', async () => {
-    const { callTool } = await setup({ features: ['notebooks', 'debugging'] });
+  test('database cells fail when the platform cannot execute SQL', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const { callTool } = await setup({
+      platform: { ...platform, database: undefined },
+      features: RUN_FEATURES,
+    });
     harness.mockServer?.use(
       http.get(
         `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
@@ -772,7 +795,7 @@ describe('run_notebook', () => {
 
   describe('confirmation via elicitation', () => {
     test.each([{}, FORM_CAPABLE, { elicitation: { url: {} } }])(
-      'non-destructive database and log cells run without elicitation (%j)',
+      'read-only database and log cells run without elicitation (%j)',
       async (clientCapabilities) => {
         const { client, platform } = await setupModern({
           features: RUN_FEATURES,
@@ -825,7 +848,7 @@ describe('run_notebook', () => {
     );
 
     test.each([{}, { elicitation: { url: {} } }])(
-      'destructive SQL without form support blocks the entire run (%j)',
+      'mutating SQL without form support blocks the entire run (%j)',
       async (clientCapabilities) => {
         const { client, platform } = await setupModern({
           features: RUN_FEATURES,
@@ -844,7 +867,7 @@ describe('run_notebook', () => {
           {
             id: 'cleanup',
             type: 'database',
-            sql: 'delete from films',
+            sql: "update films set title = 'New' where id = 1",
             row_limit: 100,
           },
         ]);
@@ -858,57 +881,6 @@ describe('run_notebook', () => {
         );
         expect(executeSql).not.toHaveBeenCalled();
         expect(queryLogs).not.toHaveBeenCalled();
-      }
-    );
-
-    test.each([{}, FORM_CAPABLE])(
-      'disabled database cells cannot execute or trigger confirmation (%j)',
-      async (clientCapabilities) => {
-        const { client, platform } = await setupModern({
-          features: ['notebooks', 'debugging'],
-          clientCapabilities,
-        });
-        const executeSql = vi.spyOn(platform.database!, 'executeSql');
-        const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
-        harness.mockServer!.use(
-          http.get(
-            `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
-            () => HttpResponse.json({ result: [], error: null })
-          )
-        );
-        const { project, notebook } = await createNotebookFixture([
-          {
-            id: 'cleanup',
-            type: 'database',
-            sql: 'drop table films',
-            row_limit: 100,
-          },
-          {
-            id: 'logs',
-            type: 'log',
-            sql: 'select * from logs',
-            time_range: { type: 'relative', unit: 'hour', amount: 1 },
-          },
-        ]);
-        const result = await callModernTool(client, {
-          name: 'run_notebook',
-          arguments: runArgs(project, notebook),
-        });
-        expect(isInputRequiredResult(result)).toBe(false);
-        expect(
-          parseCellResults(parseToolResult(result as CallToolResult).cells)
-        ).toEqual([
-          expect.objectContaining({
-            cell_id: 'cleanup',
-            status: 'error',
-            error: expect.stringContaining(
-              'Database queries are not available'
-            ),
-          }),
-          expect.objectContaining({ cell_id: 'logs', status: 'success' }),
-        ]);
-        expect(executeSql).not.toHaveBeenCalled();
-        expect(queryLogs).toHaveBeenCalledOnce();
       }
     );
 
@@ -983,7 +955,7 @@ describe('run_notebook', () => {
       }
     );
 
-    test('form-capable client: confirmation links to the notebook instead of listing SQL', async () => {
+    test('form-capable client sees mutating cell count and notebook link before running', async () => {
       const { client } = await setupModern({
         features: RUN_FEATURES,
         clientCapabilities: FORM_CAPABLE,
@@ -1014,14 +986,17 @@ describe('run_notebook', () => {
         throw new Error('expected an input_required result');
       }
       expect(first.inputRequests?.confirm_run).toMatchObject({
-        method: 'elicitation/create',
         params: {
-          mode: 'form',
-          message: [
-            'Run notebook? Query cells: 2.',
-            'Potentially destructive queries: 1. These may modify or delete data.',
-            `Review notebook: https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`,
-          ].join('\n'),
+          message: expect.stringMatching(
+            /modifies data or schema in 1 of 2 query cells, 1 destructive/
+          ),
+        },
+      });
+      expect(first.inputRequests?.confirm_run).toMatchObject({
+        params: {
+          message: expect.stringContaining(
+            `https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`
+          ),
         },
       });
     });
@@ -1066,11 +1041,9 @@ describe('run_notebook', () => {
       }
       expect(first.inputRequests?.confirm_run).toMatchObject({
         params: {
-          message: [
-            'Run notebook? Query cells: 3.',
-            'Potentially destructive queries: 2. These may modify or delete data.',
-            `Review notebook: https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`,
-          ].join('\n'),
+          message: expect.stringMatching(
+            /modifies data or schema in 2 of 3 query cells, 2 destructive/
+          ),
         },
       });
     });
@@ -1364,7 +1337,7 @@ describe('run_notebook', () => {
 
     test('rejects a requestState minted by execute_sql', async () => {
       const { client, platform } = await setupModern({
-        features: RUN_FEATURES,
+        features: ['notebooks', 'database'],
         clientCapabilities: FORM_CAPABLE,
       });
       const executeSql = vi.spyOn(platform.database!, 'executeSql');

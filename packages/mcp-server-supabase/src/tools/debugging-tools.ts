@@ -74,6 +74,7 @@ function buildQueryLogsCopy({
   schemaHint: string;
 }) {
   return {
+    schemaHint,
     description: `Runs a custom read-only ${name} SQL query against a Supabase project's ${logsNoun}, for filtering, aggregating, or joining across log fields more precisely than a simple per-service log dump. When the user asks about a specific time range, always pass iso_timestamp_start and iso_timestamp_end to match it; otherwise the query defaults to the last 24 hours and will return results from a wider window than intended. The window can be up to 24 hours. Do not poll this tool in a loop.`,
     parameters: buildQueryLogsInputSchema(
       `A read-only ${name} SQL query to run against the project's ${logsNoun}. ${schemaHint}`
@@ -93,7 +94,7 @@ function buildQueryLogsCopy({
  * registry, so rebuilding them per `getDebuggingTools` call would grow it
  * unboundedly.
  */
-const queryLogsByDialect = {
+export const queryLogsByDialect = {
   clickhouse: buildQueryLogsCopy({
     name: 'ClickHouse',
     logsNoun: 'unified logs stream',
@@ -109,8 +110,9 @@ const queryLogsByDialect = {
 } as const satisfies Record<
   LogsDialect,
   {
+    schemaHint: string;
     description: string;
-    parameters: ReturnType<typeof buildQueryLogsInputSchema>;
+    parameters: z.ZodType;
   }
 >;
 

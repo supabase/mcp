@@ -45,6 +45,7 @@ type ModernSetupOptions = {
   onToolCall?: SupabaseMcpServerOptions['onToolCall'];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
   clientCapabilities?: ClientCapabilities;
+  readOnly?: boolean;
   projectId?: string;
   secretCollection?: NonNullable<
     NonNullable<SupabaseMcpServerOptions['elicitation']>['secretCollection']

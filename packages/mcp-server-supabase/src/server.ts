@@ -96,7 +96,7 @@ export type SupabaseMcpServerOptions = {
     /**
      * Form confirmation for the listed cost, destructive SQL and notebook
      * tools. Clients without form capability run raw SQL without a prompt,
-     * but cannot run destructive notebook cells when confirmation is enabled.
+     * but cannot run mutating notebook cells when confirmation is enabled.
      * Cost tools keep the legacy `get_cost` -> `confirm_cost` ->
      * `confirm_cost_id` flow.
      */
@@ -328,10 +328,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
           tools,
           getNotebookTools({
             notebooks,
-            // Running cells executes SQL and log queries, so it is gated on
-            // the feature groups that own those capabilities.
-            database: enabledFeatures.has('database') ? database : undefined,
-            debugging: enabledFeatures.has('debugging') ? debugging : undefined,
+            // Feature groups control tool discovery, not the operations that
+            // notebook cells can run. The notebooks group owns this tool.
+            database,
+            debugging,
             projectId,
             readOnly,
             confirmation:
