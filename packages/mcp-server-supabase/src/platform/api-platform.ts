@@ -18,6 +18,7 @@ import {
 } from '../management-api-v2/index.js';
 import type { components as ManagementApiV2Components } from '../management-api-v2/types.js';
 import { generatePassword } from '../password.js';
+import { createFeedbackOperations } from './feedback.js';
 import {
   applyMigrationOptionsSchema,
   createBranchOptionsSchema,
@@ -94,6 +95,8 @@ export function createSupabaseApiPlatform(
   const { accessToken, apiUrl } = options;
 
   const managementApiUrl = apiUrl ?? 'https://api.supabase.com';
+
+  let userId: string | undefined;
 
   let managementApiClient = createManagementApiClient(
     managementApiUrl,
@@ -981,6 +984,23 @@ export function createSupabaseApiPlatform(
     storage,
     secrets,
     notebooks,
+    feedback: createFeedbackOperations({
+      // Staging, local, and custom API URLs keep their feedback out of production
+      environment:
+        new URL(managementApiUrl).origin === 'https://api.supabase.com'
+          ? 'production'
+          : 'staging',
+      async getUserId() {
+        // X-Gotrue-Id is set on every response, see how CLI uses this too: https://github.com/supabase/cli/blob/8a549dffa6bc5c88069c61c1f55ef55ad9b82ae2/apps/cli/src/command-internal/identity-stitch.ts#L10-L20
+        userId ??=
+          (
+            await managementApiClient.GET('/v1/profile', {
+              signal: AbortSignal.timeout(5_000),
+            })
+          ).response.headers.get('X-Gotrue-Id') ?? undefined;
+        return userId;
+      },
+    }),
   };
 
   return platform;

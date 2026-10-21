@@ -20,6 +20,7 @@ export const CURRENT_FEATURE_GROUPS = [
   'branching',
   'storage',
   'notebooks',
+  'feedback',
 ] as const;
 
 export const deprecatedFeatureGroupSchema = z.enum(['debug']);
