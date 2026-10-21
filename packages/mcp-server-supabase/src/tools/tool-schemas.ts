@@ -7,6 +7,7 @@ import { debuggingToolDefs } from './debugging-tools.js';
 import { developmentToolDefs } from './development-tools.js';
 import { docsToolDefs } from './docs-tools.js';
 import { edgeFunctionToolDefs } from './edge-function-tools.js';
+import { feedbackToolDefs } from './feedback-tools.js';
 import { notebookToolDefs } from './notebook-tools.js';
 import { secretToolDefs } from './secret-tools.js';
 import { storageToolDefs } from './storage-tools.js';
@@ -76,6 +77,7 @@ export const supabaseMcpToolSchemas = {
   ...defsToSchemas(secretToolDefs),
   ...defsToSchemas(storageToolDefs),
   ...defsToSchemas(notebookToolDefs),
+  ...defsToSchemas(feedbackToolDefs),
 } satisfies Record<string, SchemaEntry>;
 
 /**
@@ -115,6 +117,9 @@ const FEATURE_TOOL_MAP = {
   notebooks: Object.keys(
     notebookToolDefs
   ) as readonly (keyof typeof notebookToolDefs)[],
+  feedback: Object.keys(
+    feedbackToolDefs
+  ) as readonly (keyof typeof feedbackToolDefs)[],
 } satisfies Record<
   FeatureGroup,
   readonly (keyof typeof supabaseMcpToolSchemas)[]

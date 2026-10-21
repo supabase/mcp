@@ -263,6 +263,23 @@ describe('log-cell guidance', () => {
 });
 
 describe('run_notebook', () => {
+  test.each([
+    { readOnly: true, readOnlyHint: true, destructiveHint: false },
+    { readOnly: false, readOnlyHint: false, destructiveHint: true },
+  ])(
+    'run_notebook advertises the correct annotations in read-only mode $readOnly',
+    async ({ readOnly, readOnlyHint, destructiveHint }) => {
+      const { client } = await setup({ features: RUN_FEATURES, readOnly });
+      const { tools } = await client.listTools();
+      const runNotebook = tools.find((tool) => tool.name === 'run_notebook');
+
+      expect(runNotebook?.annotations).toMatchObject({
+        readOnlyHint,
+        destructiveHint,
+      });
+    }
+  );
+
   test('runs query cells in notebook order and skips markdown', async () => {
     const { callTool } = await setup({ features: RUN_FEATURES });
     harness.mockServer?.use(
@@ -696,7 +713,7 @@ describe('run_notebook', () => {
   });
 
   test('read-only mode runs database cells read-only', async () => {
-    const { callTool, client } = await setup({
+    const { callTool } = await setup({
       features: RUN_FEATURES,
       readOnly: true,
     });
@@ -708,10 +725,6 @@ describe('run_notebook', () => {
         row_limit: 100,
       },
     ]);
-
-    const { tools } = await client.listTools();
-    const runNotebook = tools.find((tool) => tool.name === 'run_notebook');
-    expect(runNotebook?.annotations?.readOnlyHint).toBe(true);
 
     const result = await callTool({
       name: 'run_notebook',

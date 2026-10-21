@@ -350,6 +350,7 @@ export function getNotebookTools({
         annotations: {
           ...notebookToolDefs.run_notebook.annotations,
           readOnlyHint: readOnly ?? false,
+          destructiveHint: !readOnly,
         },
         inject: { project_id },
         execute: async (
