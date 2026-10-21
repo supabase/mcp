@@ -11,7 +11,11 @@ export type {
   RequestObserver,
 } from './observation.js';
 export type { ToolCallCallback } from '@supabase/mcp-utils';
-export type { SupabasePlatform } from './platform/index.js';
+export {
+  createFeedbackOperations,
+  type FeedbackOperationsOptions,
+} from './platform/feedback.js';
+export type { FeedbackOperations, SupabasePlatform } from './platform/index.js';
 export {
   createSupabaseMcpServer,
   type SupabaseMcpServerOptions,
