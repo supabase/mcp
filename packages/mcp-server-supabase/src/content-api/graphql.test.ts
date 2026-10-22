@@ -95,6 +95,20 @@ describe('graphql client', () => {
     );
   });
 
+  it('keeps malformed server schema errors unbranded', async () => {
+    const graphqlClient = new GraphQLClient({
+      url: 'dummy-url',
+      loadSchema: async () => 'type Query {',
+    });
+
+    const error = await graphqlClient
+      .query({ query: '{ getHelloWorld }' }, { validateSchema: true })
+      .catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(isToolCallerError(error)).toBe(false);
+  });
+
   it('keeps Content API failures as plain errors', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(null, { status: 503 })

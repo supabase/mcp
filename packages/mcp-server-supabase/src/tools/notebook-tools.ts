@@ -5,6 +5,7 @@ import {
 } from '@modelcontextprotocol/server';
 import type { ToolObservation } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
+import { ToolCallerError } from '../errors.js';
 import type { ObservationFact } from '../observation.js';
 import { resolveLogWindow } from '../logs.js';
 import type {
@@ -302,7 +303,9 @@ export function getNotebookTools({
         inject: { project_id },
         execute: async ({ project_id, ...options }) => {
           if (readOnly) {
-            throw new Error('Cannot create notebook in read-only mode.');
+            throw new ToolCallerError(
+              'Cannot create notebook in read-only mode.'
+            );
           }
 
           const { id, name, updated_at } = await createNotebook(

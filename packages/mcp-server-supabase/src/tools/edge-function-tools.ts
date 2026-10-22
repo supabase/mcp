@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { edgeFunctionExample } from '../edge-function.js';
+import { ToolCallerError } from '../errors.js';
 import type { EdgeFunctionsOperations } from '../platform/types.js';
 import {
   edgeFunctionSchema,
@@ -133,7 +134,9 @@ export function getEdgeFunctionTools({
         files,
       }) => {
         if (readOnly) {
-          throw new Error('Cannot deploy an edge function in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot deploy an edge function in read-only mode.'
+          );
         }
 
         return await functions.deployEdgeFunction(project_id, {

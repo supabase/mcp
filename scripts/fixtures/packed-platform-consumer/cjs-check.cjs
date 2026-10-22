@@ -1,4 +1,8 @@
-const { createSupabaseMcpHandler } = require('@supabase/mcp-server-supabase');
+const {
+  createSupabaseMcpHandler,
+  isToolCallerError,
+  ToolCallerError,
+} = require('@supabase/mcp-server-supabase');
 
 if (typeof createSupabaseMcpHandler !== 'function') {
   throw new Error(
@@ -6,8 +10,29 @@ if (typeof createSupabaseMcpHandler !== 'function') {
   );
 }
 
+// Hosts may load the CJS build while the server runs ESM; the brand must match across both copies.
+async function checkToolCallerErrorAcrossBuilds() {
+  const esm = await import('@supabase/mcp-server-supabase');
+  if (esm.ToolCallerError === ToolCallerError) {
+    throw new Error('expected separate ESM and CJS ToolCallerError classes');
+  }
+  const fromCjs = new ToolCallerError('bad input');
+  const fromEsm = new esm.ToolCallerError('bad input');
+  if (
+    fromCjs.name !== 'ToolCallerError' ||
+    !esm.isToolCallerError(fromCjs) ||
+    !isToolCallerError(fromEsm) ||
+    isToolCallerError(new Error('bad input'))
+  ) {
+    throw new Error(
+      'ToolCallerError brand does not match across CJS and ESM builds'
+    );
+  }
+}
+
 // Exercise the require()-loaded implementation, not merely its export shape.
-import('./modern-call.mjs')
+checkToolCallerErrorAcrossBuilds()
+  .then(() => import('./modern-call.mjs'))
   .then(({ runConsumer }) => runConsumer(createSupabaseMcpHandler))
   .then(() => console.log('CJS_OK'))
   .catch((error) => {

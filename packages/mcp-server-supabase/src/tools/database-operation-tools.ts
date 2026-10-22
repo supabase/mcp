@@ -12,6 +12,7 @@ import {
   buildRlsDisabledAdvisory,
   selectAdvisory,
 } from '../advisories/index.js';
+import { ToolCallerError } from '../errors.js';
 import type { ObservationFact } from '../observation.js';
 import { listExtensionsSql, listTablesSql } from '../pg-meta/index.js';
 import {
@@ -472,7 +473,9 @@ export function getDatabaseTools({
             route: 'blocked',
             reason: 'read_only',
           });
-          throw new Error('Cannot apply migration in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot apply migration in read-only mode.'
+          );
         }
 
         let bypassReason: 'not_configured' | 'capability_missing' | undefined;

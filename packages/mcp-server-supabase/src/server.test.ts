@@ -8,6 +8,7 @@ import {
   mockContentApiSchemaLoadCount,
 } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
+import { isToolCallerError } from './errors.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { createSupabaseMcpServer, instructions } from './server.js';
@@ -595,6 +596,46 @@ describe('feature groups', () => {
     ).rejects.toThrow('Cannot delete feedback in read-only mode.');
     expect(feedback.submit).not.toHaveBeenCalled();
     expect(feedback.delete).not.toHaveBeenCalled();
+  });
+
+  test('onToolCall receives branded read-only denials and unbranded backend failures', async () => {
+    const errors: unknown[] = [];
+    const feedback = {
+      submit: vi.fn().mockRejectedValue(new Error('upstream down')),
+      delete: vi.fn(),
+    };
+    const onToolCall: NonNullable<Parameters<typeof setup>[0]>['onToolCall'] = (
+      details
+    ) => {
+      if (!details.success) errors.push(details.error);
+    };
+
+    const readOnly = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+      readOnly: true,
+      onToolCall,
+    });
+    await expect(
+      readOnly.callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi' },
+      })
+    ).rejects.toThrow('Cannot submit feedback in read-only mode.');
+
+    const writable = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+      onToolCall,
+    });
+    await expect(
+      writable.callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi' },
+      })
+    ).rejects.toThrow('upstream down');
+
+    expect(errors.map(isToolCallerError)).toEqual([true, false]);
   });
 
   test('feedback tools are hidden in read-only mode', async () => {

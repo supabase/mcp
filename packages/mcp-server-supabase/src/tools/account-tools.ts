@@ -320,7 +320,9 @@ export function getAccountTools({
             route: 'blocked',
             reason: 'read_only',
           });
-          throw new Error('Cannot create a project in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot create a project in read-only mode.'
+          );
         }
 
         if (confirmation && isFormCapable(ctx)) {
@@ -433,7 +435,9 @@ export function getAccountTools({
       ...accountToolDefs.pause_project,
       execute: async ({ project_id }) => {
         if (readOnly) {
-          throw new Error('Cannot pause a project in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot pause a project in read-only mode.'
+          );
         }
 
         await account.pauseProject(project_id);
@@ -444,7 +448,9 @@ export function getAccountTools({
       ...accountToolDefs.restore_project,
       execute: async ({ project_id }) => {
         if (readOnly) {
-          throw new Error('Cannot restore a project in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot restore a project in read-only mode.'
+          );
         }
 
         await account.restoreProject(project_id);

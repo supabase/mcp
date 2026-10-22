@@ -214,7 +214,9 @@ export function getBranchingTools({
             route: 'blocked',
             reason: 'read_only',
           });
-          throw new Error('Cannot create a branch in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot create a branch in read-only mode.'
+          );
         }
 
         if (confirmation && isFormCapable(ctx)) {
@@ -314,7 +316,9 @@ export function getBranchingTools({
       ...branchingToolDefs.delete_branch,
       execute: async ({ branch_id }) => {
         if (readOnly) {
-          throw new Error('Cannot delete a branch in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot delete a branch in read-only mode.'
+          );
         }
 
         await branching.deleteBranch(branch_id);
@@ -325,7 +329,7 @@ export function getBranchingTools({
       ...branchingToolDefs.merge_branch,
       execute: async ({ branch_id }) => {
         if (readOnly) {
-          throw new Error('Cannot merge a branch in read-only mode.');
+          throw new ToolCallerError('Cannot merge a branch in read-only mode.');
         }
 
         await branching.mergeBranch(branch_id);
@@ -336,7 +340,7 @@ export function getBranchingTools({
       ...branchingToolDefs.reset_branch,
       execute: async ({ branch_id, migration_version }) => {
         if (readOnly) {
-          throw new Error('Cannot reset a branch in read-only mode.');
+          throw new ToolCallerError('Cannot reset a branch in read-only mode.');
         }
 
         await branching.resetBranch(branch_id, {
@@ -349,7 +353,9 @@ export function getBranchingTools({
       ...branchingToolDefs.rebase_branch,
       execute: async ({ branch_id }) => {
         if (readOnly) {
-          throw new Error('Cannot rebase a branch in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot rebase a branch in read-only mode.'
+          );
         }
 
         await branching.rebaseBranch(branch_id);

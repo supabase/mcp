@@ -2,6 +2,8 @@ import {
   createSupabaseMcpHandler,
   createSupabaseMcpServer,
   CURRENT_ELICITATION_TOOLS,
+  isToolCallerError,
+  ToolCallerError,
   type ElicitationToolName,
   type SupabaseMcpServerOptions,
 } from '@supabase/mcp-server-supabase';
@@ -155,6 +157,15 @@ const sqlFacts = [
   },
 ] satisfies Supabase.ObservationFact[];
 void sqlFacts;
+
+const callerError: Error = new ToolCallerError('bad input', {
+  cause: new Error('root'),
+});
+const caught: unknown = callerError;
+if (isToolCallerError(caught)) {
+  const narrowed: ToolCallerError = caught;
+  void narrowed.message;
+}
 const supabaseObserver: Supabase.RequestObserver = (context) => {
   if (context.method === 'tools/call') {
     const tool:

@@ -1,5 +1,6 @@
 import type { Implementation } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
+import { ToolCallerError } from '../errors.js';
 import type { FeedbackOperations } from '../platform/types.js';
 import { injectableTool, type ToolDefs } from './util.js';
 
@@ -71,7 +72,9 @@ export function getFeedbackTools({
       inject: { project_id },
       execute: async ({ feedback: message, project_id }) => {
         if (readOnly) {
-          throw new Error('Cannot submit feedback in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot submit feedback in read-only mode.'
+          );
         }
 
         const { deleteToken } = await feedback.submit({
@@ -87,7 +90,9 @@ export function getFeedbackTools({
       inject: { project_id },
       execute: async ({ delete_token, project_id }) => {
         if (readOnly) {
-          throw new Error('Cannot delete feedback in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot delete feedback in read-only mode.'
+          );
         }
 
         return feedback.delete({
