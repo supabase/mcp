@@ -7,6 +7,7 @@ import {
   type DocumentNode,
 } from 'graphql';
 import { z } from 'zod/v4';
+import { ToolCallerError } from '../errors.js';
 
 export const graphqlRequestSchema = z.object({
   query: z.string(),
@@ -122,7 +123,7 @@ export class GraphQLClient {
         const { schema } = await this.schemaLoaded;
         const errors = validate(schema, documentNode);
         if (errors.length > 0) {
-          throw new Error(
+          throw new ToolCallerError(
             `Invalid GraphQL query: ${errors.map((e) => e.message).join(', ')}`
           );
         }
@@ -132,7 +133,7 @@ export class GraphQLClient {
     } catch (error) {
       // Make it obvious that this is a GraphQL error
       if (error instanceof GraphQLError) {
-        throw new Error(`Invalid GraphQL query: ${error.message}`);
+        throw new ToolCallerError(`Invalid GraphQL query: ${error.message}`);
       }
 
       throw error;

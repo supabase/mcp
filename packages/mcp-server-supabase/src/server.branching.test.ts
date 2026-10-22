@@ -659,6 +659,38 @@ describe('tools', () => {
     );
   });
 
+  test('create branch with mismatched cost confirmation fails as a caller error', async () => {
+    const { callTool } = await setup({ features: ['branching'] });
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    await expect(
+      callTool({
+        name: 'create_branch',
+        arguments: {
+          project_id: project.id,
+          name: 'test-branch',
+          confirm_cost_id: 'not-the-cost-hash',
+        },
+      })
+    ).rejects.toMatchObject({
+      name: 'ToolCallerError',
+      message:
+        'Cost confirmation ID does not match the expected cost of creating a branch.',
+    });
+  });
+
   describe('create_branch cost confirmation via elicitation', () => {
     test('create_branch requires confirm_cost_id when cost confirmation is not configured', async () => {
       const { client } = await setup({ features: ['branching'] });
@@ -772,9 +804,12 @@ describe('tools', () => {
           name: 'create_branch',
           arguments: { project_id: project.id, name: 'test-branch' },
         })
-      ).rejects.toThrow(
-        /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
-      );
+      ).rejects.toMatchObject({
+        name: 'ToolCallerError',
+        message: expect.stringMatching(
+          /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
+        ),
+      });
       expect(
         Array.from(mockBranches.values()).filter(
           (branch) => branch.name === 'test-branch' && !branch.is_default

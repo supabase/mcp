@@ -170,7 +170,9 @@ export function createServerHarness() {
       }
       const result = JSON.parse(textContent.text);
       if (output.isError) {
-        throw new Error(result.error.message);
+        throw Object.assign(new Error(result.error.message), {
+          name: result.error.name ?? 'Error',
+        });
       }
       return result;
     }

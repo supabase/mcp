@@ -5,6 +5,7 @@ import {
 } from '@modelcontextprotocol/server';
 import { type ToolObservation, tool } from '@supabase/mcp-utils';
 import type { ObservationFact } from '../observation.js';
+import { ToolCallerError } from '../errors.js';
 import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
 import {
@@ -404,7 +405,7 @@ export function getAccountTools({
         // Legacy clients only: form-capable clients returned above. Without
         // this, a missing ID would hit the opaque hash-mismatch error below.
         if (!confirm_cost_id) {
-          throw new Error(missingConfirmCostIdMessage);
+          throw new ToolCallerError(missingConfirmCostIdMessage);
         }
 
         const cost = await getNextProjectCost(account, organization_id);
@@ -418,7 +419,7 @@ export function getAccountTools({
         });
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
-          throw new Error(
+          throw new ToolCallerError(
             'Cost confirmation ID does not match the expected cost of creating a project.'
           );
         }

@@ -520,6 +520,33 @@ describe('tools', () => {
     );
   });
 
+  test('create project with mismatched cost confirmation fails as a caller error', async () => {
+    const { callTool } = await setup();
+
+    const freeOrg = await createOrganization({
+      name: 'Free Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    await expect(
+      callTool({
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: freeOrg.id,
+          confirm_cost_id: 'not-the-cost-hash',
+        },
+      })
+    ).rejects.toMatchObject({
+      name: 'ToolCallerError',
+      message:
+        'Cost confirmation ID does not match the expected cost of creating a project.',
+    });
+    expect(mockProjects.size).toBe(0);
+  });
+
   describe('create_project cost confirmation via elicitation', () => {
     async function createOrganizationWithBillableNextProject() {
       const org = await createOrganization({
@@ -729,9 +756,12 @@ describe('tools', () => {
             organization_id: org.id,
           },
         })
-      ).rejects.toThrow(
-        /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
-      );
+      ).rejects.toMatchObject({
+        name: 'ToolCallerError',
+        message: expect.stringMatching(
+          /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
+        ),
+      });
       // Only the existing project that makes the next one billable.
       expect(mockProjects.size).toBe(1);
     });
