@@ -10,7 +10,8 @@ if (typeof createSupabaseMcpHandler !== 'function') {
   );
 }
 
-// Hosts may load the CJS build while the server runs ESM; the brand must match across both copies.
+// ToolCallerError is the only export matched across loaded copies, since a host may require() CJS while the server throws from ESM.
+// This also guards the constructor-assigned brand, which a class field would miscompile in CJS.
 async function checkToolCallerErrorAcrossBuilds() {
   const esm = await import('@supabase/mcp-server-supabase');
   if (esm.ToolCallerError === ToolCallerError) {
