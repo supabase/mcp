@@ -1,7 +1,11 @@
 import type { Implementation } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 import { ToolCallerError } from '../errors.js';
-import type { FeedbackOperations } from '../platform/types.js';
+import {
+  FEEDBACK_CATEGORIES,
+  FEEDBACK_OUTCOMES,
+  type FeedbackOperations,
+} from '../platform/types.js';
 import { injectableTool, type ToolDefs } from './util.js';
 
 type FeedbackToolsOptions = {
@@ -11,9 +15,62 @@ type FeedbackToolsOptions = {
   readOnly?: boolean;
 };
 
+const docsTargetSchema = z.object({
+  url: z
+    .string()
+    .max(500)
+    .refine(
+      (value) => {
+        try {
+          const { href, pathname } = new URL(value);
+          // The parser resolves dot segments and encodes unsafe characters, so a changed href means unsafe input
+          return (
+            href === value &&
+            value.startsWith('https://supabase.com/') &&
+            /^\/(docs|kb)(\/|$)|^\/llms(-full)?\.txt$|^\/llms\//.test(pathname)
+          );
+        } catch {
+          return false;
+        }
+      },
+      {
+        message:
+          'Invalid docs URL. Use a canonical https://supabase.com/docs, /kb or llms.txt URL.',
+      }
+    )
+    .describe(
+      'The docs URL that you read, for example from search_docs results. Must be a canonical https://supabase.com/docs, /kb or llms.txt URL.'
+    ),
+  heading: z
+    .string()
+    .max(200)
+    .optional()
+    .describe('The section heading, if any.'),
+  quote: z
+    .string()
+    .regex(/\S/)
+    .max(400)
+    .describe('The relevant docs text, copied verbatim.'),
+});
+
 const submitFeedbackInputSchema = z.object({
   feedback: z.string().min(1).max(1000),
   project_id: z.string().optional(),
+  targets: z
+    .array(docsTargetSchema)
+    .max(3)
+    .optional()
+    .describe(
+      'The docs sections that the feedback is about. Use only for docs feedback.'
+    ),
+  category: z
+    .enum(FEEDBACK_CATEGORIES)
+    .optional()
+    .describe('The type of docs problem. Use only for docs feedback.'),
+  outcome: z
+    .enum(FEEDBACK_OUTCOMES)
+    .optional()
+    .describe('The final effect of the problem on your task.'),
 });
 
 const submitFeedbackOutputSchema = z.object({
@@ -32,7 +89,7 @@ const deleteFeedbackOutputSchema = z.object({
 export const feedbackToolDefs = {
   submit_feedback: {
     description:
-      "Sends feedback about Supabase tools to the Supabase team. Use it when the user asks, or when you hit a bug or missing capability. Ask the user before sending feedback they didn't request. Never include secrets, personal data, or database contents. Show the user the returned delete token.",
+      'Sends feedback about Supabase tools or docs to the Supabase team. Use it when the user asks, or when a bug, a missing capability, or wrong, outdated, or missing docs caused a meaningful detour or is likely to recur. Do not report routine debugging. Unless the user asked, ask them once, after the task or when you are blocked, and call this only if they agree. Send one report per problem. For docs, add the URLs you read with a verbatim quote from each, a category, and an outcome. Never include secrets, personal data, or database contents. Show the user the returned delete token.',
     parameters: submitFeedbackInputSchema,
     outputSchema: submitFeedbackOutputSchema,
     annotations: {
@@ -70,7 +127,13 @@ export function getFeedbackTools({
     submit_feedback: injectableTool({
       ...feedbackToolDefs.submit_feedback,
       inject: { project_id },
-      execute: async ({ feedback: message, project_id }) => {
+      execute: async ({
+        feedback: message,
+        project_id,
+        targets,
+        category,
+        outcome,
+      }) => {
         if (readOnly) {
           throw new ToolCallerError(
             'Cannot submit feedback in read-only mode.'
@@ -81,6 +144,15 @@ export function getFeedbackTools({
           feedback: message,
           projectId: project_id,
           clientInfo,
+          targets: targets?.length
+            ? targets.map(({ url, quote, heading }) => ({
+                url,
+                quote,
+                ...(heading?.trim() && { heading }),
+              }))
+            : undefined,
+          category,
+          outcome,
         });
         return { delete_token: deleteToken };
       },
