@@ -308,11 +308,11 @@ test.each([
         ...(instant ? { instant: true } : {}),
       },
     ]);
-    if (action === 'cancel') {
+    // The 1000 ms normal-cancel text and nothing-ran checks live in the
+    // five-tool test above.
+    if (instant) {
       expect(text(result)).toBe(
-        instant
-          ? 'The client cancelled this confirmation about 1.0 s after it was sent, faster than a person could answer, so it likely never showed you a prompt. The SQL was not run.'
-          : 'SQL execution was cancelled.'
+        'The client cancelled this confirmation about 1.0 s after it was sent, faster than a person could answer, so it likely never showed you a prompt. The SQL was not run.'
       );
       expectNothingRan(h);
     }
