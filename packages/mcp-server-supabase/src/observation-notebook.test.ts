@@ -74,8 +74,14 @@ const eligible = {
 function required(reason: 'initial' | 'missing_response' | 'changed_quote') {
   return { kind: 'input_required', feature: 'notebook', mode: 'form', reason };
 }
+// Timing fields (`elapsed_ms`, `instant`) are pinned in
+// confirmation-instant-cancel.test.ts; these flow tests match only the action.
 function response(action: 'accept' | 'decline' | 'cancel') {
-  return { kind: 'input_response', feature: 'notebook', action };
+  return expect.objectContaining({
+    kind: 'input_response',
+    feature: 'notebook',
+    action,
+  });
 }
 function validation(
   result: 'valid' | 'missing_response' | 'changed_quote' | 'arguments_mismatch'
