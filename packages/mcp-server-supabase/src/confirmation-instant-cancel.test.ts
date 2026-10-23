@@ -110,6 +110,8 @@ type Harness = {
   operations: unknown[];
   createBranch: unknown;
   setNow(value: number): void;
+  /** Advance the clock by `ms` on every platform read from now on. */
+  delayReads(ms: number): void;
   call(
     name: Tool,
     extra?: { requestState?: string; inputResponses?: InputResponses }
@@ -118,10 +120,28 @@ type Harness = {
 
 async function setup(): Promise<Harness> {
   const fake = fakePlatform();
+  let now = T0;
+  let readDelay = 0;
+  // Platform reads advance the mocked clock so a test can model a resume
+  // whose server-side work takes time.
+  function slowRead<A extends unknown[], R>(read: (...a: A) => R) {
+    return (...a: A) => {
+      now += readDelay;
+      return read(...a);
+    };
+  }
+  const { account } = fake.platform;
   const platform = {
     ...fake.platform,
+    account: {
+      ...account,
+      getOrganization: slowRead(account.getOrganization),
+      listOrganizations: slowRead(account.listOrganizations),
+      listProjects: slowRead(account.listProjects),
+      getProject: slowRead(account.getProject),
+    },
     notebooks: {
-      getNotebook: vi.fn(async () => notebook),
+      getNotebook: slowRead(async () => notebook),
       listNotebooks: vi.fn(async () => []),
     },
   } satisfies SupabasePlatform;
@@ -133,7 +153,6 @@ async function setup(): Promise<Harness> {
       confirmation: { enabledTools: [...tools] },
     },
   });
-  let now = T0;
   vi.spyOn(Date, 'now').mockImplementation(() => now);
   return {
     attempts,
@@ -146,6 +165,9 @@ async function setup(): Promise<Harness> {
     createBranch: fake.createBranch,
     setNow(value) {
       now = value;
+    },
+    delayReads(ms) {
+      readDelay = ms;
     },
     call: (name, extra = {}) =>
       callModernTool(client, { name, arguments: args[name], ...extra }),
@@ -243,13 +265,32 @@ describe.each(tools)('%s confirmation requestState', (name) => {
     ]);
     expectNothingRan(h);
   });
+
+  // Regression: a refactor swaps the instant text, or another tool's cancel
+  // text, into a slow cancel, or a slow cancel runs something. Before this,
+  // only execute_sql pinned its normal cancel text under a controlled clock.
+  test('a cancel after 1000 ms keeps the normal cancel text and runs nothing', async () => {
+    const h = await setup();
+    const result = await resume(h, name, 'cancel', 1_000);
+    expect(text(result)).toBe(
+      {
+        execute_sql: 'SQL execution was cancelled.',
+        apply_migration: 'Migration was cancelled.',
+        run_notebook: 'Notebook run was cancelled.',
+        create_project: 'Project creation was cancelled.',
+        create_branch: 'Branch creation was cancelled.',
+      }[name]
+    );
+    expect(result.structuredContent).toEqual({ status: 'cancelled' });
+    expectNothingRan(h);
+  });
 });
 
 // Regression: an off-by-one threshold (<= 1000 or < 999), `instant` set on a
-// decline/accept, or elapsed_ms dropped on non-cancel actions. These are the
-// shared threshold and observation contracts, so one tool covers them.
+// fast decline/accept, or elapsed_ms dropped on non-cancel actions. These are
+// the shared threshold and observation contracts, so one tool covers them.
 test.each([
-  { action: 'accept', gap: 3_000, instant: false },
+  { action: 'accept', gap: 999, instant: false },
   { action: 'decline', gap: 999, instant: false },
   { action: 'cancel', gap: 999, instant: true },
   { action: 'cancel', gap: 1_000, instant: false },
@@ -268,33 +309,58 @@ test.each([
       },
     ]);
     if (action === 'cancel') {
-      // The spec rounds 999 ms to 0.1 s, i.e. "1.0" or "1"; either rendering
-      // is allowed here, the sentence around it is not.
-      expect(text(result)).toMatch(
+      expect(text(result)).toBe(
         instant
-          ? /^The client cancelled this confirmation about 1(\.0)? s after it was sent, faster than a person could answer, so it likely never showed you a prompt\. The SQL was not run\.$/
-          : /^SQL execution was cancelled\.$/
+          ? 'The client cancelled this confirmation about 1.0 s after it was sent, faster than a person could answer, so it likely never showed you a prompt. The SQL was not run.'
+          : 'SQL execution was cancelled.'
       );
       expectNothingRan(h);
     }
   }
 );
 
-// Regression: seconds truncated (Math.floor) or rounded up (Math.ceil)
-// instead of rounded to the nearest 0.1. The five-tool test only checks 550.
-test.each([
-  { gap: 500, seconds: '0.5' },
-  { gap: 949, seconds: '0.9' },
-])(
-  'instant cancel after $gap ms reports $seconds s',
-  async ({ gap, seconds }) => {
-    const h = await setup();
-    const result = await resume(h, 'execute_sql', 'cancel', gap);
-    expect(text(result)).toBe(
-      `The client cancelled this confirmation about ${seconds} s after it was sent, faster than a person could answer, so it likely never showed you a prompt. The SQL was not run.`
-    );
-  }
-);
+// Regression: seconds rounded up (Math.ceil) instead of to the nearest 0.1;
+// 949 ms must read 0.9. Truncation (Math.floor) is caught by the 550 ms rows
+// (0.5 instead of 0.6) and the 999 ms row (0.9 instead of 1.0).
+test('instant cancel after 949 ms reports 0.9 s', async () => {
+  const h = await setup();
+  const result = await resume(h, 'execute_sql', 'cancel', 949);
+  expect(text(result)).toBe(
+    'The client cancelled this confirmation about 0.9 s after it was sent, faster than a person could answer, so it likely never showed you a prompt. The SQL was not run.'
+  );
+});
+
+// Regression: the gap is sampled after the resume's platform reads instead of
+// when the request reaches the tool, so a slow organization/project lookup
+// pushes a fast cancel past 1000 ms and hides it. No other test makes server
+// work take time on the clock.
+test('create_project measures the gap at handler entry, before platform reads', async () => {
+  const h = await setup();
+  const first = issued(await h.call('create_project'));
+  h.delayReads(600);
+  const result = await resume(
+    h,
+    'create_project',
+    'cancel',
+    550,
+    first.requestState
+  );
+  // Precondition: the resume did read the platform, so the clock moved on.
+  expect(Date.now()).toBeGreaterThanOrEqual(1_893_456_001_400);
+  expect(text(result)).toBe(
+    'The client cancelled this confirmation about 0.6 s after it was sent, faster than a person could answer, so it likely never showed you a prompt. The project was not created.'
+  );
+  expect(inputResponseFacts(h)).toEqual([
+    {
+      kind: 'input_response',
+      feature: 'cost',
+      action: 'cancel',
+      elapsed_ms: 550,
+      instant: true,
+    },
+  ]);
+  expectNothingRan(h);
+});
 
 // Regression: a resume clocked before issuance (clock skew between servers)
 // is treated as instant because the gap is < 1000, or records a negative

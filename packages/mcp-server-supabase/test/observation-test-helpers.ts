@@ -210,7 +210,7 @@ function factBuilders(feature: ObservationFact['feature']) {
   // action. confirmation-instant-cancel.test.ts pins the timing fields.
   function response(
     action: Extract<ObservationFact, { kind: 'input_response' }>['action']
-  ): ObservationFact {
+  ): unknown {
     return expect.objectContaining({ kind: 'input_response', feature, action });
   }
   const started: ObservationFact = {
