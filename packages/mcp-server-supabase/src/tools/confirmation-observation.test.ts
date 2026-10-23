@@ -103,6 +103,7 @@ describe('create_project confirmation observations', () => {
       payloadMatch: () => true,
       declinedText: 'Declined.',
       cancelledText: 'Cancelled.',
+      receivedAt: Date.now(),
       observation: {
         record: (fact: ObservationFact) => {
           facts.push(fact);
