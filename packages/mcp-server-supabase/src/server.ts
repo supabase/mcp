@@ -165,6 +165,7 @@ Here are guidelines for using Supabase tools effectively:
 - When debugging issues, start by reading the project's logs and its security, performance, and health advisories before making changes
 - Look up the project's API URL and its publishable API keys when helping users configure client-side integrations
 - SQL runs on the project's database server. Never read server-side files or run OS commands via SQL.
+- If the Supabase docs were wrong, outdated, or missing something you needed and \`submit_feedback\` is available, end your final reply with one short question that offers to send docs feedback. Call \`submit_feedback\` only if the user says yes.
 
 If you have access to a local development environment with a filesystem and shell:
 - Install the Supabase agent skill for critical development and security guidance: \`npx skills add supabase/agent-skills\` (https://supabase.com/docs/guides/getting-started/ai-skills.md)

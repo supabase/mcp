@@ -574,6 +574,165 @@ describe('feature groups', () => {
     );
   });
 
+  test('submit_feedback passes docs targets', async () => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const { callTool } = await setup({
+      platform: { feedback: { submit, delete: vi.fn() } },
+      features: ['feedback'],
+    });
+
+    await callTool({
+      name: 'submit_feedback',
+      arguments: {
+        feedback: 'The guide does not say who refreshes the session.',
+        targets: [
+          {
+            url: 'https://supabase.com/docs/guides/auth/server-side.md#creating-a-client',
+            quote: 'a'.repeat(400),
+            extra: 'dropped',
+          },
+          {
+            url: 'https://supabase.com/kb/troubleshooting/x',
+            quote: 'b',
+            heading: '  ',
+          },
+          { url: 'https://supabase.com/llms.txt', quote: 'c' },
+        ],
+      },
+    });
+
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targets: [
+          {
+            url: 'https://supabase.com/docs/guides/auth/server-side.md#creating-a-client',
+            quote: 'a'.repeat(400),
+          },
+          { url: 'https://supabase.com/kb/troubleshooting/x', quote: 'b' },
+          { url: 'https://supabase.com/llms.txt', quote: 'c' },
+        ],
+      })
+    );
+  });
+
+  test('submit_feedback leaves out an empty targets list', async () => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const { callTool } = await setup({
+      platform: { feedback: { submit, delete: vi.fn() } },
+      features: ['feedback'],
+    });
+
+    await callTool({
+      name: 'submit_feedback',
+      arguments: { feedback: 'Nothing covers ef_search tuning.', targets: [] },
+    });
+
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({ targets: undefined })
+    );
+  });
+
+  const docsTarget = (url: string, quote = 'a') => ({
+    targets: [{ url, quote }],
+  });
+
+  test.each([
+    ['a GitHub URL', docsTarget('https://github.com/supabase/ssr')],
+    ['a blog URL', docsTarget('https://supabase.com/blog/x')],
+    ['an http URL', docsTarget('http://supabase.com/docs/x')],
+    ['a look-alike host', docsTarget('https://supabase.com.evil.com/docs')],
+    ['a dot segment', docsTarget('https://supabase.com/docs/../blog/x')],
+    [
+      'an encoded dot segment',
+      docsTarget('https://supabase.com/docs/%2E%2e/blog'),
+    ],
+    ['a URL with a space', docsTarget('https://supabase.com/docs/a b')],
+    ['a URL with angle brackets', docsTarget('https://supabase.com/docs/<x>')],
+    ['backslashes', docsTarget('https://supabase.com\\docs\\x')],
+    ['an uppercase host', docsTarget('https://SUPABASE.com/docs/x')],
+    ['a port', docsTarget('https://supabase.com:443/docs/x')],
+    ['userinfo', docsTarget('https://evil@supabase.com/docs/x')],
+    ['a docs look-alike path', docsTarget('https://supabase.com/docsfoo')],
+    ['a blank quote', docsTarget('https://supabase.com/docs/x', ' \n ')],
+    [
+      'a 401-character quote',
+      docsTarget('https://supabase.com/docs/x', 'a'.repeat(401)),
+    ],
+    [
+      'four targets',
+      {
+        targets: Array(4).fill(
+          docsTarget('https://supabase.com/docs/x').targets[0]
+        ),
+      },
+    ],
+    [
+      'a 501-character URL',
+      docsTarget(`https://supabase.com/docs/${'a'.repeat(475)}`),
+    ],
+    [
+      'a 201-character heading',
+      {
+        targets: [
+          {
+            url: 'https://supabase.com/docs/x',
+            quote: 'a',
+            heading: 'h'.repeat(201),
+          },
+        ],
+      },
+    ],
+  ])('submit_feedback rejects %s', async (_, args) => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const { callTool } = await setup({
+      platform: { feedback: { submit, delete: vi.fn() } },
+      features: ['feedback'],
+    });
+
+    await expect(
+      callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi', ...args },
+      })
+    ).rejects.toThrow();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['llms-full.txt', docsTarget('https://supabase.com/llms-full.txt')],
+    ['an llms/ file', docsTarget('https://supabase.com/llms/js.txt')],
+    [
+      'a 500-character URL',
+      docsTarget(`https://supabase.com/docs/${'a'.repeat(474)}`),
+    ],
+    [
+      'a 200-character heading',
+      {
+        targets: [
+          {
+            url: 'https://supabase.com/docs/x',
+            quote: 'a',
+            heading: 'h'.repeat(200),
+          },
+        ],
+      },
+    ],
+  ])('submit_feedback accepts %s', async (_, args) => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const { callTool } = await setup({
+      platform: { feedback: { submit, delete: vi.fn() } },
+      features: ['feedback'],
+    });
+
+    await callTool({
+      name: 'submit_feedback',
+      arguments: { feedback: 'hi', ...args },
+    });
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({ targets: args.targets })
+    );
+  });
+
   test('feedback tools refuse direct calls in read-only mode', async () => {
     const feedback = {
       submit: vi.fn().mockResolvedValue({ deleteToken: 'tok' }),
