@@ -196,9 +196,9 @@ export type ConfirmationStateOptions<S extends ConfirmationState> = {
   cancelledText: string;
   /**
    * `Date.now()` sampled when the request reached the tool handler, before any
-   * await, so server-side work doesn't count as client time. Defaults to now.
+   * await, so server-side work doesn't count as client time.
    */
-  receivedAt?: number;
+  receivedAt: number;
   observation?: ToolObservation<ObservationFact>;
 };
 
@@ -275,7 +275,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     declinedText,
     cancelledText,
     observation,
-    receivedAt = Date.now(),
+    receivedAt,
   } = options;
   const feature = FEATURE[tool];
   const raw = ctx.mcpReq.requestState<unknown>();
