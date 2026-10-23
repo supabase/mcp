@@ -57,7 +57,7 @@ export function createFeedbackOperations({
   }
 
   return {
-    async submit({ feedback, projectId, clientInfo }) {
+    async submit({ feedback, projectId, clientInfo, targets }) {
       const userId = await resolveUserId();
       const response = await request(
         'rpc/submit_interfaces_feedback',
@@ -74,6 +74,7 @@ export function createFeedbackOperations({
                 client_name: clientInfo.name,
                 client_version: clientInfo.version,
               }),
+              targets,
             },
           }),
         },
