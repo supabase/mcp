@@ -1,5 +1,5 @@
 import { codeBlock } from 'common-tags';
-import { resolve } from 'node:path';
+import { resolve } from 'node:path/posix';
 
 /**
  * Gets the deployment ID for an Edge Function.
