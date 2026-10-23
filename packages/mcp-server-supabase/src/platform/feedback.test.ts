@@ -48,6 +48,52 @@ describe('createFeedbackOperations', () => {
     });
   });
 
+  test('submit adds docs targets, category and outcome to metadata', async () => {
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json('tok'));
+    const feedback = createFeedbackOperations({ fetch: fakeFetch });
+    const targets = [
+      {
+        url: 'https://supabase.com/docs/guides/auth/server-side',
+        heading: 'Creating a client',
+        quote: 'Create a server client.',
+      },
+      {
+        url: 'https://supabase.com/kb/troubleshooting/auth-session-missing',
+        quote: 'Refresh the session.',
+      },
+    ];
+
+    await feedback.submit({
+      feedback: 'The guide does not say who refreshes the session.',
+      targets,
+      category: 'missing_information',
+      outcome: 'worked_around',
+    });
+
+    expect(
+      JSON.parse(String(fakeFetch.mock.calls[0]![1]?.body)).metadata
+    ).toEqual({
+      source: 'mcp',
+      targets,
+      category: 'missing_information',
+      outcome: 'worked_around',
+    });
+  });
+
+  test('submit leaves out targets when only a category is given', async () => {
+    const fakeFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json('tok'));
+    const feedback = createFeedbackOperations({ fetch: fakeFetch });
+
+    await feedback.submit({ feedback: 'hi', category: 'unclear' });
+
+    const { metadata } = JSON.parse(String(fakeFetch.mock.calls[0]![1]?.body));
+    expect(metadata).toEqual({ source: 'mcp', category: 'unclear' });
+  });
+
   test('submit omits client info when unavailable', async () => {
     const fakeFetch = vi
       .fn<typeof fetch>()

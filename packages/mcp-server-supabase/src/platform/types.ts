@@ -457,11 +457,33 @@ export type NotebookOperations = {
   ): Promise<NotebookWithContent>;
 };
 
+export const FEEDBACK_CATEGORIES = [
+  'missing_information',
+  'unclear',
+  'incorrect',
+  'outdated',
+  'conflicting',
+  'example_broken',
+  'hard_to_find',
+] as const;
+
+export const FEEDBACK_OUTCOMES = [
+  'blocked',
+  'worked_around',
+  'resolved',
+] as const;
+
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORIES)[number];
+export type FeedbackOutcome = (typeof FEEDBACK_OUTCOMES)[number];
+
 export type FeedbackOperations = {
   submit(input: {
     feedback: string;
     projectId?: string;
     clientInfo?: { name: string; version: string };
+    targets?: { url: string; heading?: string; quote: string }[];
+    category?: FeedbackCategory;
+    outcome?: FeedbackOutcome;
   }): Promise<{ deleteToken: string }>;
   delete(input: {
     deleteToken: string;
