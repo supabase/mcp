@@ -244,7 +244,13 @@ export function getBranchingTools({
                 }),
               },
               requestState: await codec.mint(
-                { tool: 'create_branch', project_id, name, cost },
+                {
+                  tool: 'create_branch',
+                  project_id,
+                  name,
+                  cost,
+                  issued_at: Date.now(),
+                },
                 ctx
               ),
             });

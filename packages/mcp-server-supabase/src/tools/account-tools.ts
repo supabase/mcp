@@ -364,7 +364,14 @@ export function getAccountTools({
                 }),
               },
               requestState: await codec.mint(
-                { tool: 'create_project', name, region, organization_id, cost },
+                {
+                  tool: 'create_project',
+                  name,
+                  region,
+                  organization_id,
+                  cost,
+                  issued_at: Date.now(),
+                },
                 ctx
               ),
             });

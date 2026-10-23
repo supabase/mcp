@@ -508,6 +508,7 @@ export function getDatabaseTools({
                   project_id,
                   name,
                   queryHash: queryHash ?? (await hashObject({ query })),
+                  issued_at: Date.now(),
                 },
                 ctx
               ),
@@ -595,6 +596,7 @@ export function getDatabaseTools({
                   tool: 'execute_sql',
                   project_id,
                   queryHash: queryHash ?? (await hashObject({ query })),
+                  issued_at: Date.now(),
                 },
                 ctx
               ),

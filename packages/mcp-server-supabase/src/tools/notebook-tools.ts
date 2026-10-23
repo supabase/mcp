@@ -447,6 +447,7 @@ export function getNotebookTools({
                     notebook_id,
                     cellsHash,
                     readOnly: readOnly ?? false,
+                    issued_at: Date.now(),
                   },
                   ctx
                 ),

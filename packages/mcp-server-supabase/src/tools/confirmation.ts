@@ -34,6 +34,13 @@ export const missingConfirmCostIdMessage =
   'This client needs a cost confirmation ID: call `get_cost`, tell the user the cost, call `confirm_cost` once they agree, then retry with its `confirmation_id` as `confirm_cost_id`.';
 
 /**
+ * Epoch ms (`Date.now()`) when a confirmation was sent; each prompt mints a
+ * fresh one. Optional because states minted before it existed lack it.
+ */
+type IssuedAt = number;
+const issuedAtSchema = z.number().optional();
+
+/**
  * Signed `requestState` payload for the `create_project` cost-confirmation
  * elicitation, bound to the project arguments and the cost quoted to the
  * user.
@@ -44,6 +51,7 @@ export type ProjectCostState = {
   region: (typeof AWS_REGION_CODES)[number];
   organization_id: string;
   cost: Cost;
+  issued_at?: IssuedAt;
 };
 
 const costSchema: z.ZodType<Cost> = z.discriminatedUnion('type', [
@@ -65,6 +73,7 @@ export const projectCostStateSchema = z.object({
   region: z.enum(AWS_REGION_CODES),
   organization_id: z.string(),
   cost: costSchema,
+  issued_at: issuedAtSchema,
 }) satisfies z.ZodType<ProjectCostState>;
 
 /**
@@ -77,6 +86,7 @@ export type BranchCostState = {
   project_id: string;
   name: string;
   cost: BranchCost;
+  issued_at?: IssuedAt;
 };
 
 export const branchCostStateSchema = z.object({
@@ -88,12 +98,14 @@ export const branchCostStateSchema = z.object({
     recurrence: z.literal('hourly'),
     amount: z.number(),
   }),
+  issued_at: issuedAtSchema,
 }) satisfies z.ZodType<BranchCostState>;
 
 export type ExecuteSqlState = {
   tool: 'execute_sql';
   project_id: string;
   queryHash: string;
+  issued_at?: IssuedAt;
 };
 
 export type ApplyMigrationState = {
@@ -101,6 +113,7 @@ export type ApplyMigrationState = {
   project_id: string;
   name: string;
   queryHash: string;
+  issued_at?: IssuedAt;
 };
 
 /**
@@ -113,6 +126,7 @@ export type RunNotebookState = {
   notebook_id: string;
   cellsHash: string;
   readOnly: boolean;
+  issued_at?: IssuedAt;
 };
 
 export type DestructiveSqlState = ExecuteSqlState | ApplyMigrationState;
@@ -146,6 +160,7 @@ export const executeSqlStateSchema = z.object({
   tool: z.literal('execute_sql'),
   project_id: z.string(),
   queryHash: z.string(),
+  issued_at: issuedAtSchema,
 }) satisfies z.ZodType<ExecuteSqlState>;
 
 export const applyMigrationStateSchema = z.object({
@@ -153,6 +168,7 @@ export const applyMigrationStateSchema = z.object({
   project_id: z.string(),
   name: z.string(),
   queryHash: z.string(),
+  issued_at: issuedAtSchema,
 }) satisfies z.ZodType<ApplyMigrationState>;
 
 export const runNotebookStateSchema = z.object({
@@ -161,6 +177,7 @@ export const runNotebookStateSchema = z.object({
   notebook_id: z.string(),
   cellsHash: z.string(),
   readOnly: z.boolean(),
+  issued_at: issuedAtSchema,
 }) satisfies z.ZodType<RunNotebookState>;
 
 export type CheckConfirmationStateResult =
@@ -200,6 +217,18 @@ const FEATURE = {
   apply_migration: 'destructive_sql',
   run_notebook: 'notebook',
 } as const satisfies Record<ConfirmationState['tool'], ConfirmationFeature>;
+
+// SU-495524 logs show ~0.55 s client auto-cancels; nobody reads SQL and answers in < 1 s.
+const INSTANT_CANCEL_MS = 1000;
+
+/** Last sentence of an instant-cancel result: what did not happen. */
+const NOT_DONE = {
+  create_project: 'The project was not created.',
+  create_branch: 'The branch was not created.',
+  execute_sql: 'The SQL was not run.',
+  apply_migration: 'The migration was not applied.',
+  run_notebook: 'The notebook was not run.',
+} as const satisfies Record<ConfirmationState['tool'], string>;
 
 export async function checkConfirmationState<S extends ConfirmationState>(
   options: ConfirmationStateOptions<S> & {
@@ -306,11 +335,24 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     return { kind: 'reprompt', reason: 'missing_response' };
   }
 
+  // Missing (older state) or negative (clock skew) gaps carry no timing.
+  const gap =
+    state.issued_at === undefined ? undefined : Date.now() - state.issued_at;
+  const elapsedMs = gap !== undefined && gap >= 0 ? gap : undefined;
+  const instantMs =
+    response.action === 'cancel' &&
+    elapsedMs !== undefined &&
+    elapsedMs < INSTANT_CANCEL_MS
+      ? elapsedMs
+      : undefined;
+
   observation?.setOutcome(OUTCOME[response.action]);
   observation?.record({
     kind: 'input_response',
     feature,
     action: response.action,
+    ...(elapsedMs !== undefined ? { elapsed_ms: elapsedMs } : {}),
+    ...(instantMs !== undefined ? { instant: true } : {}),
   });
 
   if (response.action === 'decline') {
@@ -324,10 +366,14 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   }
 
   if (response.action !== 'accept') {
+    const text =
+      instantMs === undefined
+        ? cancelledText
+        : `The client cancelled this confirmation about ${(Math.round(instantMs / 100) / 10).toFixed(1)} s after it was sent, faster than a person could answer, so it likely never showed you a prompt. ${NOT_DONE[tool]}`;
     return {
       kind: 'terminal',
       result: {
-        content: [{ type: 'text', text: cancelledText }],
+        content: [{ type: 'text', text }],
         structuredContent: { status: 'cancelled' },
       },
     };
