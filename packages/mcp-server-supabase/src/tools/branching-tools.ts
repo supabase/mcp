@@ -207,6 +207,7 @@ export function getBranchingTools({
         ctx: ServerContext,
         observation?: ToolObservation<ObservationFact>
       ) => {
+        const receivedAt = Date.now();
         if (readOnly) {
           observation?.record({
             kind: 'confirmation_decision',
@@ -260,6 +261,7 @@ export function getBranchingTools({
             ctx,
             tool: 'create_branch',
             schema: branchCostStateSchema,
+            receivedAt,
             requestKey: 'confirm_cost',
             askForConfirmation,
             observation,

@@ -361,6 +361,7 @@ export function getNotebookTools({
           ctx: ServerContext,
           observation?: ToolObservation<ObservationFact>
         ) => {
+          const receivedAt = Date.now();
           const record = observation?.record;
           const notebook = await notebooks.getNotebook(project_id, notebook_id);
 
@@ -457,6 +458,7 @@ export function getNotebookTools({
               ctx,
               tool: 'run_notebook',
               schema: runNotebookStateSchema,
+              receivedAt,
               requestKey: 'confirm_run',
               askForConfirmation,
               argsMatch: (state) =>

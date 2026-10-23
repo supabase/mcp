@@ -465,6 +465,7 @@ export function getDatabaseTools({
         ctx: ServerContext,
         observation?: ToolObservation<ObservationFact>
       ) => {
+        const receivedAt = Date.now();
         const record = observation?.record;
         if (readOnly) {
           record?.({
@@ -517,6 +518,7 @@ export function getDatabaseTools({
           const gated = await checkDestructiveSqlConfirmation(query, {
             ctx,
             tool: 'apply_migration',
+            receivedAt,
             schema: applyMigrationStateSchema,
             requestKey: 'confirm_destructive',
             argsMatch: (state) =>
@@ -560,6 +562,7 @@ export function getDatabaseTools({
         ctx: ServerContext,
         observation?: ToolObservation<ObservationFact>
       ) => {
+        const receivedAt = Date.now();
         const record = observation?.record;
         let bypassReason:
           | 'read_only'
@@ -604,6 +607,7 @@ export function getDatabaseTools({
 
           const gated = await checkDestructiveSqlConfirmation(query, {
             ctx,
+            receivedAt,
             tool: 'execute_sql',
             schema: executeSqlStateSchema,
             requestKey: 'confirm_destructive',

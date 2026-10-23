@@ -313,6 +313,7 @@ export function getAccountTools({
         ctx: ServerContext,
         observation?: ToolObservation<ObservationFact>
       ) => {
+        const receivedAt = Date.now();
         if (readOnly) {
           observation?.record({
             kind: 'confirmation_decision',
@@ -381,6 +382,7 @@ export function getAccountTools({
             ctx,
             tool: 'create_project',
             schema: projectCostStateSchema,
+            receivedAt,
             requestKey: 'confirm_cost',
             askForConfirmation,
             observation,

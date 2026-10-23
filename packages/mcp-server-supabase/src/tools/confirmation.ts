@@ -194,6 +194,11 @@ export type ConfirmationStateOptions<S extends ConfirmationState> = {
   payloadMatch?: (state: S) => boolean;
   declinedText: string;
   cancelledText: string;
+  /**
+   * `Date.now()` sampled when the request reached the tool handler, before any
+   * await, so server-side work doesn't count as client time. Defaults to now.
+   */
+  receivedAt?: number;
   observation?: ToolObservation<ObservationFact>;
 };
 
@@ -270,6 +275,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     declinedText,
     cancelledText,
     observation,
+    receivedAt = Date.now(),
   } = options;
   const feature = FEATURE[tool];
   const raw = ctx.mcpReq.requestState<unknown>();
@@ -337,14 +343,12 @@ export function inspectConfirmationState<S extends ConfirmationState>(
 
   // Missing (older state) or negative (clock skew) gaps carry no timing.
   const gap =
-    state.issued_at === undefined ? undefined : Date.now() - state.issued_at;
+    state.issued_at === undefined ? undefined : receivedAt - state.issued_at;
   const elapsedMs = gap !== undefined && gap >= 0 ? gap : undefined;
-  const instantMs =
+  const instant =
     response.action === 'cancel' &&
     elapsedMs !== undefined &&
-    elapsedMs < INSTANT_CANCEL_MS
-      ? elapsedMs
-      : undefined;
+    elapsedMs < INSTANT_CANCEL_MS;
 
   observation?.setOutcome(OUTCOME[response.action]);
   observation?.record({
@@ -352,7 +356,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     feature,
     action: response.action,
     ...(elapsedMs !== undefined ? { elapsed_ms: elapsedMs } : {}),
-    ...(instantMs !== undefined ? { instant: true } : {}),
+    ...(instant ? { instant: true } : {}),
   });
 
   if (response.action === 'decline') {
@@ -366,10 +370,11 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   }
 
   if (response.action !== 'accept') {
-    const text =
-      instantMs === undefined
-        ? cancelledText
-        : `The client cancelled this confirmation about ${(Math.round(instantMs / 100) / 10).toFixed(1)} s after it was sent, faster than a person could answer, so it likely never showed you a prompt. ${NOT_DONE[tool]}`;
+    let text = cancelledText;
+    if (instant) {
+      const seconds = (Math.round(elapsedMs / 100) / 10).toFixed(1);
+      text = `The client cancelled this confirmation about ${seconds} s after it was sent, faster than a person could answer, so it likely never showed you a prompt. ${NOT_DONE[tool]}`;
+    }
     return {
       kind: 'terminal',
       result: {
