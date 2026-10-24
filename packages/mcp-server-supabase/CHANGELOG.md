@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.15.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.14.0...mcp-server-supabase-v0.15.0) (2026-10-24)
+
+
+### Features
+
+* `submit_feedback` and `delete_feedback` tools ([#474](https://github.com/supabase/mcp/issues/474)) ([f50318a](https://github.com/supabase/mcp/commit/f50318a15ea5b73dffd3b754d5968bb526fdbec4))
+* add create_notebook ([#446](https://github.com/supabase/mcp/issues/446)) ([82e4630](https://github.com/supabase/mcp/commit/82e4630a5bf777a738427fdc37da6c324b706b87))
+* add run_notebook with destructive SQL confirmation ([#445](https://github.com/supabase/mcp/issues/445)) ([2e3f34d](https://github.com/supabase/mcp/commit/2e3f34dcc4b4354baeb94f907b40e5df5b3a99cc))
+* mark client-caused tool errors as ToolCallerError ([#480](https://github.com/supabase/mcp/issues/480)) ([4a619c1](https://github.com/supabase/mcp/commit/4a619c13f6dd054bac4ee7fbd3757dd27509ac63))
+* **mcp-server-supabase:** observe notebook runs ([#478](https://github.com/supabase/mcp/issues/478)) ([2f5ae12](https://github.com/supabase/mcp/commit/2f5ae12c38cb49f56f07d80b27495b99de165a1d))
+
+
+### Bug Fixes
+
+* **mcp:** don't split an UPDATE on a semicolon inside a dollar-quoted value ([#482](https://github.com/supabase/mcp/issues/482)) ([9f07410](https://github.com/supabase/mcp/commit/9f0741069409169e60a7f984b4cf8e9e0d1b7397))
+* **mcp:** don't split an UPDATE on a semicolon inside a quoted value ([#459](https://github.com/supabase/mcp/issues/459)) ([6d93b50](https://github.com/supabase/mcp/commit/6d93b50e0a4fae23626fe59fb1a8e05f90e26891))
+
 ## [0.14.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.13.0...mcp-server-supabase-v0.14.0) (2026-10-14)
 
 
