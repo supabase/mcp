@@ -396,7 +396,6 @@ export function getAccountTools({
                 state.cost.recurrence === cost.recurrence &&
                 state.cost.amount === cost.amount),
             declinedText: 'Project creation was declined.',
-            cancelledText: 'Project creation was cancelled.',
           });
           switch (confirmationState.kind) {
             case 'reprompt':

@@ -469,7 +469,6 @@ export function getNotebookTools({
                 state.cellsHash === cellsHash &&
                 state.readOnly === (readOnly ?? false),
               declinedText: 'Notebook run was declined.',
-              cancelledText: 'Notebook run was cancelled.',
               observation,
             });
 

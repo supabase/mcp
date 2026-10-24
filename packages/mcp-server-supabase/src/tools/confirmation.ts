@@ -193,7 +193,8 @@ export type ConfirmationStateOptions<S extends ConfirmationState> = {
   argsMatch: (state: S) => boolean;
   payloadMatch?: (state: S) => boolean;
   declinedText: string;
-  cancelledText: string;
+  /** Unused: cancels share one message. Remove once no caller passes it. */
+  cancelledText?: string;
   /**
    * `Date.now()` sampled when the request reached the tool handler, before any
    * await, so server-side work doesn't count as client time.
@@ -224,9 +225,10 @@ const FEATURE = {
 } as const satisfies Record<ConfirmationState['tool'], ConfirmationFeature>;
 
 // SU-495524 logs show ~0.55 s client auto-cancels; nobody reads SQL and answers in < 1 s.
+// Telemetry only: marks `instant` on the input_response fact, never changes the result.
 const INSTANT_CANCEL_MS = 1000;
 
-/** Last sentence of an instant-cancel result: what did not happen. */
+/** First sentence of a cancel result: what did not happen. */
 const NOT_DONE = {
   create_project: 'The project was not created.',
   create_branch: 'The branch was not created.',
@@ -234,6 +236,20 @@ const NOT_DONE = {
   apply_migration: 'The migration was not applied.',
   run_notebook: 'The notebook was not run.',
 } as const satisfies Record<ConfirmationState['tool'], string>;
+
+/** A terminal result carrying its message in both `content` and `structuredContent`. */
+function terminalResult(
+  status: 'declined' | 'cancelled' | 'error',
+  message: string,
+  isError = false
+): CallToolResult {
+  const structuredContent = { status, message };
+  return {
+    content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+    structuredContent,
+    ...(isError ? { isError: true } : {}),
+  };
+}
 
 export async function checkConfirmationState<S extends ConfirmationState>(
   options: ConfirmationStateOptions<S> & {
@@ -273,7 +289,6 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     argsMatch,
     payloadMatch,
     declinedText,
-    cancelledText,
     observation,
     receivedAt,
   } = options;
@@ -296,16 +311,11 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     }
     return {
       kind: 'terminal',
-      result: {
-        content: [
-          {
-            type: 'text',
-            text: `Request state was not issued for ${tool}.`,
-          },
-        ],
-        structuredContent: { status: 'error' },
-        isError: true,
-      },
+      result: terminalResult(
+        'error',
+        `Request state was not issued for ${tool}.`,
+        true
+      ),
     };
   }
 
@@ -318,16 +328,11 @@ export function inspectConfirmationState<S extends ConfirmationState>(
     });
     return {
       kind: 'terminal',
-      result: {
-        content: [
-          {
-            type: 'text',
-            text: 'Request state arguments do not match the current arguments.',
-          },
-        ],
-        structuredContent: { status: 'error' },
-        isError: true,
-      },
+      result: terminalResult(
+        'error',
+        'Request state arguments do not match the current arguments.',
+        true
+      ),
     };
   }
 
@@ -362,25 +367,17 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   if (response.action === 'decline') {
     return {
       kind: 'terminal',
-      result: {
-        content: [{ type: 'text', text: declinedText }],
-        structuredContent: { status: 'declined' },
-      },
+      result: terminalResult('declined', declinedText),
     };
   }
 
   if (response.action !== 'accept') {
-    let text = cancelledText;
-    if (instant) {
-      const seconds = (Math.round(elapsedMs / 100) / 10).toFixed(1);
-      text = `The client cancelled this confirmation about ${seconds} s after it was sent, faster than a person could answer, so it likely never showed you a prompt. ${NOT_DONE[tool]}`;
-    }
     return {
       kind: 'terminal',
-      result: {
-        content: [{ type: 'text', text }],
-        structuredContent: { status: 'cancelled' },
-      },
+      result: terminalResult(
+        'cancelled',
+        `${NOT_DONE[tool]} If you didn't see a confirmation prompt, your client may have cancelled it automatically.`
+      ),
     };
   }
 

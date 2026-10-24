@@ -526,7 +526,6 @@ export function getDatabaseTools({
               state.name === name &&
               state.queryHash === queryHash,
             declinedText: 'Migration was declined.',
-            cancelledText: 'Migration was cancelled.',
             observation,
             askForConfirmation,
           });
@@ -614,7 +613,6 @@ export function getDatabaseTools({
             argsMatch: (state) =>
               state.project_id === project_id && state.queryHash === queryHash,
             declinedText: 'SQL execution was declined.',
-            cancelledText: 'SQL execution was cancelled.',
             observation,
             askForConfirmation,
           });

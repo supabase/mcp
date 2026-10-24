@@ -272,7 +272,6 @@ export function getBranchingTools({
               state.cost.recurrence === cost.recurrence &&
               state.cost.amount === cost.amount,
             declinedText: 'Branch creation was declined.',
-            cancelledText: 'Branch creation was cancelled.',
           });
           switch (confirmationState.kind) {
             case 'reprompt':
