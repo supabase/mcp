@@ -6,6 +6,10 @@ import {
   createProjectFixture,
   NOTEBOOKS_PAGE_SIZE,
 } from '../test/mocks.js';
+import {
+  expectTerminalResult,
+  freezeClock,
+} from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { NotebookCell } from './platform/types.js';
@@ -878,6 +882,7 @@ describe('run_notebook', () => {
             row_limit: 100,
           },
         ]);
+        freezeClock();
         const first = await callModernTool(client, {
           name: 'run_notebook',
           arguments: runArgs(project, notebook),
@@ -893,11 +898,17 @@ describe('run_notebook', () => {
           requestState: first.requestState,
           inputResponses: { confirm_run: { action } },
         });
-        expect(result).toMatchObject({
-          structuredContent: {
-            status: action === 'decline' ? 'declined' : 'cancelled',
-          },
-        });
+        if (isInputRequiredResult(result))
+          throw new Error('expected a CallToolResult');
+        // Regression: the message is missing from either result channel, or
+        // the cancel drops its timing sentence (0 ms gap, frozen clock).
+        expectTerminalResult(
+          result,
+          action === 'decline' ? 'declined' : 'cancelled',
+          action === 'decline'
+            ? 'Notebook run was declined.'
+            : "The client cancelled this confirmation 0.0 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically."
+        );
         expect(executeSql).not.toHaveBeenCalled();
       }
     );
@@ -1237,13 +1248,22 @@ describe('run_notebook', () => {
             row_limit: 100,
           },
         ]);
+        freezeClock();
 
         const result = await client.callTool({
           name: 'run_notebook',
           arguments: runArgs(project, notebook),
         });
 
-        expect(result.structuredContent).toEqual({ status });
+        // Regression: the message is missing from either result channel, or
+        // the cancel drops its timing sentence (0 ms gap, frozen clock).
+        expectTerminalResult(
+          result,
+          status,
+          status === 'declined'
+            ? 'Notebook run was declined.'
+            : "The client cancelled this confirmation 0.0 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically."
+        );
         expect(executeSql).not.toHaveBeenCalled();
       }
     );
@@ -1355,11 +1375,12 @@ describe('run_notebook', () => {
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
       }
-      expect(second.content).toContainEqual({
-        type: 'text',
-        text: 'Request state arguments do not match the current arguments.',
-      });
-      expect(second.isError).toBe(true);
+      // Regression: the mismatch error is missing from either result channel.
+      expectTerminalResult(
+        second,
+        'error',
+        'Request state arguments do not match the current arguments.'
+      );
       expect(executeSql).not.toHaveBeenCalled();
     });
 
@@ -1398,11 +1419,12 @@ describe('run_notebook', () => {
       if (isInputRequiredResult(result)) {
         throw new Error('expected a CallToolResult');
       }
-      expect(result.content).toContainEqual({
-        type: 'text',
-        text: 'Request state was not issued for run_notebook.',
-      });
-      expect(result.isError).toBe(true);
+      // Regression: the wrong-tool error is missing from either result channel.
+      expectTerminalResult(
+        result,
+        'error',
+        'Request state was not issued for run_notebook.'
+      );
       expect(executeSql).not.toHaveBeenCalled();
     });
 

@@ -207,6 +207,7 @@ export function getBranchingTools({
         ctx: ServerContext,
         observation?: ToolObservation<ObservationFact>
       ) => {
+        const receivedAt = Date.now();
         if (readOnly) {
           observation?.record({
             kind: 'confirmation_decision',
@@ -244,7 +245,13 @@ export function getBranchingTools({
                 }),
               },
               requestState: await codec.mint(
-                { tool: 'create_branch', project_id, name, cost },
+                {
+                  tool: 'create_branch',
+                  project_id,
+                  name,
+                  cost,
+                  issued_at: Date.now(),
+                },
                 ctx
               ),
             });
@@ -254,6 +261,7 @@ export function getBranchingTools({
             ctx,
             tool: 'create_branch',
             schema: branchCostStateSchema,
+            receivedAt,
             requestKey: 'confirm_cost',
             askForConfirmation,
             observation,
@@ -264,7 +272,6 @@ export function getBranchingTools({
               state.cost.recurrence === cost.recurrence &&
               state.cost.amount === cost.amount,
             declinedText: 'Branch creation was declined.',
-            cancelledText: 'Branch creation was cancelled.',
           });
           switch (confirmationState.kind) {
             case 'reprompt':

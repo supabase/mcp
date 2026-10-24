@@ -361,6 +361,7 @@ export function getNotebookTools({
           ctx: ServerContext,
           observation?: ToolObservation<ObservationFact>
         ) => {
+          const receivedAt = Date.now();
           const record = observation?.record;
           const notebook = await notebooks.getNotebook(project_id, notebook_id);
 
@@ -447,6 +448,7 @@ export function getNotebookTools({
                     notebook_id,
                     cellsHash,
                     readOnly: readOnly ?? false,
+                    issued_at: Date.now(),
                   },
                   ctx
                 ),
@@ -456,6 +458,7 @@ export function getNotebookTools({
               ctx,
               tool: 'run_notebook',
               schema: runNotebookStateSchema,
+              receivedAt,
               requestKey: 'confirm_run',
               askForConfirmation,
               argsMatch: (state) =>
@@ -466,7 +469,6 @@ export function getNotebookTools({
                 state.cellsHash === cellsHash &&
                 state.readOnly === (readOnly ?? false),
               declinedText: 'Notebook run was declined.',
-              cancelledText: 'Notebook run was cancelled.',
               observation,
             });
 

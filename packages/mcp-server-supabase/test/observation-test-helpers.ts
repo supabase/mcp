@@ -205,10 +205,13 @@ function factBuilders(feature: ObservationFact['feature']) {
   ): ObservationFact {
     return { kind: 'resume_validation', feature, result };
   }
+  // `input_response` also carries timing (`elapsed_ms`, `instant`) taken from
+  // the wall clock; these flow tests don't control it, so they match only the
+  // action. confirmation-instant-cancel.test.ts pins the timing fields.
   function response(
     action: Extract<ObservationFact, { kind: 'input_response' }>['action']
-  ): ObservationFact {
-    return { kind: 'input_response', feature, action };
+  ): unknown {
+    return expect.objectContaining({ kind: 'input_response', feature, action });
   }
   const started: ObservationFact = {
     kind: 'operation',
@@ -249,4 +252,12 @@ function assertAttempt(
   }
 }
 
-export { form, tools, setup, issued, factBuilders, assertAttempt };
+export {
+  form,
+  tools,
+  setup,
+  issued,
+  factBuilders,
+  assertAttempt,
+  fakePlatform,
+};

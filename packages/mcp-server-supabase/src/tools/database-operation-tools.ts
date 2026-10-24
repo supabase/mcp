@@ -465,6 +465,7 @@ export function getDatabaseTools({
         ctx: ServerContext,
         observation?: ToolObservation<ObservationFact>
       ) => {
+        const receivedAt = Date.now();
         const record = observation?.record;
         if (readOnly) {
           record?.({
@@ -508,6 +509,7 @@ export function getDatabaseTools({
                   project_id,
                   name,
                   queryHash: queryHash ?? (await hashObject({ query })),
+                  issued_at: Date.now(),
                 },
                 ctx
               ),
@@ -516,6 +518,7 @@ export function getDatabaseTools({
           const gated = await checkDestructiveSqlConfirmation(query, {
             ctx,
             tool: 'apply_migration',
+            receivedAt,
             schema: applyMigrationStateSchema,
             requestKey: 'confirm_destructive',
             argsMatch: (state) =>
@@ -523,7 +526,6 @@ export function getDatabaseTools({
               state.name === name &&
               state.queryHash === queryHash,
             declinedText: 'Migration was declined.',
-            cancelledText: 'Migration was cancelled.',
             observation,
             askForConfirmation,
           });
@@ -559,6 +561,7 @@ export function getDatabaseTools({
         ctx: ServerContext,
         observation?: ToolObservation<ObservationFact>
       ) => {
+        const receivedAt = Date.now();
         const record = observation?.record;
         let bypassReason:
           | 'read_only'
@@ -595,6 +598,7 @@ export function getDatabaseTools({
                   tool: 'execute_sql',
                   project_id,
                   queryHash: queryHash ?? (await hashObject({ query })),
+                  issued_at: Date.now(),
                 },
                 ctx
               ),
@@ -602,13 +606,13 @@ export function getDatabaseTools({
 
           const gated = await checkDestructiveSqlConfirmation(query, {
             ctx,
+            receivedAt,
             tool: 'execute_sql',
             schema: executeSqlStateSchema,
             requestKey: 'confirm_destructive',
             argsMatch: (state) =>
               state.project_id === project_id && state.queryHash === queryHash,
             declinedText: 'SQL execution was declined.',
-            cancelledText: 'SQL execution was cancelled.',
             observation,
             askForConfirmation,
           });

@@ -313,6 +313,7 @@ export function getAccountTools({
         ctx: ServerContext,
         observation?: ToolObservation<ObservationFact>
       ) => {
+        const receivedAt = Date.now();
         if (readOnly) {
           observation?.record({
             kind: 'confirmation_decision',
@@ -364,7 +365,14 @@ export function getAccountTools({
                 }),
               },
               requestState: await codec.mint(
-                { tool: 'create_project', name, region, organization_id, cost },
+                {
+                  tool: 'create_project',
+                  name,
+                  region,
+                  organization_id,
+                  cost,
+                  issued_at: Date.now(),
+                },
                 ctx
               ),
             });
@@ -374,6 +382,7 @@ export function getAccountTools({
             ctx,
             tool: 'create_project',
             schema: projectCostStateSchema,
+            receivedAt,
             requestKey: 'confirm_cost',
             askForConfirmation,
             observation,
@@ -387,7 +396,6 @@ export function getAccountTools({
                 state.cost.recurrence === cost.recurrence &&
                 state.cost.amount === cost.amount),
             declinedText: 'Project creation was declined.',
-            cancelledText: 'Project creation was cancelled.',
           });
           switch (confirmationState.kind) {
             case 'reprompt':

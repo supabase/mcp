@@ -36,6 +36,10 @@ export type ObservationFact =
       kind: 'input_response';
       feature: ConfirmationFeature;
       action: 'accept' | 'decline' | 'cancel';
+      /** Ms from minting the prompt's state to the resume request reaching the tool; absent without a usable `issued_at`. */
+      elapsed_ms?: number;
+      /** Set only on a cancel faster than a person could answer. */
+      instant?: true;
     }>
   | Readonly<{
       kind: 'resume_validation';
