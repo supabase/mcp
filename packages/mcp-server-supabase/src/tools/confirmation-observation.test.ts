@@ -103,7 +103,6 @@ describe('create_project confirmation observations', () => {
       argsMatch: () => true,
       payloadMatch: () => true,
       declinedText: 'Declined.',
-      cancelledText: 'Cancelled.',
       receivedAt: Date.now(),
       observation: {
         record: (fact: ObservationFact) => {

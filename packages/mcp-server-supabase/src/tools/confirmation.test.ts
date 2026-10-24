@@ -143,7 +143,6 @@ describe('checkConfirmationState', () => {
       },
       argsMatch: () => true,
       declinedText: 'SQL execution was declined.',
-      cancelledText: 'SQL execution was cancelled.',
       receivedAt: Date.now(),
     });
 
