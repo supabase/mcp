@@ -193,8 +193,6 @@ export type ConfirmationStateOptions<S extends ConfirmationState> = {
   argsMatch: (state: S) => boolean;
   payloadMatch?: (state: S) => boolean;
   declinedText: string;
-  /** Unused: cancels share one message. Remove once no caller passes it. */
-  cancelledText?: string;
   /**
    * `Date.now()` sampled when the request reached the tool handler, before any
    * await, so server-side work doesn't count as client time.
