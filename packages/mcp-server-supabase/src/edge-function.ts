@@ -1,5 +1,6 @@
 import { codeBlock } from 'common-tags';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Gets the deployment ID for an Edge Function.
@@ -24,6 +25,18 @@ export function getPathPrefix(deploymentId: string) {
  */
 function withoutPrefix(value: string, prefix: string) {
   return value.startsWith(prefix) ? value.slice(prefix.length) : value;
+}
+
+/**
+ * Converts a `file://` URL to a path, passing through anything that isn't one.
+ * Edge Function paths in metadata may sometimes be a path rather than a URL.
+ */
+export function getFilenameFromUrlOrPath(urlOrPath: string) {
+  try {
+    return fileURLToPath(urlOrPath, { windows: false });
+  } catch {
+    return urlOrPath;
+  }
 }
 
 /**
