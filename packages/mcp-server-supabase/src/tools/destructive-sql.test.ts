@@ -93,6 +93,10 @@ describe('isUpdateWithoutWhere', () => {
     String.raw`UPDATE films SET note = E'it\'s; fine' WHERE id = 1;`,
     'UPDATE "film;archive" SET id = 1 WHERE id = 2;',
     "select 1; UPDATE films SET note = 'a; b' WHERE id = 1;",
+    "UPDATE t SET basis = 'price', what = $t$keep; no exit$t$, why = $t$a rule; agreed$t$ WHERE id = 131;",
+    'UPDATE t SET note = $$a; b$$ WHERE id = 1;',
+    'UPDATE t SET note = $t$a $$; b$t$ WHERE id = 1;',
+    'UPDATE t SET a = $$x; y$$ WHERE id = 1; UPDATE t SET b = $$z; w$$ WHERE id = 2;',
   ])('semicolon inside a quoted span does not split the UPDATE: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(false);
   });
@@ -110,6 +114,10 @@ describe('isUpdateWithoutWhere', () => {
     `SELECT 1 AS -- x\r"\n"; UPDATE t SET a = 1; SELECT '"'; -- '`,
     'UPDATE t SET a = 1 -- todo; add a where clause later',
     'UPDATE t SET a = 1 -- where needed',
+    'UPDATE t SET note = $$x where y$$;',
+    'CREATE FUNCTION f() RETURNS void AS $$ SELECT 1; UPDATE t SET a = 1; $$ LANGUAGE sql;',
+    'UPDATE t SET note = $$a; b',
+    'UPDATE t SET note = $$a; b$$; SELECT 1 FROM t WHERE id = 1;',
   ])('UPDATE without WHERE still matches: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(true);
   });

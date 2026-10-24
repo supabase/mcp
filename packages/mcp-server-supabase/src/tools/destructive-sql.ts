@@ -158,11 +158,13 @@ const dollarQuoteTag = /\$(?:[a-z_\u0080-\uffff][\w\u0080-\uffff]*)?\$/iy;
 // Quoted spans and comment bodies are blanked in the returned statements so a
 // later WHERE check cannot see tokens that only appeared inside a literal or
 // a comment (`-- where needed`).
-// Inside dollar-quoted bodies and comments, quotes are not tracked and every
-// semicolon still splits, as before: a function or DO body is code whose
-// statements are checked one by one. Block comments nest; `--` ends at a bare
-// `\r` or `\n`. If a quote is left unterminated, fall back to the plain split
-// rather than letting it hide the rest of the input.
+// A dollar-quoted string inside an UPDATE is a value, so it is blanked like a
+// quoted span (`SET note = $t$a; b$t$`). Inside other dollar-quoted bodies and
+// comments, quotes are not tracked and every semicolon still splits, as
+// before: a function or DO body is code whose statements are checked one by
+// one. Block comments nest; `--` ends at a bare `\r` or `\n`. If a quote is
+// left unterminated, fall back to the plain split rather than letting it hide
+// the rest of the input.
 function splitStatements(sql: string): string[] {
   const statements: string[] = [];
   let blanked = '';
@@ -236,6 +238,15 @@ function splitStatements(sql: string): string[] {
     if (ch === '$' && !/[\w$\u0080-\uffff]/.test(sql[i - 1] ?? '')) {
       dollarQuoteTag.lastIndex = i;
       const tag = dollarQuoteTag.exec(sql)?.[0];
+      if (tag !== undefined && /^\s*update\s/i.test(blanked)) {
+        const end = sql.indexOf(tag, i + tag.length);
+        if (end === -1) {
+          return sql.split(';').map(blankQuotedSpans);
+        }
+        blanked += tag + tag;
+        i = end + tag.length;
+        continue;
+      }
       if (tag !== undefined) {
         blanked += tag;
         dollarUntil = tag;
