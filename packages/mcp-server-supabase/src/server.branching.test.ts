@@ -12,6 +12,10 @@ import {
   createProjectFixture,
   mockBranches,
 } from '../test/mocks.js';
+import {
+  cancelledMessage,
+  expectTerminalResult,
+} from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, getBranchCost } from './pricing.js';
 import * as pricing from './pricing.js';
@@ -882,8 +886,8 @@ describe('tools', () => {
         arguments: { project_id: project.id, name: 'test-branch' },
       });
 
-      expect(result.isError).toBeFalsy();
-      expect(result.structuredContent).toEqual({ status: 'declined' });
+      // Regression: the decline message is missing from either result channel.
+      expectTerminalResult(result, 'declined', 'Branch creation was declined.');
       expect(mockBranches.size).toBe(0);
     });
 
@@ -911,8 +915,8 @@ describe('tools', () => {
         arguments: { project_id: project.id, name: 'test-branch' },
       });
 
-      expect(result.isError).toBeFalsy();
-      expect(result.structuredContent).toEqual({ status: 'cancelled' });
+      // Regression: the cancel message is missing from either result channel.
+      expectTerminalResult(result, 'cancelled', cancelledMessage.create_branch);
       expect(mockBranches.size).toBe(0);
     });
 
@@ -1033,7 +1037,12 @@ describe('tools', () => {
         if (isInputRequiredResult(second)) {
           throw new Error('expected a CallToolResult');
         }
-        expect(second.structuredContent).toEqual({ status: 'declined' });
+        // Regression: the decline message is missing from either result channel.
+        expectTerminalResult(
+          second,
+          'declined',
+          'Branch creation was declined.'
+        );
         expect(mockBranches.size).toBe(0);
       } finally {
         getBranchCostSpy.mockRestore();
@@ -1118,8 +1127,12 @@ describe('tools', () => {
         throw new Error('expected a CallToolResult');
       }
 
-      expect(second.isError).toBe(true);
-      expect(second.structuredContent).toEqual({ status: 'error' });
+      // Regression: the mismatch error is missing from either result channel.
+      expectTerminalResult(
+        second,
+        'error',
+        'Request state arguments do not match the current arguments.'
+      );
       expect(mockBranches.size).toBe(0);
     });
 
@@ -1220,15 +1233,12 @@ describe('tools', () => {
         throw new Error('expected a CallToolResult');
       }
 
-      expect(result.isError).toBe(true);
-      expect(result.structuredContent).toEqual({ status: 'error' });
-      expect(
-        result.content.some(
-          (c) =>
-            c.type === 'text' &&
-            c.text === 'Request state was not issued for create_branch.'
-        )
-      ).toBe(true);
+      // Regression: the wrong-tool error is missing from either result channel.
+      expectTerminalResult(
+        result,
+        'error',
+        'Request state was not issued for create_branch.'
+      );
       expect(mockBranches.size).toBe(0);
     });
 

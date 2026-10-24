@@ -6,6 +6,10 @@ import {
   createProjectFixture,
   NOTEBOOKS_PAGE_SIZE,
 } from '../test/mocks.js';
+import {
+  cancelledMessage,
+  expectTerminalResult,
+} from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { NotebookCell } from './platform/types.js';
@@ -893,11 +897,16 @@ describe('run_notebook', () => {
           requestState: first.requestState,
           inputResponses: { confirm_run: { action } },
         });
-        expect(result).toMatchObject({
-          structuredContent: {
-            status: action === 'decline' ? 'declined' : 'cancelled',
-          },
-        });
+        if (isInputRequiredResult(result))
+          throw new Error('expected a CallToolResult');
+        // Regression: the message is missing from either result channel.
+        expectTerminalResult(
+          result,
+          action === 'decline' ? 'declined' : 'cancelled',
+          action === 'decline'
+            ? 'Notebook run was declined.'
+            : cancelledMessage.run_notebook
+        );
         expect(executeSql).not.toHaveBeenCalled();
       }
     );
@@ -1243,7 +1252,14 @@ describe('run_notebook', () => {
           arguments: runArgs(project, notebook),
         });
 
-        expect(result.structuredContent).toEqual({ status });
+        // Regression: the message is missing from either result channel.
+        expectTerminalResult(
+          result,
+          status,
+          status === 'declined'
+            ? 'Notebook run was declined.'
+            : cancelledMessage.run_notebook
+        );
         expect(executeSql).not.toHaveBeenCalled();
       }
     );
@@ -1355,11 +1371,12 @@ describe('run_notebook', () => {
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
       }
-      expect(second.content).toContainEqual({
-        type: 'text',
-        text: 'Request state arguments do not match the current arguments.',
-      });
-      expect(second.isError).toBe(true);
+      // Regression: the mismatch error is missing from either result channel.
+      expectTerminalResult(
+        second,
+        'error',
+        'Request state arguments do not match the current arguments.'
+      );
       expect(executeSql).not.toHaveBeenCalled();
     });
 
@@ -1398,11 +1415,12 @@ describe('run_notebook', () => {
       if (isInputRequiredResult(result)) {
         throw new Error('expected a CallToolResult');
       }
-      expect(result.content).toContainEqual({
-        type: 'text',
-        text: 'Request state was not issued for run_notebook.',
-      });
-      expect(result.isError).toBe(true);
+      // Regression: the wrong-tool error is missing from either result channel.
+      expectTerminalResult(
+        result,
+        'error',
+        'Request state was not issued for run_notebook.'
+      );
       expect(executeSql).not.toHaveBeenCalled();
     });
 

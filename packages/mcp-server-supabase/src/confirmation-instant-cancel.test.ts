@@ -14,6 +14,10 @@ import {
   issued,
   setup as setupObservation,
 } from '../test/observation-test-helpers.js';
+import {
+  cancelledMessage,
+  expectTerminalResult,
+} from '../test/confirmation-results.js';
 import { callModernTool } from '../test/server-harness.js';
 import type { ObservationEnd, ObservationFact } from './index.js';
 import type {
@@ -22,9 +26,10 @@ import type {
 } from './platform/types.js';
 import * as pricing from './pricing.js';
 
-// AI-1328: a confirmation `cancel` that arrives faster than a person could
-// answer is reported as an instant cancel. Every expected value below is a
-// hand-written literal from the approved spec.
+// AI-1328: confirmation cancels record how long the client took (`elapsed_ms`)
+// and flag sub-second ones as `instant`. Every cancel returns the same text,
+// whatever its timing. Every expected value below is a hand-written literal
+// from the approved spec.
 
 const KEY = 'a'.repeat(32);
 const PRINCIPAL = 'PRIVATE_PRINCIPAL';
@@ -206,10 +211,6 @@ function inputResponseFacts(h: Harness) {
   return h.attempts.at(-1)!.facts.filter((f) => f.kind === 'input_response');
 }
 
-function text(result: CallToolResult) {
-  return result.content.map((c) => (c.type === 'text' ? c.text : '')).join('');
-}
-
 function expectNothingRan(h: Harness) {
   for (const operation of h.operations)
     expect(operation).not.toHaveBeenCalled();
@@ -232,58 +233,34 @@ describe.each(tools)('%s confirmation requestState', (name) => {
     expect(payload(second.requestState).issued_at).toBe(1_893_456_005_250);
   });
 
-  // Regression: a tool keeps the generic cancel text, gets another tool's
-  // ending, or runs/creates something on an instant cancel. Existing cancel
-  // tests never control the clock and only check structuredContent.
-  test('instant cancel explains itself and runs nothing', async () => {
-    const h = await setup();
-    const result = await resume(h, name, 'cancel', 550);
-
-    const ending = {
-      execute_sql: 'The SQL was not run.',
-      apply_migration: 'The migration was not applied.',
-      run_notebook: 'The notebook was not run.',
-      create_project: 'The project was not created.',
-      create_branch: 'The branch was not created.',
-    }[name];
-    expect(text(result)).toBe(
-      `The client cancelled this confirmation about 0.6 s after it was sent, faster than a person could answer, so it likely never showed you a prompt. ${ending}`
-    );
-    expect(result.structuredContent).toEqual({ status: 'cancelled' });
-    expect(result.isError).not.toBe(true);
-    expect(inputResponseFacts(h)).toEqual([
-      {
-        kind: 'input_response',
-        feature: feature[name],
-        action: 'cancel',
-        elapsed_ms: 550,
-        instant: true,
-      },
-    ]);
-    expect(h.attempts.at(-1)!.ends).toEqual([
-      expect.objectContaining({ result: 'cancelled' }),
-    ]);
-    expectNothingRan(h);
-  });
-
-  // Regression: a refactor swaps the instant text, or another tool's cancel
-  // text, into a slow cancel, or a slow cancel runs something. Before this,
-  // only execute_sql pinned its normal cancel text under a controlled clock.
-  test('a cancel after 1000 ms keeps the normal cancel text and runs nothing', async () => {
-    const h = await setup();
-    const result = await resume(h, name, 'cancel', 1_000);
-    expect(text(result)).toBe(
-      {
-        execute_sql: 'SQL execution was cancelled.',
-        apply_migration: 'Migration was cancelled.',
-        run_notebook: 'Notebook run was cancelled.',
-        create_project: 'Project creation was cancelled.',
-        create_branch: 'Branch creation was cancelled.',
-      }[name]
-    );
-    expect(result.structuredContent).toEqual({ status: 'cancelled' });
-    expectNothingRan(h);
-  });
+  // Regression: a tool's cancel text depends on timing again (instant text
+  // on a fast cancel, or the old "was cancelled." text on a slow one), gets
+  // another tool's text, drops the message from either result channel,
+  // mis-records the fact, or runs/creates something on a cancel.
+  test.each([
+    { gap: 550, instant: true },
+    { gap: 1_000, instant: false },
+  ])(
+    'a cancel after $gap ms returns the one cancel text and runs nothing',
+    async ({ gap, instant }) => {
+      const h = await setup();
+      const result = await resume(h, name, 'cancel', gap);
+      expectTerminalResult(result, 'cancelled', cancelledMessage[name]);
+      expect(inputResponseFacts(h)).toEqual([
+        {
+          kind: 'input_response',
+          feature: feature[name],
+          action: 'cancel',
+          elapsed_ms: gap,
+          ...(instant ? { instant: true } : {}),
+        },
+      ]);
+      expect(h.attempts.at(-1)!.ends).toEqual([
+        expect.objectContaining({ result: 'cancelled' }),
+      ]);
+      expectNothingRan(h);
+    }
+  );
 });
 
 // Regression: an off-by-one threshold (<= 1000 or < 999), `instant` set on a
@@ -298,7 +275,7 @@ test.each([
   'execute_sql $action after $gap ms records elapsed_ms (instant=$instant)',
   async ({ action, gap, instant }) => {
     const h = await setup();
-    const result = await resume(h, 'execute_sql', action, gap);
+    await resume(h, 'execute_sql', action, gap);
     expect(inputResponseFacts(h)).toEqual([
       {
         kind: 'input_response',
@@ -308,27 +285,9 @@ test.each([
         ...(instant ? { instant: true } : {}),
       },
     ]);
-    // The 1000 ms normal-cancel text and nothing-ran checks live in the
-    // five-tool test above.
-    if (instant) {
-      expect(text(result)).toBe(
-        'The client cancelled this confirmation about 1.0 s after it was sent, faster than a person could answer, so it likely never showed you a prompt. The SQL was not run.'
-      );
-      expectNothingRan(h);
-    }
+    if (action !== 'accept') expectNothingRan(h);
   }
 );
-
-// Regression: seconds rounded up (Math.ceil) instead of to the nearest 0.1;
-// 949 ms must read 0.9. Truncation (Math.floor) is caught by the 550 ms rows
-// (0.5 instead of 0.6) and the 999 ms row (0.9 instead of 1.0).
-test('instant cancel after 949 ms reports 0.9 s', async () => {
-  const h = await setup();
-  const result = await resume(h, 'execute_sql', 'cancel', 949);
-  expect(text(result)).toBe(
-    'The client cancelled this confirmation about 0.9 s after it was sent, faster than a person could answer, so it likely never showed you a prompt. The SQL was not run.'
-  );
-});
 
 // Regression: the gap is sampled after the resume's platform reads instead of
 // when the request reaches the tool, so a slow organization/project lookup
@@ -338,18 +297,9 @@ test('create_project measures the gap at handler entry, before platform reads', 
   const h = await setup();
   const first = issued(await h.call('create_project'));
   h.delayReads(600);
-  const result = await resume(
-    h,
-    'create_project',
-    'cancel',
-    550,
-    first.requestState
-  );
+  await resume(h, 'create_project', 'cancel', 550, first.requestState);
   // Precondition: the resume did read the platform, so the clock moved on.
   expect(Date.now()).toBeGreaterThanOrEqual(1_893_456_001_400);
-  expect(text(result)).toBe(
-    'The client cancelled this confirmation about 0.6 s after it was sent, faster than a person could answer, so it likely never showed you a prompt. The project was not created.'
-  );
   expect(inputResponseFacts(h)).toEqual([
     {
       kind: 'input_response',
@@ -363,9 +313,9 @@ test('create_project measures the gap at handler entry, before platform reads', 
 });
 
 // Regression: a resume clocked before issuance (clock skew between servers)
-// is treated as instant because the gap is < 1000, or records a negative
-// elapsed_ms. Nothing else exercises a negative gap.
-test('a negative gap is a normal cancel without elapsed_ms', async () => {
+// is flagged instant because the gap is < 1000, records a negative
+// elapsed_ms, or gets a different text. Nothing else exercises a negative gap.
+test('a negative gap is a cancel without timing', async () => {
   const h = await setup();
   const first = issued(await h.call('execute_sql'));
   // Precondition: the state carries issued_at, so this exercises the negative
@@ -379,8 +329,7 @@ test('a negative gap is a normal cancel without elapsed_ms', async () => {
     -500,
     first.requestState
   );
-  expect(text(result)).toBe('SQL execution was cancelled.');
-  expect(result.structuredContent).toEqual({ status: 'cancelled' });
+  expectTerminalResult(result, 'cancelled', cancelledMessage.execute_sql);
   expect(inputResponseFacts(h)).toEqual([
     { kind: 'input_response', feature: 'destructive_sql', action: 'cancel' },
   ]);
@@ -388,11 +337,11 @@ test('a negative gap is a normal cancel without elapsed_ms', async () => {
 });
 
 // Regression: requestState minted before this change (no issued_at) is
-// rejected as "not issued" once the schema requires issued_at, or is treated
-// as instant (NaN/undefined gap). Re-signing with the real codec and the
-// server's key and binding reproduces an in-flight legacy state at the public
-// seam; no existing test does.
-test('a signed state without issued_at is a normal cancel without elapsed_ms', async () => {
+// rejected as "not issued" once the schema requires issued_at, is flagged
+// instant (NaN/undefined gap), or gets a different text. Re-signing with the
+// real codec and the server's key and binding reproduces an in-flight legacy
+// state at the public seam; no existing test does.
+test('a signed state without issued_at is a cancel without timing', async () => {
   const h = await setup();
   const first = issued(await h.call('execute_sql'));
   const { issued_at, ...legacy } = payload(first.requestState);
@@ -406,9 +355,7 @@ test('a signed state without issued_at is a normal cancel without elapsed_ms', a
   } as ServerContext);
 
   const result = await resume(h, 'execute_sql', 'cancel', 100, legacyState);
-  expect(text(result)).toBe('SQL execution was cancelled.');
-  expect(result.structuredContent).toEqual({ status: 'cancelled' });
-  expect(result.isError).not.toBe(true);
+  expectTerminalResult(result, 'cancelled', cancelledMessage.execute_sql);
   expect(inputResponseFacts(h)).toEqual([
     { kind: 'input_response', feature: 'destructive_sql', action: 'cancel' },
   ]);

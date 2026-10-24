@@ -4,6 +4,7 @@ import {
   type ServerContext,
 } from '@modelcontextprotocol/server';
 import { describe, expect, test } from 'vitest';
+import { expectTerminalResult } from '../../test/confirmation-results.js';
 
 import {
   checkConfirmationState,
@@ -146,18 +147,11 @@ describe('checkConfirmationState', () => {
       receivedAt: Date.now(),
     });
 
-    expect(result).toEqual({
-      kind: 'terminal',
-      result: {
-        content: [
-          {
-            type: 'text',
-            text: 'Request state was not issued for execute_sql.',
-          },
-        ],
-        structuredContent: { status: 'error' },
-        isError: true,
-      },
-    });
+    if (result.kind !== 'terminal') throw new Error('expected terminal');
+    expectTerminalResult(
+      result.result,
+      'error',
+      'Request state was not issued for execute_sql.'
+    );
   });
 });
