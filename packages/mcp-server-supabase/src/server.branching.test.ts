@@ -15,7 +15,6 @@ import {
 import {
   expectTerminalResult,
   freezeClock,
-  timedCancelledMessage,
 } from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, getBranchCost } from './pricing.js';
@@ -921,7 +920,7 @@ describe('tools', () => {
       expectTerminalResult(
         result,
         'cancelled',
-        timedCancelledMessage('0.0', 'create_branch')
+        "The client cancelled this confirmation 0.0 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically."
       );
       expect(mockBranches.size).toBe(0);
     });

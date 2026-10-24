@@ -14,11 +14,7 @@ import {
   issued,
   setup as setupObservation,
 } from '../test/observation-test-helpers.js';
-import {
-  cancelledMessage,
-  expectTerminalResult,
-  timedCancelledMessage,
-} from '../test/confirmation-results.js';
+import { expectTerminalResult } from '../test/confirmation-results.js';
 import { callModernTool } from '../test/server-harness.js';
 import type { ObservationEnd, ObservationFact } from './index.js';
 import type {
@@ -234,23 +230,29 @@ describe.each(tools)('%s confirmation requestState', (name) => {
     expect(payload(second.requestState).issued_at).toBe(1_893_456_005_250);
   });
 
-  // Regression: a tool's cancel message drops the timing sentence, states the
-  // wrong gap, switches wording at the 1000 ms instant threshold, gets another
-  // tool's text, drops the message from either result channel, mis-records
-  // the fact, or runs/creates something on a cancel.
+  // Regression: the cancel message drops the timing sentence, states the
+  // wrong gap, switches wording at the 1000 ms instant threshold, brings back
+  // a per-tool sentence instead of "Nothing was run.", drops the message from
+  // either result channel, mis-records the fact, or runs/creates something.
   test.each([
-    { gap: 550, seconds: '0.6', instant: true },
-    { gap: 1_000, seconds: '1.0', instant: false },
+    {
+      gap: 550,
+      instant: true,
+      message:
+        "The client cancelled this confirmation 0.6 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically.",
+    },
+    {
+      gap: 1_000,
+      instant: false,
+      message:
+        "The client cancelled this confirmation 1.0 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically.",
+    },
   ])(
-    'a cancel after $gap ms states $seconds s and runs nothing',
-    async ({ gap, seconds, instant }) => {
+    'a cancel after $gap ms states the gap and runs nothing',
+    async ({ gap, instant, message }) => {
       const h = await setup();
       const result = await resume(h, name, 'cancel', gap);
-      expectTerminalResult(
-        result,
-        'cancelled',
-        timedCancelledMessage(seconds, name)
-      );
+      expectTerminalResult(result, 'cancelled', message);
       expect(inputResponseFacts(h)).toEqual([
         {
           kind: 'input_response',
@@ -272,17 +274,29 @@ describe.each(tools)('%s confirmation requestState', (name) => {
 // fast decline/accept, or elapsed_ms dropped on non-cancel actions. These are
 // the shared threshold and observation contracts, so one tool covers them;
 // the 1000 ms side of the boundary lives in the five-tool test above.
-// The `seconds` rows catch rounding mistakes in the cancel message: 949 ms
+// The `message` rows catch rounding mistakes in the cancel message: 949 ms
 // reads 1.0 under Math.ceil, and 999 ms reads 0.9 under truncation or prints
 // `1` without the decimal. (550 ms reading 0.5 under floor is caught above.)
 test.each([
   { action: 'accept', gap: 999, instant: false },
   { action: 'decline', gap: 999, instant: false },
-  { action: 'cancel', gap: 949, instant: true, seconds: '0.9' },
-  { action: 'cancel', gap: 999, instant: true, seconds: '1.0' },
+  {
+    action: 'cancel',
+    gap: 949,
+    instant: true,
+    message:
+      "The client cancelled this confirmation 0.9 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically.",
+  },
+  {
+    action: 'cancel',
+    gap: 999,
+    instant: true,
+    message:
+      "The client cancelled this confirmation 1.0 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically.",
+  },
 ] as const)(
   'execute_sql $action after $gap ms records elapsed_ms (instant=$instant)',
-  async ({ action, gap, instant, seconds }) => {
+  async ({ action, gap, instant, message }) => {
     const h = await setup();
     const result = await resume(h, 'execute_sql', action, gap);
     expect(inputResponseFacts(h)).toEqual([
@@ -294,12 +308,8 @@ test.each([
         ...(instant ? { instant: true } : {}),
       },
     ]);
-    if (seconds !== undefined)
-      expectTerminalResult(
-        result,
-        'cancelled',
-        timedCancelledMessage(seconds, 'execute_sql')
-      );
+    if (message !== undefined)
+      expectTerminalResult(result, 'cancelled', message);
     if (action !== 'accept') expectNothingRan(h);
   }
 );
@@ -344,7 +354,11 @@ test('a negative gap is a cancel without timing', async () => {
     -500,
     first.requestState
   );
-  expectTerminalResult(result, 'cancelled', cancelledMessage.execute_sql);
+  expectTerminalResult(
+    result,
+    'cancelled',
+    "Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically."
+  );
   expect(inputResponseFacts(h)).toEqual([
     { kind: 'input_response', feature: 'destructive_sql', action: 'cancel' },
   ]);
@@ -370,7 +384,11 @@ test('a signed state without issued_at is a cancel without timing', async () => 
   } as ServerContext);
 
   const result = await resume(h, 'execute_sql', 'cancel', 100, legacyState);
-  expectTerminalResult(result, 'cancelled', cancelledMessage.execute_sql);
+  expectTerminalResult(
+    result,
+    'cancelled',
+    "Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically."
+  );
   expect(inputResponseFacts(h)).toEqual([
     { kind: 'input_response', feature: 'destructive_sql', action: 'cancel' },
   ]);

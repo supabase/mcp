@@ -9,7 +9,6 @@ import {
 import {
   expectTerminalResult,
   freezeClock,
-  timedCancelledMessage,
 } from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
@@ -908,7 +907,7 @@ describe('run_notebook', () => {
           action === 'decline' ? 'declined' : 'cancelled',
           action === 'decline'
             ? 'Notebook run was declined.'
-            : timedCancelledMessage('0.0', 'run_notebook')
+            : "The client cancelled this confirmation 0.0 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically."
         );
         expect(executeSql).not.toHaveBeenCalled();
       }
@@ -1263,7 +1262,7 @@ describe('run_notebook', () => {
           status,
           status === 'declined'
             ? 'Notebook run was declined.'
-            : timedCancelledMessage('0.0', 'run_notebook')
+            : "The client cancelled this confirmation 0.0 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically."
         );
         expect(executeSql).not.toHaveBeenCalled();
       }
