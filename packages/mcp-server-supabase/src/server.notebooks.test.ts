@@ -7,8 +7,9 @@ import {
   NOTEBOOKS_PAGE_SIZE,
 } from '../test/mocks.js';
 import {
-  cancelledMessage,
   expectTerminalResult,
+  freezeClock,
+  timedCancelledMessage,
 } from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
@@ -882,6 +883,7 @@ describe('run_notebook', () => {
             row_limit: 100,
           },
         ]);
+        freezeClock();
         const first = await callModernTool(client, {
           name: 'run_notebook',
           arguments: runArgs(project, notebook),
@@ -899,13 +901,14 @@ describe('run_notebook', () => {
         });
         if (isInputRequiredResult(result))
           throw new Error('expected a CallToolResult');
-        // Regression: the message is missing from either result channel.
+        // Regression: the message is missing from either result channel, or
+        // the cancel drops its timing sentence (0 ms gap, frozen clock).
         expectTerminalResult(
           result,
           action === 'decline' ? 'declined' : 'cancelled',
           action === 'decline'
             ? 'Notebook run was declined.'
-            : cancelledMessage.run_notebook
+            : timedCancelledMessage('0.0', 'run_notebook')
         );
         expect(executeSql).not.toHaveBeenCalled();
       }
@@ -1246,19 +1249,21 @@ describe('run_notebook', () => {
             row_limit: 100,
           },
         ]);
+        freezeClock();
 
         const result = await client.callTool({
           name: 'run_notebook',
           arguments: runArgs(project, notebook),
         });
 
-        // Regression: the message is missing from either result channel.
+        // Regression: the message is missing from either result channel, or
+        // the cancel drops its timing sentence (0 ms gap, frozen clock).
         expectTerminalResult(
           result,
           status,
           status === 'declined'
             ? 'Notebook run was declined.'
-            : cancelledMessage.run_notebook
+            : timedCancelledMessage('0.0', 'run_notebook')
         );
         expect(executeSql).not.toHaveBeenCalled();
       }

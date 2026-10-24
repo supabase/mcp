@@ -13,8 +13,9 @@ import {
   mockBranches,
 } from '../test/mocks.js';
 import {
-  cancelledMessage,
   expectTerminalResult,
+  freezeClock,
+  timedCancelledMessage,
 } from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, getBranchCost } from './pricing.js';
@@ -909,14 +910,19 @@ describe('tools', () => {
         organization_id: org.id,
       });
       project.status = 'ACTIVE_HEALTHY';
-
+      freezeClock();
       const result = await client.callTool({
         name: 'create_branch',
         arguments: { project_id: project.id, name: 'test-branch' },
       });
 
-      // Regression: the cancel message is missing from either result channel.
-      expectTerminalResult(result, 'cancelled', cancelledMessage.create_branch);
+      // Regression: the cancel message is missing from either result channel,
+      // or drops the timing sentence (0 ms gap under the frozen clock).
+      expectTerminalResult(
+        result,
+        'cancelled',
+        timedCancelledMessage('0.0', 'create_branch')
+      );
       expect(mockBranches.size).toBe(0);
     });
 

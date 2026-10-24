@@ -11,8 +11,9 @@ import {
   mockProjects,
 } from '../test/mocks.js';
 import {
-  cancelledMessage,
   expectTerminalResult,
+  freezeClock,
+  timedCancelledMessage,
 } from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, PROJECT_COST_MONTHLY } from './pricing.js';
@@ -859,7 +860,7 @@ describe('tools', () => {
         elicitationAction: 'cancel',
       });
       const { org } = await createOrganizationWithBillableNextProject();
-
+      freezeClock();
       const result = await client.callTool({
         name: 'create_project',
         arguments: {
@@ -869,11 +870,12 @@ describe('tools', () => {
         },
       });
 
-      // Regression: the cancel message is missing from either result channel.
+      // Regression: the cancel message is missing from either result channel,
+      // or drops the timing sentence (0 ms gap under the frozen clock).
       expectTerminalResult(
         result,
         'cancelled',
-        cancelledMessage.create_project
+        timedCancelledMessage('0.0', 'create_project')
       );
       expect(mockProjects.size).toBe(1);
     });
