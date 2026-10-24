@@ -226,15 +226,6 @@ const FEATURE = {
 // Telemetry only: marks `instant` on the input_response fact, never changes the result.
 const INSTANT_CANCEL_MS = 1000;
 
-/** First sentence of a cancel result: what did not happen. */
-const NOT_DONE = {
-  create_project: 'The project was not created.',
-  create_branch: 'The branch was not created.',
-  execute_sql: 'The SQL was not run.',
-  apply_migration: 'The migration was not applied.',
-  run_notebook: 'The notebook was not run.',
-} as const satisfies Record<ConfirmationState['tool'], string>;
-
 /** A terminal result carrying its message in both `content` and `structuredContent`. */
 function terminalResult(
   status: 'declined' | 'cancelled' | 'error',
@@ -378,7 +369,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
       kind: 'terminal',
       result: terminalResult(
         'cancelled',
-        `${timing}${NOT_DONE[tool]} If you didn't see a confirmation prompt, your client may have cancelled it automatically.`
+        `${timing}Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically.`
       ),
     };
   }
