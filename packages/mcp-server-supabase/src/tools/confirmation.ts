@@ -370,11 +370,15 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   }
 
   if (response.action !== 'accept') {
+    const timing =
+      elapsedMs === undefined
+        ? ''
+        : `The client cancelled this confirmation ${(Math.round(elapsedMs / 100) / 10).toFixed(1)} s after it was sent. `;
     return {
       kind: 'terminal',
       result: terminalResult(
         'cancelled',
-        `${NOT_DONE[tool]} If you didn't see a confirmation prompt, your client may have cancelled it automatically.`
+        `${timing}${NOT_DONE[tool]} If you didn't see a confirmation prompt, your client may have cancelled it automatically.`
       ),
     };
   }
