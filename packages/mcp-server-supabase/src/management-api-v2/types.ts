@@ -57,6 +57,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/projects/{ref}/backups/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Download project backup */
+        post: operations["v2-download-project-backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/projects/{ref}/branches": {
         parameters: {
             query?: never;
@@ -850,7 +867,7 @@ export interface components {
         ErrorResponseBodyAPIErrorObject: {
             id?: string;
             /** @enum {string} */
-            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
             message: string;
             description?: string;
             links?: {
@@ -1158,6 +1175,29 @@ export interface components {
                         /** Format: date-time */
                         observed_at?: string;
                     }[];
+                };
+            };
+        };
+        DownloadBackupBody: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "project_backup_file_url";
+                id: number;
+            };
+        };
+        DownloadBackupResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "project_backup_file_url";
+                id: number;
+                attributes: {
+                    file_url: string;
                 };
             };
         };
@@ -2216,7 +2256,7 @@ export interface components {
             error?: {
                 id?: string;
                 /** @enum {string} */
-                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
                 message: string;
                 description?: string;
                 links?: {
@@ -2799,6 +2839,77 @@ export interface operations {
             };
             /** @description Rate limit exceeded */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-download-project-backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DownloadBackupBody"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadBackupResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to download project backup */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

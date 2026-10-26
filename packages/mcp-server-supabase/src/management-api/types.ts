@@ -6812,6 +6812,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description API key not found for project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Rate limit exceeded */
             429: {
                 headers: {
@@ -6857,6 +6864,13 @@ export interface operations {
             };
             /** @description Forbidden action */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description API key not found for project */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6912,6 +6926,13 @@ export interface operations {
             };
             /** @description Forbidden action */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description API key not found for project */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
