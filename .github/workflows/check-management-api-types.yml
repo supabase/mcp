@@ -8,6 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
@@ -19,8 +20,20 @@ jobs:
       - name: Regenerate management API types
         run: pnpm --filter @supabase/mcp-server-supabase generate:management-api-types
       - name: Check for diff
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if ! git diff --exit-code packages/mcp-server-supabase/src/management-api/types.ts packages/mcp-server-supabase/src/management-api-v2/types.ts; then
             echo "Management API types are out of date. Run 'pnpm generate:management-api-types' to update."
+            echo 'Management API types are out of date. Run `pnpm generate:management-api-types` to update.' >> "$GITHUB_STEP_SUMMARY"
+            if pr_url=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" -f state=open -f "head=$GITHUB_REPOSITORY_OWNER:chore/regenerate-management-api-types" --jq '.[0].html_url // empty'); then
+              if [ -n "$pr_url" ]; then
+                echo "A [generated types update PR]($pr_url) is open. Check whether it includes these changes." >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "No generated types update PR is currently open." >> "$GITHUB_STEP_SUMMARY"
+              fi
+            else
+              echo "Could not look up the generated types update PR." >> "$GITHUB_STEP_SUMMARY"
+            fi
             exit 1
           fi
