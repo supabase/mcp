@@ -7,7 +7,12 @@ import {
 import { z } from 'zod/v4';
 import { ToolCallerError } from '../errors.js';
 import type { SecretOperations } from '../platform/types.js';
-import { isUrlCapable, type ElicitationState } from './confirmation.js';
+import {
+  ExpiredRequestState,
+  expiredResult,
+  isUrlCapable,
+  type ElicitationState,
+} from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
 
 const RESUME_WINDOW_SECONDS = 600;
@@ -145,7 +150,12 @@ export function getSecretTools({
             ),
           });
 
-        const state = ctx.mcpReq.requestState<ElicitationState>();
+        const state = ctx.mcpReq.requestState<
+          ElicitationState | ExpiredRequestState
+        >();
+        if (state instanceof ExpiredRequestState) {
+          return expiredResult('create_edge_function_secret', state);
+        }
         if (!state) {
           if (!isUrlCapable(ctx)) {
             return {

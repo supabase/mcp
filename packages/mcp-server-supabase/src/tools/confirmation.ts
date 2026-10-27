@@ -228,7 +228,7 @@ const INSTANT_CANCEL_MS = 1000;
 
 /** A terminal result carrying its message in both `content` and `structuredContent`. */
 function terminalResult(
-  status: 'declined' | 'cancelled' | 'error',
+  status: 'declined' | 'cancelled' | 'expired' | 'error',
   message: string,
   isError = false
 ): CallToolResult {
@@ -238,6 +238,32 @@ function terminalResult(
     structuredContent,
     ...(isError ? { isError: true } : {}),
   };
+}
+
+/**
+ * What the server's `requestState` verify hook returns in place of an
+ * authentic but expired token, so tools can answer with a tool error rather
+ * than the SDK's -32602. Carries no payload: the bind check never ran on it.
+ */
+export class ExpiredRequestState {
+  constructor(readonly ttlSeconds: number) {}
+}
+
+/** Terminal tool error for an expired `requestState`, naming the called tool. */
+export function expiredResult(
+  tool: string,
+  { ttlSeconds }: ExpiredRequestState
+): CallToolResult {
+  const [count, unit] =
+    ttlSeconds % 60 === 0
+      ? [ttlSeconds / 60, 'minute']
+      : [ttlSeconds, 'second'];
+  const lifetime = `${count} ${unit}${count === 1 ? '' : 's'}`;
+  return terminalResult(
+    'expired',
+    `This confirmation expired after ${lifetime}. Call \`${tool}\` again to get a new confirmation.`,
+    true
+  );
 }
 
 export async function checkConfirmationState<S extends ConfirmationState>(
@@ -285,6 +311,15 @@ export function inspectConfirmationState<S extends ConfirmationState>(
   const raw = ctx.mcpReq.requestState<unknown>();
   if (raw === undefined) {
     return { kind: 'reprompt', reason: 'initial' };
+  }
+
+  if (raw instanceof ExpiredRequestState) {
+    observation?.record({
+      kind: 'resume_validation',
+      feature,
+      result: 'expired',
+    });
+    return { kind: 'terminal', result: expiredResult(tool, raw) };
   }
 
   const parsed = schema.safeParse(raw);
