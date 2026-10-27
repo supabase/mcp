@@ -366,7 +366,7 @@ export function getNotebookTools({
           const notebook = await notebooks.getNotebook(project_id, notebook_id);
 
           if (notebook.updated_at !== expected_updated_at) {
-            throw new Error(
+            throw new ToolCallerError(
               `Notebook ${notebook_id} changed since ${expected_updated_at}; it was last updated at ${notebook.updated_at}. Call get_notebook again and retry run_notebook against the current content.`
             );
           }
@@ -407,7 +407,7 @@ export function getNotebookTools({
                 route: 'blocked',
                 reason: 'capability_missing',
               });
-              throw new Error(
+              throw new ToolCallerError(
                 'Notebook run requires confirmation, but this client does not support form elicitation. No cells were run. Use a client with form elicitation support or run in read-only mode.'
               );
             }
