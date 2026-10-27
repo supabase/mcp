@@ -457,9 +457,12 @@ describe('run_notebook', () => {
       },
     });
 
-    await expect(result).rejects.toThrow(
-      'Call get_notebook again and retry run_notebook'
-    );
+    await expect(result).rejects.toMatchObject({
+      name: 'ToolCallerError',
+      message: expect.stringContaining(
+        'Call get_notebook again and retry run_notebook'
+      ),
+    });
   });
 
   test('a log cell error reaches the reader and later cells still run', async () => {
@@ -825,10 +828,18 @@ describe('run_notebook', () => {
           name: 'run_notebook',
           arguments: runArgs(project, notebook),
         });
-        expect(result).toMatchObject({ isError: true });
-        expect(JSON.stringify(result)).toContain(
-          'does not support form elicitation'
-        );
+        if (isInputRequiredResult(result)) {
+          throw new Error('expected a CallToolResult');
+        }
+        expect(result.isError).toBe(true);
+        expect(parseToolResult(result)).toEqual({
+          error: {
+            name: 'ToolCallerError',
+            message: expect.stringContaining(
+              'does not support form elicitation'
+            ),
+          },
+        });
         expect(executeSql).not.toHaveBeenCalled();
         expect(queryLogs).not.toHaveBeenCalled();
       }
