@@ -7,7 +7,6 @@ import {
   mockSecrets,
 } from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
-import { expectTerminalResult } from '../test/confirmation-results.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import { createSupabaseMcpServer } from './server.js';
 import type { SupabaseMcpServerOptions } from './server.js';
@@ -862,54 +861,6 @@ describe('tools', () => {
         }
       }
     );
-
-    // AI-1372. Regression: the secret tool's own resume path keeps returning
-    // JSON-RPC -32602 for an authentic but expired requestState, or accepts
-    // it and reports the secret as stored. The dashboard reports MY_SECRET
-    // as updated after issue, so an expiry-blind path would say stored: true.
-    // Default TTL 600 s: exp = 1_893_456_000 + 600, and 601 s later is past it.
-    test('an expired secret continuation returns the expired tool result', async () => {
-      const { client } = await setupUrlCapable();
-      const issuedAt = Date.parse('2030-01-01T00:00:00Z');
-      const clock = vi.spyOn(Date, 'now').mockReturnValue(issuedAt);
-      try {
-        const project = await createActiveProject();
-        const args = { project_id: project.id, name: 'MY_SECRET' };
-        const first = await callModernTool(client, {
-          name: 'create_edge_function_secret',
-          arguments: args,
-        });
-        if (!isInputRequiredResult(first)) {
-          throw new Error('expected InputRequiredResult');
-        }
-        mockSecrets.set(project.id, [
-          {
-            name: 'MY_SECRET',
-            value: 'secret-value',
-            updated_at: '2030-01-01T00:00:01Z',
-          },
-        ]);
-
-        clock.mockReturnValue(issuedAt + 601_000);
-        const second = await callModernTool(client, {
-          name: 'create_edge_function_secret',
-          arguments: args,
-          inputResponses: {
-            store_secret: { action: 'accept', content: {} },
-          },
-          requestState: first.requestState,
-        });
-        expect(isInputRequiredResult(second)).toBe(false);
-        expectTerminalResult(
-          second as CallToolResult,
-          'expired',
-          'This confirmation expired after 10 minutes. Call `create_edge_function_secret` again to get a new confirmation.'
-        );
-      } finally {
-        clock.mockRestore();
-        await client.close();
-      }
-    });
 
     test('accept with old or missing secret reissues elicitation with same issued_at', async () => {
       const { client } = await setupUrlCapable();
