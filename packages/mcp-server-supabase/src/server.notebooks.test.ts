@@ -1819,7 +1819,19 @@ describe('create_notebook', () => {
     [
       401,
       { message: 'Unauthorized' },
+      'Error',
       'Unauthorized. Please provide a valid access token',
+    ],
+    [
+      403,
+      {
+        error: {
+          code: 'notebook_disabled',
+          message: "Notebooks aren't available for your account yet",
+        },
+      },
+      'ToolCallerError',
+      "Notebooks aren't available for your account yet",
     ],
     [
       403,
@@ -1829,10 +1841,17 @@ describe('create_notebook', () => {
           message: 'Insufficient notebook permissions',
         },
       },
+      'ToolCallerError',
       'Insufficient notebook permissions',
     ],
-    [500, {}, 'Failed to create notebook'],
-  ])('surfaces API errors (%s)', async (status, body, message) => {
+    [
+      500,
+      { error: { code: 'internal_server_error', message: 'Internal error' } },
+      'Error',
+      'Internal error',
+    ],
+    [500, {}, 'Error', 'Failed to create notebook'],
+  ])('surfaces API errors (%s %j)', async (status, body, name, message) => {
     const { callTool } = await setup({ features: ['notebooks'] });
     harness.mockServer!.use(
       http.post(`${API_URL}/v2/projects/:ref/notebooks`, () =>
@@ -1844,7 +1863,10 @@ describe('create_notebook', () => {
         name: 'create_notebook',
         arguments: { project_id: 'test-project', ...proposal },
       })
-    ).rejects.toThrow(message);
+    ).rejects.toMatchObject({
+      name,
+      message: expect.stringContaining(message),
+    });
   });
 
   test.each([false, true])(
