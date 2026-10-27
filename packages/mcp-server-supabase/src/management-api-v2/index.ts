@@ -9,6 +9,7 @@ import type {
   SuccessResponse as OpenApiSuccessResponse,
 } from 'openapi-typescript-helpers';
 import { z } from 'zod/v4';
+import { ToolCallerError } from '../errors.js';
 import type { paths } from './types.js';
 
 export function createManagementApiV2Client(
@@ -69,7 +70,11 @@ export function assertSuccessV2<
     const { data: errorContent } = errorSchema.safeParse(response.error);
 
     if (errorContent) {
-      throw new Error(errorContent.error.message);
+      const { message } = errorContent.error;
+      // A 4xx is the caller's request, like a notebook feature that isn't enabled for them.
+      throw response.response.status < 500
+        ? new ToolCallerError(message)
+        : new Error(message);
     }
 
     throw new Error(fallbackMessage);
