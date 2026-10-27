@@ -1,14 +1,19 @@
 import {
   inputRequired,
+  type CallToolResult,
+  type InputRequiredResult,
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
+import type { ToolObservation, ToolOutcome } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
 import {
   advisorySchema,
   buildRlsDisabledAdvisory,
   selectAdvisory,
 } from '../advisories/index.js';
+import { ToolCallerError } from '../errors.js';
+import type { ObservationFact } from '../observation.js';
 import { listExtensionsSql, listTablesSql } from '../pg-meta/index.js';
 import {
   postgresExtensionSchema,
@@ -20,10 +25,13 @@ import { hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
   applyMigrationStateSchema,
+  type ConfirmationStateOptions,
+  type DestructiveSqlState,
   inspectConfirmationState,
   type ElicitationState,
   executeSqlStateSchema,
   isFormCapable,
+  observeOperation,
 } from './confirmation.js';
 import { isDestructiveSql } from './destructive-sql.js';
 import {
@@ -41,6 +49,70 @@ type DatabaseOperationToolsOptions = {
     enabledTools: readonly ('execute_sql' | 'apply_migration')[];
   };
 };
+
+async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
+  query: string,
+  options: ConfirmationStateOptions<S> & {
+    askForConfirmation: () => Promise<InputRequiredResult>;
+  }
+): Promise<CallToolResult | InputRequiredResult | undefined> {
+  const { observation, askForConfirmation } = options;
+  const record = observation?.record;
+  // State facts and outcome count only when the inspected decision applies.
+  const stagedFacts: ObservationFact[] | undefined = observation
+    ? []
+    : undefined;
+  let stagedOutcome: ToolOutcome | undefined;
+  const confirmationState = inspectConfirmationState({
+    ...options,
+    observation: stagedFacts
+      ? {
+          record: (fact) => stagedFacts.push(fact),
+          setOutcome: (outcome) => {
+            stagedOutcome = outcome;
+          },
+        }
+      : undefined,
+  });
+
+  if (confirmationState.kind !== 'proceed' && !isDestructiveSql(query)) {
+    record?.({
+      kind: 'confirmation_decision',
+      feature: 'destructive_sql',
+      route: 'bypass',
+      reason: 'not_destructive',
+    });
+    return;
+  }
+
+  if (stagedOutcome !== undefined) {
+    observation?.setOutcome(stagedOutcome);
+  }
+  record?.({
+    kind: 'confirmation_decision',
+    feature: 'destructive_sql',
+    route: 'inline',
+    reason: 'eligible',
+  });
+  if (record && stagedFacts) {
+    for (const fact of stagedFacts) {
+      record(fact);
+    }
+  }
+  if (confirmationState.kind === 'reprompt') {
+    const result = await askForConfirmation();
+    record?.({
+      kind: 'input_required',
+      feature: 'destructive_sql',
+      mode: 'form',
+      reason: confirmationState.reason,
+    });
+    return result;
+  }
+  if (confirmationState.kind === 'terminal') {
+    return confirmationState.result;
+  }
+}
 
 const listTablesInputSchema = z.object({
   project_id: z.string(),
@@ -390,15 +462,31 @@ export function getDatabaseTools({
     apply_migration: injectableTool({
       ...databaseToolDefs.apply_migration,
       inject: { project_id },
-      execute: async ({ project_id, name, query }, ctx: ServerContext) => {
+      execute: async (
+        { project_id, name, query },
+        ctx: ServerContext,
+        observation?: ToolObservation<ObservationFact>
+      ) => {
+        const receivedAt = Date.now();
+        const record = observation?.record;
         if (readOnly) {
-          throw new Error('Cannot apply migration in read-only mode.');
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'blocked',
+            reason: 'read_only',
+          });
+          throw new ToolCallerError(
+            'Cannot apply migration in read-only mode.'
+          );
         }
 
-        if (
-          confirmation?.enabledTools.includes('apply_migration') &&
-          isFormCapable(ctx)
-        ) {
+        let bypassReason: 'not_configured' | 'capability_missing' | undefined;
+        if (!confirmation?.enabledTools.includes('apply_migration')) {
+          bypassReason = 'not_configured';
+        } else if (!isFormCapable(ctx)) {
+          bypassReason = 'capability_missing';
+        } else {
           const { codec } = confirmation;
           const queryHash =
             ctx.mcpReq.requestState() === undefined
@@ -423,14 +511,16 @@ export function getDatabaseTools({
                   project_id,
                   name,
                   queryHash: queryHash ?? (await hashObject({ query })),
+                  issued_at: Date.now(),
                 },
                 ctx
               ),
             });
 
-          const confirmationState = inspectConfirmationState({
+          const gated = await checkDestructiveSqlConfirmation(query, {
             ctx,
             tool: 'apply_migration',
+            receivedAt,
             schema: applyMigrationStateSchema,
             requestKey: 'confirm_destructive',
             argsMatch: (state) =>
@@ -438,17 +528,26 @@ export function getDatabaseTools({
               state.name === name &&
               state.queryHash === queryHash,
             declinedText: 'Migration was declined.',
-            cancelledText: 'Migration was cancelled.',
+            observation,
+            askForConfirmation,
           });
 
-          if (confirmationState.kind !== 'proceed' && isDestructiveSql(query)) {
-            return confirmationState.kind === 'reprompt'
-              ? await askForConfirmation()
-              : confirmationState.result;
+          if (gated) {
+            return gated;
           }
         }
+        if (bypassReason) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'bypass',
+            reason: bypassReason,
+          });
+        }
 
-        await database.applyMigration(project_id, { name, query });
+        await observeOperation('destructive_sql', record, () =>
+          database.applyMigration(project_id, { name, query })
+        );
         return { success: true };
       },
     }),
@@ -459,12 +558,25 @@ export function getDatabaseTools({
         readOnlyHint: readOnly ?? false,
       },
       inject: { project_id },
-      execute: async ({ query, project_id }, ctx: ServerContext) => {
-        if (
-          !readOnly &&
-          confirmation?.enabledTools.includes('execute_sql') &&
-          isFormCapable(ctx)
-        ) {
+      execute: async (
+        { query, project_id },
+        ctx: ServerContext,
+        observation?: ToolObservation<ObservationFact>
+      ) => {
+        const receivedAt = Date.now();
+        const record = observation?.record;
+        let bypassReason:
+          | 'read_only'
+          | 'not_configured'
+          | 'capability_missing'
+          | undefined;
+        if (readOnly) {
+          bypassReason = 'read_only';
+        } else if (!confirmation?.enabledTools.includes('execute_sql')) {
+          bypassReason = 'not_configured';
+        } else if (!isFormCapable(ctx)) {
+          bypassReason = 'capability_missing';
+        } else {
           const { codec } = confirmation;
           const queryHash =
             ctx.mcpReq.requestState() === undefined
@@ -488,33 +600,44 @@ export function getDatabaseTools({
                   tool: 'execute_sql',
                   project_id,
                   queryHash: queryHash ?? (await hashObject({ query })),
+                  issued_at: Date.now(),
                 },
                 ctx
               ),
             });
 
-          const confirmationState = inspectConfirmationState({
+          const gated = await checkDestructiveSqlConfirmation(query, {
             ctx,
+            receivedAt,
             tool: 'execute_sql',
             schema: executeSqlStateSchema,
             requestKey: 'confirm_destructive',
             argsMatch: (state) =>
               state.project_id === project_id && state.queryHash === queryHash,
             declinedText: 'SQL execution was declined.',
-            cancelledText: 'SQL execution was cancelled.',
+            observation,
+            askForConfirmation,
           });
 
-          if (confirmationState.kind !== 'proceed' && isDestructiveSql(query)) {
-            return confirmationState.kind === 'reprompt'
-              ? await askForConfirmation()
-              : confirmationState.result;
+          if (gated) {
+            return gated;
           }
         }
+        if (bypassReason) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'destructive_sql',
+            route: 'bypass',
+            reason: bypassReason,
+          });
+        }
 
-        const result = await database.executeSql(project_id, {
-          query,
-          read_only: readOnly,
-        });
+        const result = await observeOperation('destructive_sql', record, () =>
+          database.executeSql(project_id, {
+            query,
+            read_only: readOnly,
+          })
+        );
 
         return {
           result: wrapWithUntrustedDataBoundary(result),

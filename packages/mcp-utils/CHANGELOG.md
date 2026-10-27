@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/supabase/mcp/compare/mcp-utils-v0.8.0...mcp-utils-v0.9.0) (2026-10-14)
+
+
+### Features
+
+* **mcp-utils:** add bounded request lifecycle observations ([#427](https://github.com/supabase/mcp/issues/427)) ([b11d62b](https://github.com/supabase/mcp/commit/b11d62baa265ca837b4583f7a1952acfc8692d04))
+
 ## [0.8.0](https://github.com/supabase/mcp/compare/mcp-utils-v0.7.0...mcp-utils-v0.8.0) (2026-09-04)
 
 

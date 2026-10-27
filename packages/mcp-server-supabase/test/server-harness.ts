@@ -30,13 +30,20 @@ type SetupOptions = {
   accessToken?: string;
   projectId?: string;
   platform?: SupabasePlatform;
+  clientInfo?: SupabaseMcpServerOptions['clientInfo'];
   readOnly?: boolean;
   features?: string[];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
+  observer?: SupabaseMcpServerOptions['observer'];
+  onToolCall?: SupabaseMcpServerOptions['onToolCall'];
   clientCapabilities?: ClientCapabilities;
 };
 
 type ModernSetupOptions = {
+  platform?: SupabasePlatform;
+  features?: string[];
+  observer?: SupabaseMcpServerOptions['observer'];
+  onToolCall?: SupabaseMcpServerOptions['onToolCall'];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
   clientCapabilities?: ClientCapabilities;
   readOnly?: boolean;
@@ -141,6 +148,9 @@ export function createServerHarness() {
       readOnly,
       features,
       elicitation,
+      clientInfo: options.clientInfo,
+      observer: options.observer,
+      onToolCall: options.onToolCall,
     }));
 
     await server.connect(serverTransport);
@@ -160,7 +170,9 @@ export function createServerHarness() {
       }
       const result = JSON.parse(textContent.text);
       if (output.isError) {
-        throw new Error(result.error.message);
+        throw Object.assign(new Error(result.error.message), {
+          name: result.error.name ?? 'Error',
+        });
       }
       return result;
     }
@@ -178,6 +190,7 @@ export function createServerHarness() {
             'create_branch',
             'execute_sql',
             'apply_migration',
+            'run_notebook',
           ],
         },
       },
@@ -186,11 +199,14 @@ export function createServerHarness() {
       elicitationAction,
       readOnly,
       projectId,
+      features,
     } = options;
-    const platform = createSupabaseApiPlatform({
-      accessToken: ACCESS_TOKEN,
-      apiUrl: API_URL,
-    });
+    const platform =
+      options.platform ??
+      createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      });
     // Modern requests do not perform an initialize handshake. Keep the
     // management API User-Agent initialization separate from client capabilities.
     await platform.init?.({
@@ -202,6 +218,9 @@ export function createServerHarness() {
       platform,
       projectId,
       readOnly,
+      features,
+      observer: options.observer,
+      onToolCall: options.onToolCall,
       elicitation: secretCollection
         ? { ...elicitation, secretCollection }
         : elicitation,

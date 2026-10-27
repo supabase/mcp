@@ -7,6 +7,7 @@ import {
   type DocumentNode,
 } from 'graphql';
 import { z } from 'zod/v4';
+import { ToolCallerError } from '../errors.js';
 
 export const graphqlRequestSchema = z.object({
   query: z.string(),
@@ -113,30 +114,30 @@ export class GraphQLClient {
     request: GraphQLRequest,
     options: QueryOptions = { validateSchema: false }
   ) {
+    let documentNode: DocumentNode;
     try {
-      // Check that this is a valid GraphQL query
-      const documentNode = parse(request.query);
-
-      // Validate the query against the schema if requested
-      if (options.validateSchema) {
-        const { schema } = await this.schemaLoaded;
-        const errors = validate(schema, documentNode);
-        if (errors.length > 0) {
-          throw new Error(
-            `Invalid GraphQL query: ${errors.map((e) => e.message).join(', ')}`
-          );
-        }
-      }
-
-      return this.#query(request);
+      documentNode = parse(request.query);
     } catch (error) {
-      // Make it obvious that this is a GraphQL error
       if (error instanceof GraphQLError) {
-        throw new Error(`Invalid GraphQL query: ${error.message}`);
+        throw new ToolCallerError(`Invalid GraphQL query: ${error.message}`, {
+          cause: error,
+        });
       }
-
       throw error;
     }
+
+    if (options.validateSchema) {
+      // Schema load failures are server faults, so they stay unbranded.
+      const { schema } = await this.schemaLoaded;
+      const errors = validate(schema, documentNode);
+      if (errors.length > 0) {
+        throw new ToolCallerError(
+          `Invalid GraphQL query: ${errors.map((e) => e.message).join(', ')}`
+        );
+      }
+    }
+
+    return this.#query(request);
   }
 
   /**

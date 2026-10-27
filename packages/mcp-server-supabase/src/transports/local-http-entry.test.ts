@@ -24,6 +24,7 @@ import {
   API_URL,
   createOrganization,
   createProject,
+  createProjectFixture,
   MCP_CLIENT_NAME,
   MCP_CLIENT_VERSION,
   mockBranches,
@@ -867,6 +868,166 @@ describe('startLocalHttpEntry', () => {
     );
     const again = await client.listTools();
     expect(again.tools).toEqual(tools);
+  });
+
+  test.each(['', 'execute_sql', 'run_notebook'])(
+    'notebook run confirmation respects HTTP skip_elicitations=%j',
+    async (skip) => {
+      const skipped = skip === 'run_notebook';
+      const { project } = await createProjectFixture();
+      await project.db.exec('create table films (id int)');
+      const notebook = project.createNotebook({
+        name: 'HTTP execution',
+        content: {
+          schema_version: 1,
+          cells: [
+            {
+              id: 'first',
+              type: 'database',
+              sql: 'create table notebook_probe (id int)',
+              row_limit: 100,
+            },
+            {
+              id: 'last',
+              type: 'database',
+              sql: 'drop table films',
+              row_limit: 100,
+            },
+          ],
+        },
+      });
+      const client = await connect(
+        { pin: MODERN_PROTOCOL_VERSION },
+        `project_ref=${project.id}&features=notebooks,database&skip_elicitations=${skip}`,
+        {
+          capabilities: { elicitation: { form: {} } },
+          inputRequired: { autoFulfill: false },
+        }
+      );
+      const result = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'run_notebook',
+            arguments: {
+              notebook_id: notebook.id,
+              expected_updated_at: notebook.attributes.updated_at,
+            },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+      expect(isInputRequiredResult(result)).toBe(!skipped);
+      if (!isInputRequiredResult(result)) {
+        expect(result.isError).toBeFalsy();
+      }
+      expect(
+        (
+          await project.db.query(
+            "select to_regclass('public.notebook_probe') as name"
+          )
+        ).rows
+      ).toEqual([{ name: skipped ? 'notebook_probe' : null }]);
+      expect(
+        (await project.db.query("select to_regclass('public.films') as name"))
+          .rows
+      ).toEqual([{ name: skipped ? null : 'films' }]);
+    }
+  );
+
+  test('a green API URL sends notebook confirmation and create links to the green dashboard', async () => {
+    await entry.close();
+    entry = await startEntry({ apiUrl: 'https://api.supabase.green' });
+    const { project } = await createProjectFixture();
+    const notebook = project.createNotebook({
+      name: 'Green notebook',
+      content: {
+        schema_version: 1,
+        cells: [
+          {
+            id: 'update',
+            type: 'database',
+            sql: "update films set title = 'x' where id = 1",
+            row_limit: 100,
+          },
+        ],
+      },
+    });
+    mockServer.use(
+      http.get(
+        'https://api.supabase.green/v2/projects/:ref/notebooks/:id',
+        () =>
+          HttpResponse.json({
+            data: {
+              type: 'notebook',
+              id: notebook.id,
+              attributes: { ...notebook.attributes, content: notebook.content },
+            },
+          })
+      ),
+      http.post('https://api.supabase.green/v2/projects/:ref/notebooks', () =>
+        HttpResponse.json({
+          data: {
+            type: 'notebook',
+            id: notebook.id,
+            attributes: { ...notebook.attributes, content: notebook.content },
+          },
+        })
+      )
+    );
+    const client = await connect(
+      { pin: MODERN_PROTOCOL_VERSION },
+      `project_ref=${project.id}&features=notebooks&read_only=false`,
+      {
+        capabilities: { elicitation: { form: {} } },
+        inputRequired: { autoFulfill: false },
+      }
+    );
+
+    const result = (await client.request(
+      {
+        method: 'tools/call',
+        params: {
+          name: 'run_notebook',
+          arguments: {
+            notebook_id: notebook.id,
+            expected_updated_at: notebook.attributes.updated_at,
+          },
+        },
+      },
+      { allowInputRequired: true }
+    )) as CallToolResult | InputRequiredResult;
+
+    if (!isInputRequiredResult(result)) {
+      throw new Error('expected notebook confirmation');
+    }
+    const params = result.inputRequests?.confirm_run?.params;
+    if (!params || !('message' in params)) {
+      throw new Error('expected form confirmation');
+    }
+    expect(params.message.split('\n').at(-1)).toBe(
+      `Run notebook? https://supabase.green/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`
+    );
+    const created = toolOutput(
+      await client.callTool({
+        name: 'create_notebook',
+        arguments: {
+          name: 'Green notebook',
+          content: {
+            cells: [
+              {
+                type: 'database',
+                sql: "update films set title = 'x' where id = 1",
+                row_limit: 100,
+              },
+            ],
+          },
+        },
+      })
+    );
+    expect(created.url).toBe(
+      `https://supabase.green/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`
+    );
   });
 
   test.each(['', ' , '])(

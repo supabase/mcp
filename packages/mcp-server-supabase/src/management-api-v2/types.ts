@@ -57,6 +57,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/projects/{ref}/backups/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Download project backup */
+        post: operations["v2-download-project-backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/projects/{ref}/branches": {
         parameters: {
             query?: never;
@@ -850,7 +867,7 @@ export interface components {
         ErrorResponseBodyAPIErrorObject: {
             id?: string;
             /** @enum {string} */
-            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
             message: string;
             description?: string;
             links?: {
@@ -1118,7 +1135,7 @@ export interface components {
                 attributes: {
                     lints: {
                         /** @enum {string} */
-                        name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high";
+                        name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "realtime_authorization_timeouts" | "realtime_postgres_changes_spike";
                     }[];
                 };
             } & {
@@ -1135,7 +1152,7 @@ export interface components {
                 attributes: {
                     lints: {
                         /** @enum {string} */
-                        name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "project_not_active" | "advisor_check_unavailable";
+                        name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "realtime_authorization_timeouts" | "realtime_postgres_changes_spike" | "project_not_active" | "advisor_check_unavailable";
                         title: string;
                         /** @enum {string} */
                         level: "ERROR" | "WARN" | "INFO";
@@ -1158,6 +1175,29 @@ export interface components {
                         /** Format: date-time */
                         observed_at?: string;
                     }[];
+                };
+            };
+        };
+        DownloadBackupBody: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "project_backup_file_url";
+                id: number;
+            };
+        };
+        DownloadBackupResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "project_backup_file_url";
+                id: number;
+                attributes: {
+                    file_url: string;
                 };
             };
         };
@@ -1281,6 +1321,8 @@ export interface components {
                         postgres_settings: {
                             effective_cache_size?: string;
                             logical_decoding_work_mem?: string;
+                            autovacuum_max_workers?: number;
+                            autovacuum_work_mem?: string;
                             /** @description Default unit: ms */
                             log_autovacuum_min_duration?: string;
                             log_checkpoints?: boolean;
@@ -1323,6 +1365,8 @@ export interface components {
                             checkpoint_timeout?: string;
                             hot_standby_feedback?: boolean;
                             cron_log_statement?: boolean;
+                            pg_net_batch_size?: number;
+                            pg_stat_statements_max?: number;
                         };
                     };
                     pooler: {
@@ -2212,7 +2256,7 @@ export interface components {
             error?: {
                 id?: string;
                 /** @enum {string} */
-                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
                 message: string;
                 description?: string;
                 links?: {
@@ -2451,7 +2495,7 @@ export interface components {
         APIErrorObject: {
             id?: string;
             /** @enum {string} */
-            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
             message: string;
             description?: string;
             links?: {
@@ -2795,6 +2839,77 @@ export interface operations {
             };
             /** @description Rate limit exceeded */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-download-project-backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DownloadBackupBody"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadBackupResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to download project backup */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3985,7 +4100,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponseBody"];
                 };
             };
-            /** @description This feature requires the Enterprise organization plan. */
+            /** @description This feature requires the Team, or Enterprise organization plan. */
             402: {
                 headers: {
                     [name: string]: unknown;
@@ -4105,7 +4220,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponseBody"];
                 };
             };
-            /** @description This feature requires the Enterprise organization plan. */
+            /** @description This feature requires the Team, or Enterprise organization plan. */
             402: {
                 headers: {
                     [name: string]: unknown;
@@ -4167,7 +4282,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponseBody"];
                 };
             };
-            /** @description This feature requires the Enterprise organization plan. */
+            /** @description This feature requires the Team, or Enterprise organization plan. */
             402: {
                 headers: {
                     [name: string]: unknown;
@@ -4401,7 +4516,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -4705,7 +4820,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret: string;
                         };
@@ -4771,7 +4886,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -5066,7 +5181,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -5363,7 +5478,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -5697,7 +5812,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -6015,7 +6130,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret?: string;
                         };
@@ -6081,7 +6196,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -6404,15 +6519,38 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
                                  */
                                 attempt_timestamp: string;
+                                event: {
+                                    /**
+                                     * @description Webhook event type.
+                                     * @enum {string}
+                                     */
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
+                                    /** @description Final data sent to the consumer. */
+                                    payload: {
+                                        /**
+                                         * @description Organization slug
+                                         * @example tsrqponmlkjihgfedcba
+                                         */
+                                        organization_slug: string;
+                                        project_ref: string | null;
+                                    };
+                                    /**
+                                     * Format: date-time
+                                     * @description Timestamp of event publication.
+                                     */
+                                    timestamp: string;
+                                };
                             };
                         }[];
                         links: {
@@ -6713,7 +6851,7 @@ export interface operations {
                              * @description Webhook event type.
                              * @enum {string}
                              */
-                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                         };
                     };
                 };
@@ -7098,10 +7236,12 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
@@ -7112,7 +7252,7 @@ export interface operations {
                                      * @description Webhook event type.
                                      * @enum {string}
                                      */
-                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                                     /** @description Final data sent to the consumer. */
                                     payload: {
                                         /**
@@ -7735,7 +7875,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -8039,7 +8179,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret: string;
                         };
@@ -8105,7 +8245,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -8400,7 +8540,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -8697,7 +8837,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -9031,7 +9171,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -9349,7 +9489,7 @@ export interface operations {
                              */
                             custom_headers?: {
                                 [key: string]: string;
-                            } | null;
+                            };
                             /** @description Secret key to use when signing. All events will be signed according to the [Standard Webhooks](https://www.standardwebhooks.com/) specification. */
                             signing_secret?: string;
                         };
@@ -9415,7 +9555,7 @@ export interface operations {
                                  */
                                 custom_headers?: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 /**
                                  * Format: uuid
                                  * @description ID of the user who created the endpoint.
@@ -9738,15 +9878,38 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
                                  */
                                 attempt_timestamp: string;
+                                event: {
+                                    /**
+                                     * @description Webhook event type.
+                                     * @enum {string}
+                                     */
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
+                                    /** @description Final data sent to the consumer. */
+                                    payload: {
+                                        /**
+                                         * @description Organization slug
+                                         * @example tsrqponmlkjihgfedcba
+                                         */
+                                        organization_slug: string;
+                                        project_ref: string | null;
+                                    };
+                                    /**
+                                     * Format: date-time
+                                     * @description Timestamp of event publication.
+                                     */
+                                    timestamp: string;
+                                };
                             };
                         }[];
                         links: {
@@ -10047,7 +10210,7 @@ export interface operations {
                              * @description Webhook event type.
                              * @enum {string}
                              */
-                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                            type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                         };
                     };
                 };
@@ -10432,10 +10595,12 @@ export interface operations {
                                 /** @description HTTP headers of the response, `{}` if unavailable. */
                                 response_headers: {
                                     [key: string]: string;
-                                } | null;
+                                };
                                 response_body: ({
                                     [key: string]: string;
                                 } | string) | null;
+                                error_code: string | null;
+                                error_message: string | null;
                                 /**
                                  * Format: date-time
                                  * @description Timestamp of the attempt.
@@ -10446,7 +10611,7 @@ export interface operations {
                                      * @description Webhook event type.
                                      * @enum {string}
                                      */
-                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded" | "project.v1.paused" | "project.v1.created" | "project.v1.restored" | "project.v1.transferred" | "project.v1.removed" | "project.v1.restarted" | "project.v1.status.changed" | "project.v1.backup.started" | "project.v1.branch.created" | "project.v1.branch.updated" | "project.v1.branch.removed" | "organization.v1.member.invitation.created" | "organization.v1.member.invitation.canceled" | "organization.v1.member.added" | "organization.v1.member.removed" | "organization.v1.member.role.assigned" | "organization.v1.member.role.removed" | "organization.v1.member.role.updated" | "organization.v1.billing.plan.upgraded" | "organization.v1.billing.plan.downgraded" | "project.v1.branch.deleted";
+                                    type: "v1.project.paused" | "v1.project.created" | "v1.project.restored" | "v1.project.transferred" | "v1.project.removed" | "v1.project.restarted" | "v1.project.status.changed" | "v1.project.backup.started" | "v1.project.branch.created" | "v1.project.branch.updated" | "v1.project.branch.removed" | "v1.organization.member.invitation.created" | "v1.organization.member.invitation.canceled" | "v1.organization.member.added" | "v1.organization.member.removed" | "v1.organization.member.role.assigned" | "v1.organization.member.role.removed" | "v1.organization.member.role.updated" | "v1.organization.billing.plan.upgraded" | "v1.organization.billing.plan.downgraded";
                                     /** @description Final data sent to the consumer. */
                                     payload: {
                                         /**

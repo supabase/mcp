@@ -1,4 +1,5 @@
 import { ACCESS_TOKEN, API_URL, createProjectFixture } from '../test/mocks.js';
+import { expectTerminalResult } from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabaseMcpServerOptions } from './server.js';
@@ -325,6 +326,41 @@ describe('tools', () => {
         target_columns: ['y', 'x'],
       })
     );
+  });
+
+  test('primary_keys follows key order and excludes INCLUDE columns', async () => {
+    const { callTool } = await setup();
+
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    await project.db.exec(`
+      create table membership (
+        org_id int not null,
+        user_id int not null,
+        primary key (user_id, org_id)
+      );
+      create table inc (a int not null, b int not null);
+      create unique index inc_pk_idx on inc (a) include (b);
+      alter table inc add constraint inc_pk primary key using index inc_pk_idx;
+    `);
+
+    const result = await callTool({
+      name: 'list_tables',
+      arguments: {
+        project_id: project.id,
+        schemas: ['public'],
+        verbose: true,
+      },
+    });
+
+    const primaryKeys = (name: string) =>
+      result.tables.find((t: { name: string }) => t.name === name).primary_keys;
+
+    expect(primaryKeys('public.membership')).toEqual(['user_id', 'org_id']);
+    expect(primaryKeys('public.inc')).toEqual(['a']);
   });
 
   test('single-column FK is represented with one-element arrays', async () => {
@@ -1152,9 +1188,16 @@ describe('tools', () => {
 
         const enabledResult = await client.callTool(toolCalls[enabledTool]);
 
-        expect(enabledResult.structuredContent).toEqual({
-          status: 'declined',
-        });
+        // Regression: the decline message is missing from either result
+        // channel, or names the other SQL tool.
+        expectTerminalResult(
+          enabledResult,
+          'declined',
+          {
+            execute_sql: 'SQL execution was declined.',
+            apply_migration: 'Migration was declined.',
+          }[enabledTool]
+        );
         expect(operations[enabledTool]).not.toHaveBeenCalled();
 
         await client.callTool(toolCalls[disabledTool]);
@@ -1194,7 +1237,8 @@ describe('tools', () => {
         arguments: { project_id: project.id, query: 'drop table films;' },
       });
 
-      expect(result.structuredContent).toEqual({ status: 'declined' });
+      // Regression: the decline message is missing from either result channel.
+      expectTerminalResult(result, 'declined', 'SQL execution was declined.');
       expect(executeSql).not.toHaveBeenCalled();
     });
 
@@ -1221,7 +1265,8 @@ describe('tools', () => {
           'select to_jsonb(films) as film from films'
         );
         expect(rows).toEqual([{ film: { id: 1, title: 'Alien' } }]);
-        expect(result.structuredContent).toEqual({ status: 'declined' });
+        // Regression: the decline message is missing from either result channel.
+        expectTerminalResult(result, 'declined', 'SQL execution was declined.');
       } finally {
         await client.close();
         await project.destroy();
@@ -1261,12 +1306,12 @@ describe('tools', () => {
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
       }
-      expect(second.content).toContainEqual({
-        type: 'text',
-        text: 'Request state arguments do not match the current arguments.',
-      });
-      expect(second.structuredContent).toEqual({ status: 'error' });
-      expect(second.isError).toBe(true);
+      // Regression: the mismatch error is missing from either result channel.
+      expectTerminalResult(
+        second,
+        'error',
+        'Request state arguments do not match the current arguments.'
+      );
       expect(executeSql).not.toHaveBeenCalled();
     });
 
@@ -1357,7 +1402,8 @@ describe('tools', () => {
         },
       });
 
-      expect(result.structuredContent).toEqual({ status: 'declined' });
+      // Regression: the decline message is missing from either result channel.
+      expectTerminalResult(result, 'declined', 'Migration was declined.');
       expect(applyMigration).not.toHaveBeenCalled();
     });
 
@@ -1396,12 +1442,12 @@ describe('tools', () => {
       if (isInputRequiredResult(second)) {
         throw new Error('expected a CallToolResult');
       }
-      expect(second.content).toContainEqual({
-        type: 'text',
-        text: 'Request state arguments do not match the current arguments.',
-      });
-      expect(second.structuredContent).toEqual({ status: 'error' });
-      expect(second.isError).toBe(true);
+      // Regression: the mismatch error is missing from either result channel.
+      expectTerminalResult(
+        second,
+        'error',
+        'Request state arguments do not match the current arguments.'
+      );
       expect(applyMigration).not.toHaveBeenCalled();
     });
 
