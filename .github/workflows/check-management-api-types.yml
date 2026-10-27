@@ -28,7 +28,7 @@ jobs:
             echo "Management API types are out of date. See the job summary for the update PR."
             echo '## Management API types are out of date' >> "$GITHUB_STEP_SUMMARY"
             echo >> "$GITHUB_STEP_SUMMARY"
-            if pr_url=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" -f state=open -f "head=$GITHUB_REPOSITORY_OWNER:chore/link-management-types-pr" --jq '.[0].html_url // empty'); then
+            if pr_url=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" -f state=open -f "head=$GITHUB_REPOSITORY_OWNER:chore/regenerate-management-api-types" --jq '.[0].html_url // empty'); then
               if [ -n "$pr_url" ]; then
                 echo "Generated types update PR [#${pr_url##*/}]($pr_url) is open. Check that it includes these changes, then merge it and update your branch." >> "$GITHUB_STEP_SUMMARY"
               else
