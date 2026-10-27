@@ -30,7 +30,7 @@ jobs:
               if [ -n "$pr_url" ]; then
                 echo "A [generated types update PR]($pr_url) is open. Check whether it includes these changes." >> "$GITHUB_STEP_SUMMARY"
               else
-                echo "No generated types update PR is currently open." >> "$GITHUB_STEP_SUMMARY"
+                echo "No generated types update PR is currently open. You can [run the sync workflow]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/sync-management-api-types.yml)." >> "$GITHUB_STEP_SUMMARY"
               fi
             else
               echo "Could not look up the generated types update PR." >> "$GITHUB_STEP_SUMMARY"
