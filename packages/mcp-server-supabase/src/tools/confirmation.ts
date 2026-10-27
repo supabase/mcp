@@ -6,7 +6,7 @@ import {
   type InputRequiredResult,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import type { ToolObservation } from '@supabase/mcp-utils';
+import type { Tool, ToolObservation } from '@supabase/mcp-utils';
 import type { ConfirmationFeature, ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { BranchCost, Cost } from '../pricing.js';
@@ -228,7 +228,7 @@ const INSTANT_CANCEL_MS = 1000;
 
 /** A terminal result carrying its message in both `content` and `structuredContent`. */
 function terminalResult(
-  status: 'declined' | 'cancelled' | 'error',
+  status: 'declined' | 'cancelled' | 'expired' | 'error',
   message: string,
   isError = false
 ): CallToolResult {
@@ -237,6 +237,53 @@ function terminalResult(
     content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
     structuredContent,
     ...(isError ? { isError: true } : {}),
+  };
+}
+
+/**
+ * What the server's `requestState` verify hook returns in place of an
+ * authentic but expired token, so tools can answer with a tool error rather
+ * than the SDK's -32602. Carries no payload: the bind check never ran on it.
+ */
+export class ExpiredRequestState {
+  constructor(readonly ttlSeconds: number) {}
+}
+
+/**
+ * Wraps a tool that resumes signed state so an expired `requestState` gets a
+ * terminal tool error before any of the tool's routing, capability checks or
+ * platform reads. Nothing runs and the payload is never read.
+ */
+export function stopExpiredState<T extends Tool<any, any, ObservationFact>>(
+  name: string,
+  tool: T
+): T {
+  return {
+    ...tool,
+    execute: async (args, ctx, observation) => {
+      const state = ctx.mcpReq.requestState<unknown>();
+      if (!(state instanceof ExpiredRequestState)) {
+        return tool.execute(args, ctx, observation);
+      }
+      if (name in FEATURE) {
+        observation?.record({
+          kind: 'resume_validation',
+          feature: FEATURE[name as keyof typeof FEATURE],
+          result: 'expired',
+        });
+      }
+      const { ttlSeconds } = state;
+      const [count, unit] =
+        ttlSeconds % 60 === 0
+          ? [ttlSeconds / 60, 'minute']
+          : [ttlSeconds, 'second'];
+      const lifetime = `${count} ${unit}${count === 1 ? '' : 's'}`;
+      return terminalResult(
+        'expired',
+        `This confirmation expired after ${lifetime}. Call \`${name}\` again to get a new confirmation.`,
+        true
+      );
+    },
   };
 }
 

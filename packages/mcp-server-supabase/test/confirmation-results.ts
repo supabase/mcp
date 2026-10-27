@@ -11,17 +11,17 @@ export function freezeClock() {
 }
 
 /**
- * Asserts a terminal confirmation result (decline, cancel, or a state error):
- * `structuredContent` is `{ status, message }` and `content` is exactly one
- * text block holding that object's JSON. Errors set `isError`; decline and
- * cancel don't.
+ * Asserts a terminal confirmation result (decline, cancel, expiry, or a state
+ * error): `structuredContent` is `{ status, message }` and `content` is
+ * exactly one text block holding that object's JSON. Errors and expiry set
+ * `isError`; decline and cancel don't.
  *
  * Regression: the two channels drift apart, so a client that reads only one
  * of them (Claude Code showed just `{"status":"cancelled"}`) loses the message.
  */
 export function expectTerminalResult(
   result: { structuredContent?: unknown; content?: unknown; isError?: unknown },
-  status: 'declined' | 'cancelled' | 'error',
+  status: 'declined' | 'cancelled' | 'expired' | 'error',
   message: string
 ) {
   const { structuredContent, content, isError } = result;
@@ -29,6 +29,6 @@ export function expectTerminalResult(
   expect(content).toEqual([
     { type: 'text', text: JSON.stringify(structuredContent) },
   ]);
-  if (status === 'error') expect(isError).toBe(true);
+  if (status === 'error' || status === 'expired') expect(isError).toBe(true);
   else expect(isError).not.toBe(true);
 }

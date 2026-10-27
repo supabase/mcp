@@ -483,6 +483,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/organizations/{slug}/maintenance/windows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List maintenance windows of an organization
+         * @description Returns the weekly maintenance window for each region, with the open occurrence and the next five.
+         */
+        get: operations["v2-list-organization-maintenance-windows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/projects/{ref}/webhooks/endpoints": {
         parameters: {
             query?: never;
@@ -2492,6 +2512,62 @@ export interface components {
                 last?: string | null;
             };
         };
+        V2ListMaintenanceWindowsResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "maintenance_window";
+                /**
+                 * @description AWS region.
+                 * @example us-east-1
+                 */
+                id: string;
+                attributes: {
+                    window: {
+                        /**
+                         * @description UTC day the window starts.
+                         * @enum {string}
+                         */
+                        day: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+                        /**
+                         * @description UTC start time.
+                         * @example 06:00
+                         */
+                        start_utc: string;
+                        /** @example 120 */
+                        duration_minutes: number;
+                    };
+                    /** @description The open occurrence, or null when the window is closed. */
+                    current_window: {
+                        /**
+                         * Format: date-time
+                         * @description Start of the occurrence, inclusive.
+                         */
+                        start_at: string;
+                        /**
+                         * Format: date-time
+                         * @description End of the occurrence, exclusive.
+                         */
+                        end_at: string;
+                    } | null;
+                    /** @description The next five occurrences that start after now, in order. */
+                    next_windows: {
+                        /**
+                         * Format: date-time
+                         * @description Start of the occurrence, inclusive.
+                         */
+                        start_at: string;
+                        /**
+                         * Format: date-time
+                         * @description End of the occurrence, exclusive.
+                         */
+                        end_at: string;
+                    }[];
+                };
+            }[];
+        };
         APIErrorObject: {
             id?: string;
             /** @enum {string} */
@@ -4422,6 +4498,64 @@ export interface operations {
             };
             /** @description Forbidden action */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-list-organization-maintenance-windows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Organization slug */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ListMaintenanceWindowsResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Organization not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -37,6 +37,7 @@ import {
   startLocalHttpEntry,
   type LocalHttpEntryOptions,
 } from './local-http-entry.js';
+import { expectTerminalResult } from '../../test/confirmation-results.js';
 
 // https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/
 const MODERN_PROTOCOL_VERSION = '2026-07-28';
@@ -567,28 +568,42 @@ describe('startLocalHttpEntry', () => {
     if (!isInputRequiredResult(secret)) {
       throw new Error('expected an input_required result');
     }
+    // AI-1372. Regression: shared HTTP state stops expiring after two minutes
+    // (the platform TTL is 120 s with URL-mode secret collection on), an
+    // expired continuation goes back to a JSON-RPC -32602, or the message
+    // states the SDK default lifetime instead of the configured one. Both
+    // continuations accept, so an expiry-blind path would create the branch.
     clock.mockReturnValue(now + 121_000);
-    for (const continuation of [
+    for (const { continuation, message } of [
       {
-        name: 'create_branch',
-        arguments: { project_id: project.id, name: 'feature' },
-        requestState: result.requestState,
-        inputResponses: { confirm_cost: { action: 'cancel' } },
+        continuation: {
+          name: 'create_branch',
+          arguments: { project_id: project.id, name: 'feature' },
+          requestState: result.requestState,
+          inputResponses: { confirm_cost: { action: 'accept', content: {} } },
+        },
+        message:
+          'This confirmation expired after 2 minutes. Call `create_branch` again to get a new confirmation.',
       },
       {
-        name: 'create_edge_function_secret',
-        arguments: { project_id: project.id, name: 'HTTP_SECRET' },
-        requestState: secret.requestState,
-        inputResponses: { store_secret: { action: 'cancel' } },
+        continuation: {
+          name: 'create_edge_function_secret',
+          arguments: { project_id: project.id, name: 'HTTP_SECRET' },
+          requestState: secret.requestState,
+          inputResponses: { store_secret: { action: 'accept', content: {} } },
+        },
+        message:
+          'This confirmation expired after 2 minutes. Call `create_edge_function_secret` again to get a new confirmation.',
       },
     ]) {
-      await expect(
-        client.request(
-          { method: 'tools/call', params: continuation },
-          { allowInputRequired: true }
-        )
-      ).rejects.toMatchObject({ code: -32602 });
+      const expired = (await client.request(
+        { method: 'tools/call', params: continuation },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+      expect(isInputRequiredResult(expired)).toBe(false);
+      expectTerminalResult(expired as CallToolResult, 'expired', message);
     }
+    expect(mockBranches.size).toBe(0);
   });
 
   test.each(['execute_sql', 'apply_migration'] as const)(
