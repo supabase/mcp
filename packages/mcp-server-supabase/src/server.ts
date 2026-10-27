@@ -26,6 +26,7 @@ import {
   ExpiredRequestState,
   isFormCapable,
   isUrlCapable,
+  stopExpiredState,
 } from './tools/confirmation.js';
 import { getDatabaseTools } from './tools/database-operation-tools.js';
 import { getDebuggingTools } from './tools/debugging-tools.js';
@@ -414,6 +415,18 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         secretTools.create_edge_function_secret.hidden =
           !ctx || !isUrlCapable(ctx);
         Object.assign(tools, secretTools);
+      }
+
+      // Every tool that resumes signed state answers an expired token first,
+      // before its own routing can ignore it.
+      for (const name of [
+        ...CURRENT_ELICITATION_TOOLS,
+        'create_edge_function_secret',
+      ]) {
+        const tool = tools[name];
+        if (tool) {
+          tools[name] = stopExpiredState(name, tool);
+        }
       }
 
       if (readOnly) {
