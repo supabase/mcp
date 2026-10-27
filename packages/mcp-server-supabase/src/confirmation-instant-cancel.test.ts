@@ -61,6 +61,21 @@ const feature = {
   create_branch: 'cost',
 } as const satisfies Record<Tool, ObservationFact['feature']>;
 
+// AI-1372: hand-written from the spec. The tool name is the one being
+// called; the lifetime is the default 600 s TTL.
+const expiredMessage = {
+  execute_sql:
+    'This confirmation expired after 10 minutes. Call `execute_sql` again to get a new confirmation.',
+  apply_migration:
+    'This confirmation expired after 10 minutes. Call `apply_migration` again to get a new confirmation.',
+  run_notebook:
+    'This confirmation expired after 10 minutes. Call `run_notebook` again to get a new confirmation.',
+  create_project:
+    'This confirmation expired after 10 minutes. Call `create_project` again to get a new confirmation.',
+  create_branch:
+    'This confirmation expired after 10 minutes. Call `create_branch` again to get a new confirmation.',
+} as const satisfies Record<Tool, string>;
+
 const args = {
   execute_sql: {
     project_id: projectId,
@@ -110,6 +125,8 @@ type Harness = {
   attempts: Array<{ facts: ObservationFact[]; ends: ObservationEnd[] }>;
   /** Every platform call that would run, apply or create something. */
   operations: unknown[];
+  /** The platform call each tool's accepted confirmation makes. */
+  operation: Record<Tool, unknown>;
   createBranch: unknown;
   setNow(value: number): void;
   /** Advance the clock by `ms` on every platform read from now on. */
@@ -120,7 +137,7 @@ type Harness = {
   ): Promise<CallToolResult | InputRequiredResult>;
 };
 
-async function setup(): Promise<Harness> {
+async function setup(options: { ttlSeconds?: number } = {}): Promise<Harness> {
   const fake = fakePlatform();
   let now = T0;
   let readDelay = 0;
@@ -151,7 +168,13 @@ async function setup(): Promise<Harness> {
     platform,
     features: ['account', 'branching', 'database', 'notebooks'],
     elicitation: {
-      requestState: { key: KEY, principal: PRINCIPAL },
+      requestState: {
+        key: KEY,
+        principal: PRINCIPAL,
+        ...(options.ttlSeconds === undefined
+          ? {}
+          : { ttlSeconds: options.ttlSeconds }),
+      },
       confirmation: { enabledTools: [...tools] },
     },
   });
@@ -164,6 +187,13 @@ async function setup(): Promise<Harness> {
       fake.createProject,
       fake.createBranch,
     ],
+    operation: {
+      execute_sql: platform.database.executeSql,
+      apply_migration: platform.database.applyMigration,
+      run_notebook: platform.database.executeSql,
+      create_project: fake.createProject,
+      create_branch: fake.createBranch,
+    },
     createBranch: fake.createBranch,
     setNow(value) {
       now = value;
@@ -268,6 +298,41 @@ describe.each(tools)('%s confirmation requestState', (name) => {
       expectNothingRan(h);
     }
   );
+
+  // AI-1372 (SU-519683). Regression: a resume whose requestState has a valid
+  // MAC but is past its expiry comes back as JSON-RPC -32602 again (the agent
+  // sees "Invalid or expired requestState" and can't tell the user why), or
+  // the operation runs anyway, or the message names the wrong tool or
+  // lifetime, or the `expired` validation fact is missing.
+  // Default TTL is 600 s; exp = floor(T0 / 1000) + 600, so T0 + 601 s is the
+  // first whole second the codec treats as expired.
+  test('an expired resume returns the expired tool result and runs nothing', async () => {
+    const h = await setup();
+    const result = await resume(h, name, 'accept', 601_000);
+    expectTerminalResult(result, 'expired', expiredMessage[name]);
+    expect(
+      h.attempts.at(-1)!.facts.filter((f) => f.kind === 'resume_validation')
+    ).toEqual([
+      { kind: 'resume_validation', feature: feature[name], result: 'expired' },
+    ]);
+    expectNothingRan(h);
+  });
+
+  // AI-1372. Regression: the fix rejects or reprompts a state that is still
+  // inside its TTL (e.g. compares in ms against a seconds `exp`, or uses a
+  // shorter TTL than the codec). Five minutes in is clearly inside the
+  // default 10-minute TTL, so this doesn't pin the SDK's boundary second.
+  test('a resume inside the TTL still runs the operation', async () => {
+    const h = await setup();
+    const result = await resume(h, name, 'accept', 300_000);
+    expect(result.isError).not.toBe(true);
+    expect(
+      h.attempts.at(-1)!.facts.filter((f) => f.kind === 'resume_validation')
+    ).toEqual([
+      { kind: 'resume_validation', feature: feature[name], result: 'valid' },
+    ]);
+    expect(h.operation[name]).toHaveBeenCalledTimes(1);
+  });
 });
 
 // Regression: an off-by-one threshold (<= 1000 or < 999), `instant` set on a
@@ -415,4 +480,59 @@ test('a changed-quote reprompt mints a fresh issued_at', async () => {
   );
   expect(payload(second.requestState).issued_at).toBe(1_893_456_002_250);
   expect(h.createBranch).not.toHaveBeenCalled();
+});
+
+// AI-1372. Regression: the lifetime in the expired message is hard-coded to
+// the default, drifts from the TTL the codec was built with (platform passes
+// 120 when URL-mode secret collection is on), always prints seconds, always
+// prints minutes, or gets the singular wrong. One tool covers the shared
+// formatter. Each gap is one whole second past exp = floor(T0 / 1000) + ttl.
+test.each([
+  { ttlSeconds: 120, gap: 121_000, lifetime: '2 minutes' },
+  { ttlSeconds: 60, gap: 61_000, lifetime: '1 minute' },
+  { ttlSeconds: 90, gap: 91_000, lifetime: '90 seconds' },
+  { ttlSeconds: 1, gap: 2_000, lifetime: '1 second' },
+])(
+  'an expired resume with ttlSeconds $ttlSeconds states $lifetime',
+  async ({ ttlSeconds, gap, lifetime }) => {
+    const h = await setup({ ttlSeconds });
+    const result = await resume(h, 'execute_sql', 'accept', gap);
+    expectTerminalResult(
+      result,
+      'expired',
+      `This confirmation expired after ${lifetime}. Call \`execute_sql\` again to get a new confirmation.`
+    );
+    expectNothingRan(h);
+  }
+);
+
+// AI-1372. Regression: the expiry handling swallows other verify failures,
+// e.g. a wrapper that maps every codec error to `expired`. A tampered token
+// that is also past its expiry pins that the MAC check still comes first,
+// so an attacker can't turn a forged state into a tool result. Every row
+// must stay the SDK's -32602 with nothing run.
+test.each([
+  { desc: 'a tampered token', gap: 1_000, tamper: true },
+  { desc: 'a tampered token past its expiry', gap: 601_000, tamper: true },
+  { desc: 'a malformed token', gap: 1_000, tamper: false },
+])('$desc is still a -32602 error', async ({ gap, tamper }) => {
+  const h = await setup();
+  h.setNow(T0);
+  const state = issued(await h.call('create_branch')).requestState!;
+  // Flip significant bits of the MAC's last base64url character; changing
+  // only padding bits can leave the decoded MAC unchanged.
+  const bad = tamper
+    ? state.slice(0, -1) + (state.endsWith('A') ? 'E' : 'A')
+    : 'not-a-request-state';
+  h.setNow(T0 + gap);
+  await expect(
+    h.call('create_branch', {
+      requestState: bad,
+      inputResponses: { confirm_cost: { action: 'accept', content: {} } },
+    })
+  ).rejects.toMatchObject({
+    code: -32602,
+    message: 'Invalid or expired requestState',
+  });
+  expectNothingRan(h);
 });
