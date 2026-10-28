@@ -1,6 +1,7 @@
 # Supabase MCP Server
 
 [![MCP Registry Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.modelcontextprotocol.io%2Fv0.1%2Fservers%2Fcom.supabase%252Fmcp%2Fversions%2Flatest&query=%24.server.version&label=MCP%20Registry&logo=modelcontextprotocol)](https://registry.modelcontextprotocol.io/?q=com.supabase%2Fmcp)
+[![context cost](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fathakur3%2Fmcp-context-cost%2Fmain%2Fbadges%2Fsupabase.json)](https://athakur3.github.io/mcp-context-cost/METHODOLOGY)
 
 > Connect your Supabase projects to Cursor, Claude, Windsurf, and other AI assistants.
 
