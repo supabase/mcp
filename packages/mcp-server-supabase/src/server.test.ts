@@ -102,6 +102,7 @@ describe('tools', () => {
         'notebooks',
         'feedback',
       ],
+      unreleasedNotebookTools: true,
     });
 
     const { tools } = await client.listTools();
@@ -463,9 +464,27 @@ describe('feature groups', () => {
     ]);
   });
 
-  test('notebooks tools', async () => {
+  test('notebooks tools omit unreleased create_notebook and run_notebook', async () => {
+    const { client } = await setup({
+      features: ['notebooks', 'database', 'debugging'],
+    });
+
+    const { tools } = await client.listTools();
+    expect(
+      tools.map((tool) => tool.name).filter((name) => name.includes('notebook'))
+    ).toEqual(['list_notebooks', 'get_notebook']);
+
+    for (const name of ['create_notebook', 'run_notebook']) {
+      const result = await client.callTool({ name, arguments: {} });
+      expect(result).toMatchObject({ isError: true });
+      expect(JSON.stringify(result.content)).toContain('tool not found');
+    }
+  });
+
+  test('notebooks tools include create_notebook and run_notebook when unreleased tools are enabled', async () => {
     const { client } = await setup({
       features: ['notebooks'],
+      unreleasedNotebookTools: true,
     });
 
     const { tools } = await client.listTools();
@@ -482,6 +501,7 @@ describe('feature groups', () => {
   test('platforms without notebook creation keep their existing notebook tools', async () => {
     const { client } = await setup({
       features: ['notebooks'],
+      unreleasedNotebookTools: true,
       platform: { notebooks: { listNotebooks: vi.fn(), getNotebook: vi.fn() } },
     });
     expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([

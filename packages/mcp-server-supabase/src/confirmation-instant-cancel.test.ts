@@ -197,16 +197,20 @@ async function setup(
     },
     confirmation: { enabledTools: [...tools] },
   };
-  const main = await setupObservation({ platform, features, elicitation });
+  const serverOptions = {
+    platform,
+    features,
+    elicitation,
+    unreleasedNotebookTools: true,
+  };
+  const main = await setupObservation(serverOptions);
   // A second server with the same key and principal, so state minted on the
   // form client verifies here too; only the client capabilities differ.
   const resumer =
     options.resumeCapabilities === undefined
       ? main
       : await setupObservation({
-          platform,
-          features,
-          elicitation,
+          ...serverOptions,
           capabilities: options.resumeCapabilities,
         });
   vi.spyOn(Date, 'now').mockImplementation(() => now);

@@ -33,6 +33,7 @@ type SetupOptions = {
   clientInfo?: SupabaseMcpServerOptions['clientInfo'];
   readOnly?: boolean;
   features?: string[];
+  unreleasedNotebookTools?: boolean;
   elicitation?: SupabaseMcpServerOptions['elicitation'];
   observer?: SupabaseMcpServerOptions['observer'];
   onToolCall?: SupabaseMcpServerOptions['onToolCall'];
@@ -42,6 +43,7 @@ type SetupOptions = {
 type ModernSetupOptions = {
   platform?: SupabasePlatform;
   features?: string[];
+  unreleasedNotebookTools?: boolean;
   observer?: SupabaseMcpServerOptions['observer'];
   onToolCall?: SupabaseMcpServerOptions['onToolCall'];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
@@ -147,6 +149,7 @@ export function createServerHarness() {
       projectId,
       readOnly,
       features,
+      unreleasedNotebookTools: options.unreleasedNotebookTools,
       elicitation,
       clientInfo: options.clientInfo,
       observer: options.observer,
@@ -219,6 +222,7 @@ export function createServerHarness() {
       projectId,
       readOnly,
       features,
+      unreleasedNotebookTools: options.unreleasedNotebookTools,
       observer: options.observer,
       onToolCall: options.onToolCall,
       elicitation: secretCollection

@@ -113,6 +113,7 @@ async function setup(
     onToolCall?: SupabaseMcpServerOptions['onToolCall'];
     platform?: SupabasePlatform;
     features?: SupabaseMcpServerOptions['features'];
+    unreleasedNotebookTools?: boolean;
     elicitation?: SupabaseMcpServerOptions['elicitation'];
   } = {}
 ) {
@@ -135,6 +136,7 @@ async function setup(
   const serverOptions: SupabaseMcpServerOptions = {
     platform: options.platform ?? fake.platform,
     features: options.features ?? ['account', 'branching', 'database'],
+    unreleasedNotebookTools: options.unreleasedNotebookTools,
     projectId: options.injected ? fake.project.id : undefined,
     readOnly: options.readOnly,
     elicitation:

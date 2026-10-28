@@ -68,6 +68,7 @@ async function startEntry(
   const started = await startLocalHttpEntry({
     port: 0,
     log: (line) => logLines.push(line),
+    unreleasedNotebookTools: true,
     ...options,
   });
   const apiOrigin = new URL(options.apiUrl ?? API_URL).origin;
