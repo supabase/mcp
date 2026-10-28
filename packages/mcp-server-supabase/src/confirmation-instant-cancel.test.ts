@@ -1,6 +1,7 @@
 import {
   isInputRequiredResult,
   type CallToolResult,
+  type ClientCapabilities,
   type InputRequiredResult,
   type InputResponses,
 } from '@modelcontextprotocol/client';
@@ -22,6 +23,7 @@ import type {
   SupabasePlatform,
 } from './platform/types.js';
 import * as pricing from './pricing.js';
+import { hashObject } from './util.js';
 
 // AI-1328: confirmation cancels record how long the client took (`elapsed_ms`)
 // and flag sub-second ones as `instant`. Every cancel returns the same text,
@@ -60,6 +62,21 @@ const feature = {
   create_project: 'cost',
   create_branch: 'cost',
 } as const satisfies Record<Tool, ObservationFact['feature']>;
+
+// AI-1372: hand-written from the spec. The tool name is the one being
+// called; the lifetime is the default 600 s TTL.
+const expiredMessage = {
+  execute_sql:
+    'This confirmation expired after 10 minutes. Call `execute_sql` again to get a new confirmation.',
+  apply_migration:
+    'This confirmation expired after 10 minutes. Call `apply_migration` again to get a new confirmation.',
+  run_notebook:
+    'This confirmation expired after 10 minutes. Call `run_notebook` again to get a new confirmation.',
+  create_project:
+    'This confirmation expired after 10 minutes. Call `create_project` again to get a new confirmation.',
+  create_branch:
+    'This confirmation expired after 10 minutes. Call `create_branch` again to get a new confirmation.',
+} as const satisfies Record<Tool, string>;
 
 const args = {
   execute_sql: {
@@ -110,25 +127,47 @@ type Harness = {
   attempts: Array<{ facts: ObservationFact[]; ends: ObservationEnd[] }>;
   /** Every platform call that would run, apply or create something. */
   operations: unknown[];
+  /** The platform call each tool's accepted confirmation makes. */
+  operation: Record<Tool, unknown>;
   createBranch: unknown;
   setNow(value: number): void;
   /** Advance the clock by `ms` on every platform read from now on. */
   delayReads(ms: number): void;
+  /** Make every account and notebook read throw from now on. */
+  failReads(): void;
+  /** Serve `value` from getNotebook from now on. */
+  setNotebook(value: NotebookWithContent): void;
   call(
     name: Tool,
-    extra?: { requestState?: string; inputResponses?: InputResponses }
+    extra?: CallExtra
+  ): Promise<CallToolResult | InputRequiredResult>;
+  /** Like `call`, through the resume client when `resumeCapabilities` is set. */
+  resumeCall(
+    name: Tool,
+    extra?: CallExtra
   ): Promise<CallToolResult | InputRequiredResult>;
 };
 
-async function setup(): Promise<Harness> {
+type CallExtra = {
+  arguments?: Record<string, unknown>;
+  requestState?: string;
+  inputResponses?: InputResponses;
+};
+
+async function setup(
+  options: { ttlSeconds?: number; resumeCapabilities?: ClientCapabilities } = {}
+): Promise<Harness> {
   const fake = fakePlatform();
   let now = T0;
   let readDelay = 0;
+  let readsFail = false;
+  let currentNotebook = notebook;
   // Platform reads advance the mocked clock so a test can model a resume
   // whose server-side work takes time.
   function slowRead<A extends unknown[], R>(read: (...a: A) => R) {
     return (...a: A) => {
       now += readDelay;
+      if (readsFail) throw new Error('PRIVATE_READ_FAILED');
       return read(...a);
     };
   }
@@ -143,27 +182,49 @@ async function setup(): Promise<Harness> {
       getProject: slowRead(account.getProject),
     },
     notebooks: {
-      getNotebook: slowRead(async () => notebook),
+      getNotebook: slowRead(async () => currentNotebook),
       listNotebooks: vi.fn(async () => []),
     },
   } satisfies SupabasePlatform;
-  const { client, attempts } = await setupObservation({
-    platform,
-    features: ['account', 'branching', 'database', 'notebooks'],
-    elicitation: {
-      requestState: { key: KEY, principal: PRINCIPAL },
-      confirmation: { enabledTools: [...tools] },
+  const features = ['account', 'branching', 'database', 'notebooks'];
+  const elicitation = {
+    requestState: {
+      key: KEY,
+      principal: PRINCIPAL,
+      ...(options.ttlSeconds === undefined
+        ? {}
+        : { ttlSeconds: options.ttlSeconds }),
     },
-  });
+    confirmation: { enabledTools: [...tools] },
+  };
+  const main = await setupObservation({ platform, features, elicitation });
+  // A second server with the same key and principal, so state minted on the
+  // form client verifies here too; only the client capabilities differ.
+  const resumer =
+    options.resumeCapabilities === undefined
+      ? main
+      : await setupObservation({
+          platform,
+          features,
+          elicitation,
+          capabilities: options.resumeCapabilities,
+        });
   vi.spyOn(Date, 'now').mockImplementation(() => now);
   return {
-    attempts,
+    attempts: resumer.attempts,
     operations: [
       platform.database.executeSql,
       platform.database.applyMigration,
       fake.createProject,
       fake.createBranch,
     ],
+    operation: {
+      execute_sql: platform.database.executeSql,
+      apply_migration: platform.database.applyMigration,
+      run_notebook: platform.database.executeSql,
+      create_project: fake.createProject,
+      create_branch: fake.createBranch,
+    },
     createBranch: fake.createBranch,
     setNow(value) {
       now = value;
@@ -171,8 +232,20 @@ async function setup(): Promise<Harness> {
     delayReads(ms) {
       readDelay = ms;
     },
+    failReads() {
+      readsFail = true;
+    },
+    setNotebook(value) {
+      currentNotebook = value;
+    },
     call: (name, extra = {}) =>
-      callModernTool(client, { name, arguments: args[name], ...extra }),
+      callModernTool(main.client, { name, arguments: args[name], ...extra }),
+    resumeCall: (name, extra = {}) =>
+      callModernTool(resumer.client, {
+        name,
+        arguments: args[name],
+        ...extra,
+      }),
   };
 }
 
@@ -182,7 +255,10 @@ function payload(state: string | undefined): Record<string, unknown> {
     .p;
 }
 
-/** Issue at T0, then resume with `action` at T0 + gap. */
+/**
+ * Issue at T0, then resume with `action` at T0 + gap (through the resume
+ * client when `resumeCapabilities` is set).
+ */
 async function resume(
   h: Harness,
   name: Tool,
@@ -193,7 +269,7 @@ async function resume(
   h.setNow(T0);
   const state = requestState ?? issued(await h.call(name)).requestState;
   h.setNow(T0 + gap);
-  const result = await h.call(name, {
+  const result = await h.resumeCall(name, {
     requestState: state,
     inputResponses: {
       [requestKey[name]]:
@@ -206,6 +282,10 @@ async function resume(
 
 function inputResponseFacts(h: Harness) {
   return h.attempts.at(-1)!.facts.filter((f) => f.kind === 'input_response');
+}
+
+function validationFacts(h: Harness) {
+  return h.attempts.at(-1)!.facts.filter((f) => f.kind === 'resume_validation');
 }
 
 function expectNothingRan(h: Harness) {
@@ -268,6 +348,36 @@ describe.each(tools)('%s confirmation requestState', (name) => {
       expectNothingRan(h);
     }
   );
+
+  // AI-1372 (SU-519683). Regression: a resume whose requestState has a valid
+  // MAC but is past its expiry comes back as JSON-RPC -32602 again (the agent
+  // sees "Invalid or expired requestState" and can't tell the user why), or
+  // the operation runs anyway, or the message names the wrong tool or
+  // lifetime, or the `expired` validation fact is missing.
+  // Default TTL is 600 s; exp = floor(T0 / 1000) + 600, so T0 + 601 s is the
+  // first whole second the codec treats as expired.
+  test('an expired resume returns the expired tool result and runs nothing', async () => {
+    const h = await setup();
+    const result = await resume(h, name, 'accept', 601_000);
+    expectTerminalResult(result, 'expired', expiredMessage[name]);
+    expect(validationFacts(h)).toEqual([
+      { kind: 'resume_validation', feature: feature[name], result: 'expired' },
+    ]);
+    expectNothingRan(h);
+  });
+});
+
+// AI-1372. Regression: an expiry check stricter than the configured TTL.
+// Five minutes in is clearly inside the default 10-minute TTL, so this
+// doesn't pin the SDK's boundary second.
+test('a resume inside the TTL still runs the operation', async () => {
+  const h = await setup();
+  const result = await resume(h, 'execute_sql', 'accept', 300_000);
+  expect(result.isError).not.toBe(true);
+  expect(validationFacts(h)).toEqual([
+    { kind: 'resume_validation', feature: 'destructive_sql', result: 'valid' },
+  ]);
+  expect(h.operation.execute_sql).toHaveBeenCalledTimes(1);
 });
 
 // Regression: an off-by-one threshold (<= 1000 or < 999), `instant` set on a
@@ -415,4 +525,208 @@ test('a changed-quote reprompt mints a fresh issued_at', async () => {
   );
   expect(payload(second.requestState).issued_at).toBe(1_893_456_002_250);
   expect(h.createBranch).not.toHaveBeenCalled();
+});
+
+// AI-1372. Regression: the lifetime in the expired message is hard-coded to
+// the default, drifts from the TTL the codec was built with (platform passes
+// 120 when URL-mode secret collection is on), always prints seconds, always
+// prints minutes, or gets the singular wrong. One tool covers the shared
+// formatter. Each gap is one whole second past exp = floor(T0 / 1000) + ttl.
+test.each([
+  { ttlSeconds: 120, gap: 121_000, lifetime: '2 minutes' },
+  { ttlSeconds: 60, gap: 61_000, lifetime: '1 minute' },
+  { ttlSeconds: 90, gap: 91_000, lifetime: '90 seconds' },
+  { ttlSeconds: 1, gap: 2_000, lifetime: '1 second' },
+])(
+  'an expired resume with ttlSeconds $ttlSeconds states $lifetime',
+  async ({ ttlSeconds, gap, lifetime }) => {
+    const h = await setup({ ttlSeconds });
+    const result = await resume(h, 'execute_sql', 'accept', gap);
+    expectTerminalResult(
+      result,
+      'expired',
+      `This confirmation expired after ${lifetime}. Call \`execute_sql\` again to get a new confirmation.`
+    );
+    expectNothingRan(h);
+  }
+);
+
+// AI-1372. Regression: the expiry handling swallows other verify failures,
+// e.g. a wrapper that maps every codec error to `expired`. A tampered token
+// that is also past its expiry pins that the MAC check still comes first,
+// so an attacker can't turn a forged state into a tool result. Every row
+// must stay the SDK's -32602 with nothing run.
+test.each([
+  { desc: 'a tampered token past its expiry', gap: 601_000, tamper: true },
+  { desc: 'a malformed token', gap: 1_000, tamper: false },
+])('$desc is still a -32602 error', async ({ gap, tamper }) => {
+  const h = await setup();
+  h.setNow(T0);
+  const state = issued(await h.call('create_branch')).requestState!;
+  // Flip significant bits of the MAC's last base64url character; changing
+  // only padding bits can leave the decoded MAC unchanged.
+  const bad = tamper
+    ? state.slice(0, -1) + (state.endsWith('A') ? 'E' : 'A')
+    : 'not-a-request-state';
+  h.setNow(T0 + gap);
+  await expect(
+    h.call('create_branch', {
+      requestState: bad,
+      inputResponses: { confirm_cost: { action: 'accept', content: {} } },
+    })
+  ).rejects.toMatchObject({
+    code: -32602,
+    message: 'Invalid or expired requestState',
+  });
+  expectNothingRan(h);
+});
+
+// AI-1372 (ADV-F1). Regression: an expired token resumed with a query that is
+// no longer destructive takes the `not_destructive` bypass, which drops the
+// expired result and runs the SQL. INSERT is not destructive, so on that
+// route the platform call would run.
+test.each(['execute_sql', 'apply_migration'] as const)(
+  'an expired %s resume with a non-destructive query returns the expired result',
+  async (name) => {
+    const h = await setup();
+    const state = issued(await h.call(name)).requestState;
+    h.setNow(T0 + 601_000);
+    const result = await h.resumeCall(name, {
+      arguments: {
+        ...args[name],
+        query: 'INSERT INTO "PRIVATE_TABLE" VALUES (1);',
+      },
+      requestState: state,
+      inputResponses: {
+        confirm_destructive: { action: 'accept', content: {} },
+      },
+    });
+    expectTerminalResult(
+      result as CallToolResult,
+      'expired',
+      expiredMessage[name]
+    );
+    expect(validationFacts(h)).toEqual([
+      {
+        kind: 'resume_validation',
+        feature: 'destructive_sql',
+        result: 'expired',
+      },
+    ]);
+    expectNothingRan(h);
+  }
+);
+
+// AI-1372 (ADV-F2). Regression: an expired token resumed by a client without
+// form elicitation takes the `capability_missing` route and runs the SQL.
+// The token is minted on a form client and resumed on a second client of the
+// same key and principal, so the signature and binding are authentic.
+test.each(['execute_sql', 'apply_migration'] as const)(
+  'an expired %s resume from a client without form elicitation returns the expired result',
+  async (name) => {
+    const h = await setup({ resumeCapabilities: {} });
+    const result = await resume(h, name, 'accept', 601_000);
+    expectTerminalResult(result, 'expired', expiredMessage[name]);
+    expect(validationFacts(h)).toEqual([
+      {
+        kind: 'resume_validation',
+        feature: 'destructive_sql',
+        result: 'expired',
+      },
+    ]);
+    expectNothingRan(h);
+  }
+);
+
+// AI-1372 (ADV-F2). Regression: an expired token sent with a matching legacy
+// `confirm_cost_id` from a client without form elicitation takes the legacy
+// route, which accepts the hash and creates the branch.
+test('an expired create_branch resume with a matching legacy confirm_cost_id creates no branch', async () => {
+  const h = await setup({ resumeCapabilities: {} });
+  const state = issued(await h.call('create_branch')).requestState;
+  h.setNow(T0 + 601_000);
+  const result = await h.resumeCall('create_branch', {
+    arguments: {
+      ...args.create_branch,
+      confirm_cost_id: await hashObject(pricing.getBranchCost()),
+    },
+    requestState: state,
+  });
+  expectTerminalResult(
+    result as CallToolResult,
+    'expired',
+    expiredMessage.create_branch
+  );
+  expectNothingRan(h);
+});
+
+// AI-1372 (precedence). Regression: create_project fetches the organization
+// and cost before inspecting the state, and run_notebook fetches and checks
+// the notebook first. Either one then returns its own error (read failure,
+// changed notebook) instead of the expired message.
+test('an expired create_project resume returns the expired result even when platform reads fail', async () => {
+  const h = await setup();
+  const state = issued(await h.call('create_project')).requestState;
+  h.failReads();
+  h.setNow(T0 + 601_000);
+  const result = await h.resumeCall('create_project', {
+    requestState: state,
+    inputResponses: { confirm_cost: { action: 'accept', content: {} } },
+  });
+  expectTerminalResult(
+    result as CallToolResult,
+    'expired',
+    expiredMessage.create_project
+  );
+  expect(validationFacts(h)).toEqual([
+    { kind: 'resume_validation', feature: 'cost', result: 'expired' },
+  ]);
+  expectNothingRan(h);
+});
+
+test('an expired run_notebook resume returns the expired result even when the notebook changed', async () => {
+  const h = await setup();
+  const state = issued(await h.call('run_notebook')).requestState;
+  h.setNotebook({ ...notebook, updated_at: '2026-02-01T00:00:00.000Z' });
+  h.setNow(T0 + 601_000);
+  const result = await h.resumeCall('run_notebook', {
+    requestState: state,
+    inputResponses: { confirm_run: { action: 'accept', content: {} } },
+  });
+  expectTerminalResult(
+    result as CallToolResult,
+    'expired',
+    expiredMessage.run_notebook
+  );
+  expect(validationFacts(h)).toEqual([
+    { kind: 'resume_validation', feature: 'notebook', result: 'expired' },
+  ]);
+  expectNothingRan(h);
+});
+
+// AI-1372 (bind). Regression: the expiry wrapper swallows the codec's bind
+// failure, turning a state minted for another principal into a tool result.
+// The SDK checks bind after expiry, so only an unexpired state reaches it.
+// Same key and binding format as the server; only the principal differs.
+test('an unexpired state minted for another principal is still a -32602 error', async () => {
+  const h = await setup();
+  const first = issued(await h.call('create_branch'));
+  const codec = createRequestStateCodec({
+    key: KEY,
+    bind: (ctx) => `${ctx.mcpReq.method}:PRIVATE_OTHER_PRINCIPAL`,
+  });
+  const foreign = await codec.mint(payload(first.requestState), {
+    mcpReq: { method: 'tools/call' },
+  } as ServerContext);
+  h.setNow(T0 + 1_000);
+  await expect(
+    h.call('create_branch', {
+      requestState: foreign,
+      inputResponses: { confirm_cost: { action: 'accept', content: {} } },
+    })
+  ).rejects.toMatchObject({
+    code: -32602,
+    message: 'Invalid or expired requestState',
+  });
+  expectNothingRan(h);
 });

@@ -49,7 +49,8 @@ export type ObservationFact =
         | 'missing_response'
         | 'tool_mismatch'
         | 'arguments_mismatch'
-        | 'changed_quote';
+        | 'changed_quote'
+        | 'expired';
     }>
   | Readonly<{
       kind: 'operation';

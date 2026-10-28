@@ -1,5 +1,5 @@
 import { codeBlock } from 'common-tags';
-import { resolve } from 'node:path';
+import { resolve } from 'node:path/posix';
 
 /**
  * Gets the deployment ID for an Edge Function.
@@ -36,6 +36,7 @@ export function normalizeFilename({
   const pathPrefix = getPathPrefix(deploymentId);
 
   // Deno 2 uses relative filenames, Deno 1 uses absolute. Resolve both to absolute first.
+  // Resolve Deno paths the same way on Windows.
   const filenameAbsolute = resolve(pathPrefix, filename);
 
   // Strip prefix(es)

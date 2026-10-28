@@ -23,8 +23,10 @@ import { getAccountTools } from './tools/account-tools.js';
 import { getBranchingTools } from './tools/branching-tools.js';
 import {
   type ElicitationState,
+  ExpiredRequestState,
   isFormCapable,
   isUrlCapable,
+  stopExpiredState,
 } from './tools/confirmation.js';
 import { getDatabaseTools } from './tools/database-operation-tools.js';
 import { getDebuggingTools } from './tools/debugging-tools.js';
@@ -216,16 +218,19 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
   const enabledConfirmationTools =
     elicitation?.confirmation?.enabledTools ?? [];
+  // One TTL for the codec and the expired message, so they can't drift.
+  const ttlSeconds = elicitation?.requestState.ttlSeconds ?? 600;
   const elicitationCodec =
     elicitation &&
     (enabledConfirmationTools.length > 0 || elicitation.secretCollection)
       ? createRequestStateCodec<ElicitationState>({
           key: elicitation.requestState.key,
-          ttlSeconds: elicitation.requestState.ttlSeconds,
+          ttlSeconds,
           bind: (ctx) =>
             `${ctx.mcpReq.method}:${elicitation.requestState.principal}`,
         })
       : undefined;
+  const expiredRequestState = new ExpiredRequestState(ttlSeconds);
 
   let handshakeClientInfo: Implementation | undefined;
 
@@ -255,7 +260,18 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         ? (name as ElicitationToolName)
         : 'other',
     requestState: elicitationCodec && {
-      verify: elicitationCodec.verify,
+      // The codec checks the MAC before expiry, so 'expired' means an
+      // authentic token. Every other failure still becomes the SDK's -32602.
+      verify: async (state, ctx) => {
+        try {
+          return await elicitationCodec.verify(state, ctx);
+        } catch (error) {
+          if (error instanceof Error && error.message === 'expired') {
+            return expiredRequestState;
+          }
+          throw error;
+        }
+      },
     },
     tools: async (ctx) => {
       const clientInfo =
@@ -399,6 +415,18 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         secretTools.create_edge_function_secret.hidden =
           !ctx || !isUrlCapable(ctx);
         Object.assign(tools, secretTools);
+      }
+
+      // Every tool that resumes signed state answers an expired token first,
+      // before its own routing can ignore it.
+      for (const name of [
+        ...CURRENT_ELICITATION_TOOLS,
+        'create_edge_function_secret',
+      ]) {
+        const tool = tools[name];
+        if (tool) {
+          tools[name] = stopExpiredState(name, tool);
+        }
       }
 
       if (readOnly) {
