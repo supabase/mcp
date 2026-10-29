@@ -5,6 +5,7 @@ import {
   type ServerContext,
 } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
+import { ToolCallerError } from '../errors.js';
 import type { SecretOperations } from '../platform/types.js';
 import { isUrlCapable, type ElicitationState } from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
@@ -116,7 +117,9 @@ export function getSecretTools({
         ctx: ServerContext
       ) => {
         if (readOnly) {
-          throw new Error('Cannot create a secret in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot create a secret in read-only mode.'
+          );
         }
 
         const issue = async (issued_at: number) =>

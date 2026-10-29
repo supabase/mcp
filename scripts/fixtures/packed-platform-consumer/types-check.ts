@@ -1,9 +1,11 @@
 import {
   createSupabaseMcpHandler,
+  createSupabaseMcpServer,
   CURRENT_ELICITATION_TOOLS,
   type ElicitationToolName,
   type SupabaseMcpServerOptions,
 } from '@supabase/mcp-server-supabase';
+import type * as Supabase from '@supabase/mcp-server-supabase';
 import {
   createMcpServer,
   tool,
@@ -122,3 +124,68 @@ const coreOptions: McpServerOptions<'named', Fact> = {
   tools: { observed: observedTool },
 };
 void createMcpServer(coreOptions);
+
+const sqlFeature: Supabase.ConfirmationFeature = 'destructive_sql';
+const notebookFeature: Supabase.ConfirmationFeature = 'notebook';
+const sqlFacts = [
+  {
+    kind: 'confirmation_decision',
+    feature: sqlFeature,
+    route: 'bypass',
+    reason: 'not_destructive',
+  },
+  {
+    kind: 'confirmation_decision',
+    feature: notebookFeature,
+    route: 'bypass',
+    reason: 'not_mutating',
+  },
+  { kind: 'operation', feature: sqlFeature, disposition: 'started' },
+  {
+    kind: 'operation',
+    feature: sqlFeature,
+    disposition: 'returned',
+    durationMs: 1,
+  },
+  {
+    kind: 'operation',
+    feature: sqlFeature,
+    disposition: 'threw',
+    durationMs: 2,
+  },
+] satisfies Supabase.ObservationFact[];
+void sqlFacts;
+const supabaseObserver: Supabase.RequestObserver = (context) => {
+  if (context.method === 'tools/call') {
+    const tool:
+      | 'create_project'
+      | 'create_branch'
+      | 'execute_sql'
+      | 'apply_migration'
+      | 'run_notebook'
+      | 'other' = context.tool;
+    void tool;
+  } else {
+    // @ts-expect-error Supabase non-call contexts have no tool field.
+    void context.tool;
+  }
+  return {
+    record: (fact) => {
+      const feature: 'cost' | 'destructive_sql' | 'notebook' = fact.feature;
+      void feature;
+      if (fact.kind === 'operation' && fact.disposition !== 'started') {
+        const durationMs: number = fact.durationMs;
+        void durationMs;
+      }
+    },
+    end: (result) => {
+      void result.durationMs;
+    },
+  };
+};
+const observedSupabaseOptions: SupabaseMcpServerOptions = {
+  ...options,
+  observer: supabaseObserver,
+};
+void createSupabaseMcpServer(observedSupabaseOptions);
+void createSupabaseMcpHandler(observedSupabaseOptions);
