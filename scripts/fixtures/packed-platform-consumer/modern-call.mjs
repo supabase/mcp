@@ -202,7 +202,7 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
         kind: 'input_response',
         feature: 'destructive_sql',
         action: 'accept',
-        elapsed_ms: sqlResume.facts[1].elapsed_ms,
+        elapsed_ms: sqlResume.facts[1]?.elapsed_ms,
       },
       {
         kind: 'resume_validation',
