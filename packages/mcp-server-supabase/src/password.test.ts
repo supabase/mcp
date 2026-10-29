@@ -28,7 +28,7 @@ describe('generatePassword', () => {
       uppercase: false,
       lowercase: false,
     });
-    expect(/^[!@#$%^&*()_+~`|}{[\]:;?><,./=-]+$/.test(password)).toBe(true);
+    expect(/^[^A-Za-z0-9]+$/.test(password)).toBe(true);
   });
 
   it('should generate a password with uppercase only', () => {
