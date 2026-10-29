@@ -145,6 +145,7 @@ function writeFixtureProject(consumerDir, { supabase, utils }) {
       [UTILS_PACKAGE_NAME]: `file:${utils.tarballPath}`,
       '@modelcontextprotocol/server': SDK_VERSION,
       '@modelcontextprotocol/client': SDK_VERSION,
+      '@modelcontextprotocol/node': SDK_VERSION,
       zod: PLATFORM_ZOD_VERSION,
     },
     devDependencies: {
