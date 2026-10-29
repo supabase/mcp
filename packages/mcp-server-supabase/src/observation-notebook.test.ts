@@ -154,6 +154,7 @@ async function setup({
   const { client } = await harness.setupModern({
     platform,
     features: ['notebooks'],
+    unreleasedNotebookTools: true,
     readOnly,
     clientCapabilities: capabilities,
     elicitation: {

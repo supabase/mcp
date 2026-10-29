@@ -28,6 +28,8 @@ export type LocalHttpEntryOptions = {
   apiUrl?: string;
   contentApiUrl?: string;
   secretUrlTemplate?: string;
+  /** See `SupabaseMcpServerOptions.unreleasedNotebookTools`. */
+  unreleasedNotebookTools?: boolean;
   log?: (line: string) => void;
 };
 
@@ -99,6 +101,7 @@ export async function startLocalHttpEntry({
   apiUrl,
   contentApiUrl,
   secretUrlTemplate,
+  unreleasedNotebookTools,
   log = (line) =>
     console.error(`[${new Date().toLocaleTimeString('en-GB')}] ${line}`),
 }: LocalHttpEntryOptions) {
@@ -188,6 +191,7 @@ export async function startLocalHttpEntry({
                 readOnly,
                 features,
                 contentApiUrl,
+                unreleasedNotebookTools,
                 dashboardUrl,
                 elicitation: {
                   requestState: {
