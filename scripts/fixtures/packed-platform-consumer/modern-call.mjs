@@ -198,7 +198,12 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
     });
     assert.deepEqual(sqlResume.facts.slice(0, 4), [
       { ...decision, feature: 'destructive_sql' },
-      { kind: 'input_response', feature: 'destructive_sql', action: 'accept' },
+      {
+        kind: 'input_response',
+        feature: 'destructive_sql',
+        action: 'accept',
+        elapsed_ms: sqlResume.facts[1]?.elapsed_ms,
+      },
       {
         kind: 'resume_validation',
         feature: 'destructive_sql',
@@ -221,6 +226,10 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
         if ('durationMs' in event) {
           assert.ok(Number.isFinite(event.durationMs));
           assert.ok(event.durationMs >= 0);
+        }
+        if ('elapsed_ms' in event) {
+          assert.ok(Number.isFinite(event.elapsed_ms));
+          assert.ok(event.elapsed_ms >= 0);
         }
       }
     }
