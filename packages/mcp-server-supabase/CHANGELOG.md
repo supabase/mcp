@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.15.0...mcp-server-supabase-v0.15.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* tolerate non-URL edge function paths in api platform ([#438](https://github.com/supabase/mcp/issues/438)) ([00d07a4](https://github.com/supabase/mcp/commit/00d07a4e4a4b1a431f424b7be8459972f5802186))
+
 ## [0.15.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.14.0...mcp-server-supabase-v0.15.0) (2026-10-29)
 
 
