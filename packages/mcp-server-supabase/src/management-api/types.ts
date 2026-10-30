@@ -3111,6 +3111,10 @@ export interface components {
             db_pool: number | null;
             /** @description If `null`, the value is automatically configured to 10. */
             db_pool_acquisition_timeout: number | null;
+            /** @description If `null`, the value is automatically configured to 1800. */
+            db_pool_max_lifetime: number | null;
+            /** @description If `null`, the value is automatically configured to 30. */
+            db_pool_max_idletime: number | null;
             jwt_secret?: string;
         };
         /** @example {
@@ -3124,6 +3128,8 @@ export interface components {
             max_rows?: number;
             db_pool?: number;
             db_pool_acquisition_timeout?: number;
+            db_pool_max_lifetime?: number;
+            db_pool_max_idletime?: number;
         };
         V1PostgrestConfigResponse_Output: {
             db_schema: string;
@@ -3133,6 +3139,10 @@ export interface components {
             db_pool: number | null;
             /** @description If `null`, the value is automatically configured to 10. */
             db_pool_acquisition_timeout: number | null;
+            /** @description If `null`, the value is automatically configured to 1800. */
+            db_pool_max_lifetime: number | null;
+            /** @description If `null`, the value is automatically configured to 30. */
+            db_pool_max_idletime: number | null;
         };
         V1ProjectRefResponse_Output: {
             id: number;
