@@ -462,6 +462,7 @@ export type FeedbackOperations = {
     feedback: string;
     projectId?: string;
     clientInfo?: { name: string; version: string };
+    targets?: { url: string; heading?: string; quote: string }[];
   }): Promise<{ deleteToken: string }>;
   delete(input: {
     deleteToken: string;
