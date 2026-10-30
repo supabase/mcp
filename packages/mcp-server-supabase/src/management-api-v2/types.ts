@@ -351,6 +351,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/organizations/{slug}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List roles of an organization
+         * @description Returns a list of org-level roles for the organization.
+         */
+        get: operations["v2-list-organization-roles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/organizations/{slug}/members/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Creates organization invitations
+         * @description Creates member invitations for an organization. Each invitation can have different role and project scope settings.
+         */
+        post: operations["v2-create-organization-invitations"];
+        /**
+         * Deletes organization invitations by email
+         * @description Bulk delete member invitations for an organization by email address.
+         */
+        delete: operations["v2-delete-organization-invitations"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/organizations/{slug}/members": {
         parameters: {
             query?: never;
@@ -391,27 +435,7 @@ export interface paths {
         patch: operations["v2-assign-organization-member-role"];
         trace?: never;
     };
-    "/v2/organizations/{slug}/roles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List roles of an organization
-         * @description Returns a list of org-level roles for the organization.
-         */
-        get: operations["v2-list-organization-roles"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v2/organizations/{slug}/members/invitations": {
+    "/v2/organizations/{slug}/members/{user_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -420,16 +444,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        post?: never;
         /**
-         * Creates organization invitations
-         * @description Creates member invitations for an organization. Each invitation can have different role and project scope settings.
+         * Removes organization members
+         * @description Removes one or more organization members including their roles and project-scoped permissions.
          */
-        post: operations["v2-create-organization-invitations"];
-        /**
-         * Deletes organization invitations by email
-         * @description Bulk delete member invitations for an organization by email address.
-         */
-        delete: operations["v2-delete-organization-invitations"];
+        delete: operations["v2-remove-organization-members"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1412,6 +1432,8 @@ export interface components {
                         db_extra_search_path: string;
                         max_rows: number;
                         db_pool_acquisition_timeout: number;
+                        db_pool_max_lifetime: number;
+                        db_pool_max_idletime: number;
                         /** @description If `null`, no pool size is written to the project's PostgREST config and PostgREST's own default applies. The platform does not pick a value here. */
                         db_pool: number | null;
                     };
@@ -2105,120 +2127,6 @@ export interface components {
                 };
             };
         };
-        V2ListMembersResponse_Output: {
-            data: {
-                /**
-                 * @description Resource type.
-                 * @enum {string}
-                 */
-                type: "organization_member";
-                /** Format: uuid */
-                id: string;
-                attributes: {
-                    /** @description Member's username */
-                    username: string | null;
-                    /** @description Member's primary email */
-                    primary_email: string | null;
-                    /** @description Whether Multi-Factor Authentication is enabled for this member */
-                    mfa_enabled: boolean;
-                    /** @description Whether this member is a Single Sign-On user */
-                    is_sso_user: boolean;
-                    /** @description Member's avatar URL */
-                    avatar_url: string | null;
-                    /** @description Roles assigned to this member. Includes both org-level and project-scoped roles. */
-                    roles: {
-                        /**
-                         * @description Role name. For project-scoped roles this is the base role name.
-                         * @example developer
-                         */
-                        name: string;
-                        /**
-                         * @description Whether this role applies org-wide or is scoped to specific projects for the user.
-                         * @enum {string}
-                         */
-                        scope: "organization" | "project";
-                        /** @description Project refs this role is scoped to. Empty array for org-level roles. */
-                        projects: {
-                            ref: string;
-                            name: string;
-                        }[];
-                    }[];
-                };
-            }[];
-            links: {
-                /**
-                 * @description URL path to the first page if available.
-                 * @example /v2/organizations/my-org/members?page[size]=10
-                 */
-                first?: string | null;
-                /**
-                 * @description URL path to the previous page.
-                 * @example /v2/organizations/my-org/members?page[size]=10&page[before]=019adf7d-4513-74c5-bb9a-f1bc0f7a95d7
-                 */
-                prev: string | null;
-                /**
-                 * @description URL path to the next page.
-                 * @example /v2/organizations/my-org/members?page[size]=10&page[after]=019adf7d-4513-7062-b292-78b86cc470a4
-                 */
-                next: string | null;
-                /**
-                 * @description URL path to the last page if available.
-                 * @example /v2/organizations/my-org/members?page[size]=10&page[after]=019adf7d-4513-71ba-b264-21900edb4295
-                 */
-                last?: string | null;
-            };
-        };
-        V2AssignOrganizationMemberRoleRequest: {
-            data: {
-                /**
-                 * @description Resource type.
-                 * @enum {string}
-                 */
-                type: "organization_member_role";
-                attributes: {
-                    /**
-                     * @description Role name to assign. Must be one of: owner, administrator, developer, read-only. Must be on a Team or Enterprise plan to use the read-only role.
-                     * @example developer
-                     * @enum {string}
-                     */
-                    role: "owner" | "administrator" | "developer" | "read-only" | "no-access";
-                    /** @description The projects to assign a project-scoped role for. If omitted, assigns an org-wide role. */
-                    projects?: {
-                        /**
-                         * @description Project ref
-                         * @example abcjuqabhgwjjutfvtpa
-                         */
-                        ref: string;
-                    }[];
-                };
-            };
-        };
-        OrganizationMemberRoleResponse_Output: {
-            data: {
-                /**
-                 * @description Resource type.
-                 * @enum {string}
-                 */
-                type: "organization_member_role";
-                attributes: {
-                    /**
-                     * @description Role name. For project-scoped assignments this is the base role name.
-                     * @example developer
-                     */
-                    name: string;
-                    /**
-                     * @description Whether this role applies org-wide or is scoped to specific projects for the user.
-                     * @enum {string}
-                     */
-                    scope: "organization" | "project";
-                    /** @description Project refs this role is scoped to. Empty array for org-level roles. */
-                    projects: {
-                        ref: string;
-                        name: string;
-                    }[];
-                };
-            };
-        };
         V2ListRolesResponse_Output: {
             data: {
                 /**
@@ -2370,6 +2278,120 @@ export interface components {
                     email: string;
                 };
             }[];
+        };
+        V2ListMembersResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "organization_member";
+                /** Format: uuid */
+                id: string;
+                attributes: {
+                    /** @description Member's username */
+                    username: string | null;
+                    /** @description Member's primary email */
+                    primary_email: string | null;
+                    /** @description Whether Multi-Factor Authentication is enabled for this member */
+                    mfa_enabled: boolean;
+                    /** @description Whether this member is a Single Sign-On user */
+                    is_sso_user: boolean;
+                    /** @description Member's avatar URL */
+                    avatar_url: string | null;
+                    /** @description Roles assigned to this member. Includes both org-level and project-scoped roles. */
+                    roles: {
+                        /**
+                         * @description Role name. For project-scoped roles this is the base role name.
+                         * @example developer
+                         */
+                        name: string;
+                        /**
+                         * @description Whether this role applies org-wide or is scoped to specific projects for the user.
+                         * @enum {string}
+                         */
+                        scope: "organization" | "project";
+                        /** @description Project refs this role is scoped to. Empty array for org-level roles. */
+                        projects: {
+                            ref: string;
+                            name: string;
+                        }[];
+                    }[];
+                };
+            }[];
+            links: {
+                /**
+                 * @description URL path to the first page if available.
+                 * @example /v2/organizations/my-org/members?page[size]=10
+                 */
+                first?: string | null;
+                /**
+                 * @description URL path to the previous page.
+                 * @example /v2/organizations/my-org/members?page[size]=10&page[before]=019adf7d-4513-74c5-bb9a-f1bc0f7a95d7
+                 */
+                prev: string | null;
+                /**
+                 * @description URL path to the next page.
+                 * @example /v2/organizations/my-org/members?page[size]=10&page[after]=019adf7d-4513-7062-b292-78b86cc470a4
+                 */
+                next: string | null;
+                /**
+                 * @description URL path to the last page if available.
+                 * @example /v2/organizations/my-org/members?page[size]=10&page[after]=019adf7d-4513-71ba-b264-21900edb4295
+                 */
+                last?: string | null;
+            };
+        };
+        V2AssignOrganizationMemberRoleRequest: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "organization_member_role";
+                attributes: {
+                    /**
+                     * @description Role name to assign. Must be one of: owner, administrator, developer, read-only. Must be on a Team or Enterprise plan to use the read-only role.
+                     * @example developer
+                     * @enum {string}
+                     */
+                    role: "owner" | "administrator" | "developer" | "read-only" | "no-access";
+                    /** @description The projects to assign a project-scoped role for. If omitted, assigns an org-wide role. */
+                    projects?: {
+                        /**
+                         * @description Project ref
+                         * @example abcjuqabhgwjjutfvtpa
+                         */
+                        ref: string;
+                    }[];
+                };
+            };
+        };
+        OrganizationMemberRoleResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "organization_member_role";
+                attributes: {
+                    /**
+                     * @description Role name. For project-scoped assignments this is the base role name.
+                     * @example developer
+                     */
+                    name: string;
+                    /**
+                     * @description Whether this role applies org-wide or is scoped to specific projects for the user.
+                     * @enum {string}
+                     */
+                    scope: "organization" | "project";
+                    /** @description Project refs this role is scoped to. Empty array for org-level roles. */
+                    projects: {
+                        ref: string;
+                        name: string;
+                    }[];
+                };
+            };
         };
         V2ListProjectsResponse_Output: {
             data: {
@@ -4080,140 +4102,6 @@ export interface operations {
             };
         };
     };
-    "v2-list-organization-members": {
-        parameters: {
-            query?: {
-                page?: {
-                    size?: number;
-                    /** Format: uuid */
-                    after?: string;
-                    /** Format: uuid */
-                    before?: string;
-                };
-                filter?: {
-                    username?: string;
-                    /** Format: email */
-                    primary_email?: string;
-                };
-            };
-            header?: never;
-            path: {
-                /** @description Organization slug */
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["V2ListMembersResponse_Output"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description Forbidden action */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description Rate limit exceeded */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-        };
-    };
-    "v2-assign-organization-member-role": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Organization slug */
-                slug: string;
-                user_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["V2AssignOrganizationMemberRoleRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrganizationMemberRoleResponse_Output"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description This feature requires the Team, or Enterprise organization plan. */
-            402: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description Forbidden action */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description Rate limit exceeded */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description Failed to assign organization member role */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-        };
-    };
     "v2-list-organization-roles": {
         parameters: {
             query?: never;
@@ -4378,6 +4266,206 @@ export interface operations {
             };
             /** @description Rate limit exceeded */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-list-organization-members": {
+        parameters: {
+            query?: {
+                page?: {
+                    size?: number;
+                    /** Format: uuid */
+                    after?: string;
+                    /** Format: uuid */
+                    before?: string;
+                };
+                filter?: {
+                    username?: string;
+                    /** Format: email */
+                    primary_email?: string;
+                };
+            };
+            header?: never;
+            path: {
+                /** @description Organization slug */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ListMembersResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-assign-organization-member-role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Organization slug */
+                slug: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2AssignOrganizationMemberRoleRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationMemberRoleResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description This feature requires the Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to assign organization member role */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-remove-organization-members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Organization slug */
+                slug: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Organization member not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to remove organization member */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
