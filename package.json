@@ -12,5 +12,12 @@
     "@biomejs/biome": "1.9.4",
     "pkg-pr-new": "^0.0.68",
     "supabase": "^2.1.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "@modelcontextprotocol/core": "https://pkg.pr.new/@modelcontextprotocol/core@b0091060d73d08211c6766990aa15656d4e03271",
+      "@modelcontextprotocol/client": "https://pkg.pr.new/@modelcontextprotocol/client@b0091060d73d08211c6766990aa15656d4e03271",
+      "@modelcontextprotocol/server": "https://pkg.pr.new/@modelcontextprotocol/server@b0091060d73d08211c6766990aa15656d4e03271"
+    }
   }
 }
