@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { ToolCallerError } from '../errors.js';
 import type { StorageOperations } from '../platform/types.js';
 import { storageBucketSchema, storageConfigSchema } from '../platform/types.js';
 import { injectableTool, type ToolDefs } from './util.js';
@@ -104,7 +105,9 @@ export function getStorageTools({
       inject: { project_id },
       execute: async ({ project_id, config }) => {
         if (readOnly) {
-          throw new Error('Cannot update storage config in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot update storage config in read-only mode.'
+          );
         }
 
         await storage.updateStorageConfig(project_id, config);

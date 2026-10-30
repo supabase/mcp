@@ -15,9 +15,16 @@ import {
   assertSuccess,
   createManagementApiClient,
 } from '../management-api/index.js';
+import {
+  assertSuccessV2,
+  createManagementApiV2Client,
+} from '../management-api-v2/index.js';
+import type { components as ManagementApiV2Components } from '../management-api-v2/types.js';
 import { generatePassword } from '../password.js';
+import { createFeedbackOperations } from './feedback.js';
 import {
   applyMigrationOptionsSchema,
+  createNotebookOptionsSchema,
   createBranchOptionsSchema,
   createProjectOptionsSchema,
   deployEdgeFunctionOptionsSchema,
@@ -42,6 +49,8 @@ import {
   type EdgeFunctionWithBody,
   type ExecuteSqlOptions,
   type GetLogsOptions,
+  type Notebook,
+  type NotebookOperations,
   type QueryLogsOptions,
   type ResetBranchOptions,
   type SecretOperations,
@@ -53,6 +62,21 @@ import {
 const { version } = packageJson;
 
 const SUCCESS_RESPONSE: SuccessResponse = { success: true };
+
+type HealthAdvisorName =
+  ManagementApiV2Components['schemas']['V2RunProjectAdvisorsBody']['data']['attributes']['lints'][number]['name'];
+
+const healthAdvisorNames = [
+  'log_data_api_error_rate_high',
+  'log_auth_error_rate_high',
+  'log_storage_error_rate_high',
+  'log_edge_function_error_rate_high',
+] as const satisfies readonly HealthAdvisorName[];
+
+const hiddenHealthAdvisorResultNames: ReadonlySet<string> = new Set([
+  'project_not_active',
+  'advisor_check_unavailable',
+]);
 
 export type SupabaseApiPlatformOptions = {
   /**
@@ -76,7 +100,13 @@ export function createSupabaseApiPlatform(
 
   const managementApiUrl = apiUrl ?? 'https://api.supabase.com';
 
+  let userId: string | undefined;
+
   let managementApiClient = createManagementApiClient(
+    managementApiUrl,
+    accessToken
+  );
+  let managementApiV2Client = createManagementApiV2Client(
     managementApiUrl,
     accessToken
   );
@@ -339,6 +369,37 @@ export function createSupabaseApiPlatform(
       assertSuccess(response, 'Failed to fetch performance advisors');
 
       return response.data;
+    },
+    async getHealthAdvisors(projectId: string) {
+      const response = await managementApiV2Client.POST(
+        '/v2/projects/{ref}/advisors/run',
+        {
+          params: {
+            path: {
+              ref: projectId,
+            },
+          },
+          body: {
+            data: {
+              type: 'project_advisors',
+              attributes: {
+                lints: healthAdvisorNames.map((name) => ({ name })),
+              },
+            },
+          },
+        }
+      );
+
+      assertSuccessV2(response, 'Failed to fetch health advisors');
+
+      const attributes = response.data.data.attributes;
+
+      return {
+        ...attributes,
+        lints: attributes.lints.filter(
+          ({ name }) => !hiddenHealthAdvisorResultNames.has(name)
+        ),
+      };
     },
   };
 
@@ -835,6 +896,74 @@ export function createSupabaseApiPlatform(
     },
   };
 
+  const notebooks: NotebookOperations = {
+    async createNotebook(projectId, options) {
+      const attributes = createNotebookOptionsSchema.parse(options);
+      const response = await managementApiV2Client.POST(
+        '/v2/projects/{ref}/notebooks',
+        {
+          params: { path: { ref: projectId } },
+          body: { data: { type: 'notebook', attributes } },
+        }
+      );
+
+      assertSuccessV2(response, 'Failed to create notebook');
+
+      const { id, attributes: notebook } = response.data.data;
+      return { id, ...notebook };
+    },
+    async listNotebooks(projectId: string) {
+      const notebooks: Notebook[] = [];
+      let cursor: string | undefined;
+
+      do {
+        const response = await managementApiV2Client.GET(
+          '/v2/projects/{ref}/notebooks',
+          {
+            params: {
+              path: {
+                ref: projectId,
+              },
+              query: cursor ? { page: { after: cursor } } : undefined,
+            },
+          }
+        );
+
+        assertSuccessV2(response, "Failed to retrieve project's notebooks");
+
+        notebooks.push(
+          ...response.data.data.map(({ id, attributes }) => ({
+            id,
+            ...attributes,
+          }))
+        );
+
+        cursor = getNextNotebooksCursor(response.data.links.next);
+      } while (cursor);
+
+      return notebooks;
+    },
+    async getNotebook(projectId: string, notebookId: string) {
+      const response = await managementApiV2Client.GET(
+        '/v2/projects/{ref}/notebooks/{id}',
+        {
+          params: {
+            path: {
+              ref: projectId,
+              id: notebookId,
+            },
+          },
+        }
+      );
+
+      assertSuccessV2(response, 'Failed to retrieve notebook');
+
+      const { id, attributes } = response.data.data;
+
+      return { id, ...attributes };
+    },
+  };
+
   const platform: SupabasePlatform = {
     async init(info: InitData) {
       const { clientInfo } = info;
@@ -842,13 +971,19 @@ export function createSupabaseApiPlatform(
         throw new Error('Client info is required');
       }
 
-      // Re-initialize the management API client with the user agent
+      // Re-initialize the management API clients with the user agent
+      const userAgentHeaders = {
+        'User-Agent': `supabase-mcp/${version} (${clientInfo.name}/${clientInfo.version})`,
+      };
       managementApiClient = createManagementApiClient(
         managementApiUrl,
         accessToken,
-        {
-          'User-Agent': `supabase-mcp/${version} (${clientInfo.name}/${clientInfo.version})`,
-        }
+        userAgentHeaders
+      );
+      managementApiV2Client = createManagementApiV2Client(
+        managementApiUrl,
+        accessToken,
+        userAgentHeaders
       );
     },
     account,
@@ -859,9 +994,40 @@ export function createSupabaseApiPlatform(
     branching,
     storage,
     secrets,
+    notebooks,
+    feedback: createFeedbackOperations({
+      // Staging, local, and custom API URLs keep their feedback out of production
+      environment:
+        new URL(managementApiUrl).origin === 'https://api.supabase.com'
+          ? 'production'
+          : 'staging',
+      async getUserId() {
+        // X-Gotrue-Id is set on every response, see how CLI uses this too: https://github.com/supabase/cli/blob/8a549dffa6bc5c88069c61c1f55ef55ad9b82ae2/apps/cli/src/command-internal/identity-stitch.ts#L10-L20
+        userId ??=
+          (
+            await managementApiClient.GET('/v1/profile', {
+              signal: AbortSignal.timeout(5_000),
+            })
+          ).response.headers.get('X-Gotrue-Id') ?? undefined;
+        return userId;
+      },
+    }),
   };
 
   return platform;
+}
+
+/**
+ * Extracts the `page[after]` cursor from a JSON:API `links.next` URL path
+ * (e.g. `/v2/projects/{ref}/notebooks?page[size]=10&page[after]=<cursor>`).
+ */
+function getNextNotebooksCursor(next: string | null | undefined) {
+  if (!next) {
+    return undefined;
+  }
+
+  const url = new URL(next, 'https://supabase.com');
+  return url.searchParams.get('page[after]') ?? undefined;
 }
 
 function getProjectDomain(apiHostname: string) {

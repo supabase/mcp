@@ -1425,14 +1425,7 @@ export interface paths {
         /**
          * Gets project's logs
          * @deprecated
-         * @description Executes a SQL query on the project's logs.
-         *
-         *     Either the `iso_timestamp_start` and `iso_timestamp_end` parameters must be provided.
-         *     If both are not provided, only the last 1 minute of logs will be queried.
-         *     The timestamp range must be no more than 24 hours and is rounded to the nearest minute. If the range is more than 24 hours, a validation error will be thrown.
-         *
-         *     Note: Unless the `sql` parameter is provided, only edge_logs will be queried. See the [log query docs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#logs-explorer) for all available sources.
-         *
+         * @description This endpoint has been removed and always responds with `410 Gone`. Use `GET /v1/projects/{ref}/analytics/endpoints/logs` instead. See the [migration guide](https://supabase.com/changelog/48235-migration-of-supabase-management-api-logs-all-analytics-endpoint-to-logs-endpoint).
          */
         get: operations["v1-get-project-logs-all"];
         put?: never;
@@ -2610,7 +2603,7 @@ export interface components {
             /** @enum {string} */
             status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
         };
-        RegionsInfo_Output: {
+        RegionsInfoV1_Output: {
             recommendations: {
                 smartGroup: {
                     name: string;
@@ -4099,7 +4092,7 @@ export interface components {
         V1ProjectAdvisorsResponse_Output: {
             lints: {
                 /** @enum {string} */
-                name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "project_not_active" | "advisor_check_unavailable";
+                name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "realtime_authorization_timeouts" | "realtime_postgres_changes_spike" | "realtime_concurrent_users_near_limit" | "project_not_active" | "advisor_check_unavailable";
                 title: string;
                 /** @enum {string} */
                 level: "ERROR" | "WARN" | "INFO";
@@ -4594,11 +4587,44 @@ export interface components {
          *       "body": "Deno.serve(() => new Response('Hello again!'))",
          *       "verify_jwt": true
          *     } */
-        V1UpdateFunctionBody: {
+        V1UpdateFunctionBodyJson: {
             name?: string;
             body?: string;
             verify_jwt?: boolean;
         };
+        /**
+         * Format: binary
+         * @description Raw Brotli-compressed ESZIP binary file.
+         *
+         *     **Validation requirements** - The file must start with the four magic bytes `EZBR` (hex: `45 5A 42 52`).
+         *     - The `ezbr_sha256` query parameter must contain the SHA-256 hash of the uploaded ESZIP payload.
+         *
+         *     **Example**
+         *     ```javascript
+         *     import { readFile } from 'node:fs/promises';
+         *     import { brotliCompress } from 'node:zlib';
+         *     import { promisify } from 'node:util';
+         *     import { createHash } from 'node:crypto';
+         *
+         *     const compress = promisify(brotliCompress);
+         *     const marker = Buffer.from('EZBR', 'ascii');
+         *
+         *     const file = await readFile('./function.eszip');
+         *     const compressed = await compress(file);
+         *
+         *     const payload = Buffer.concat([marker, compressed]);
+         *
+         *     const ezbr_sha256 = createHash('sha256')
+         *       .update(payload)
+         *       .digest('hex');
+         *
+         *     console.log(ezbr_sha256);
+         *     ```
+         *
+         *
+         * @example Binary Brotli-compressed ESZIP file
+         */
+        V1UpdateFunctionBodyEszip: string;
         V1StorageBucketResponse_Output: {
             id: string;
             name: string;
@@ -4782,6 +4808,10 @@ export interface components {
         PostgresConfigResponse_Output: {
             effective_cache_size?: string;
             logical_decoding_work_mem?: string;
+            "pg_stat_statements.max"?: number;
+            "pg_net.batch_size"?: number;
+            autovacuum_max_workers?: number;
+            autovacuum_work_mem?: string;
             "cron.log_statement"?: boolean;
             /** @description Default unit: ms */
             log_autovacuum_min_duration?: string;
@@ -4834,6 +4864,10 @@ export interface components {
         UpdatePostgresConfigBody: {
             effective_cache_size?: string;
             logical_decoding_work_mem?: string;
+            "pg_stat_statements.max"?: number;
+            "pg_net.batch_size"?: number;
+            autovacuum_max_workers?: number;
+            autovacuum_work_mem?: string;
             "cron.log_statement"?: boolean;
             /** @description Default unit: ms */
             log_autovacuum_min_duration?: string;
@@ -4903,6 +4937,11 @@ export interface components {
             suspend: boolean | null;
             /** @description Whether to enable presence */
             presence_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description If set, the Realtime service has been suspended by an admin.
+             */
+            admin_suspended_at: string | null;
         };
         /** @example {
          *       "private_only": false,
@@ -5860,7 +5899,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RegionsInfo_Output"];
+                    "application/json": components["schemas"]["RegionsInfoV1_Output"];
                 };
             };
         };
@@ -6773,6 +6812,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description API key not found for project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Rate limit exceeded */
             429: {
                 headers: {
@@ -6818,6 +6864,13 @@ export interface operations {
             };
             /** @description Forbidden action */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description API key not found for project */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6873,6 +6926,13 @@ export interface operations {
             };
             /** @description Forbidden action */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description API key not found for project */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10265,12 +10325,7 @@ export interface operations {
     };
     "v1-get-project-logs-all": {
         parameters: {
-            query?: {
-                /** @description Custom SQL query to execute on the logs. See [querying logs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#querying-with-the-logs-explorer) for more details. */
-                sql?: string;
-                iso_timestamp_start?: string;
-                iso_timestamp_end?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Project ref */
@@ -10280,14 +10335,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalyticsResponse_Output"];
-                };
-            };
             /** @description Unauthorized */
             401: {
                 headers: {
@@ -10295,15 +10342,15 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Usage exceeded. Enable additional usage to continue querying */
-            402: {
+            /** @description Forbidden action */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Forbidden action */
-            403: {
+            /** @description This endpoint has been removed */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12070,8 +12117,8 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/vnd.denoland.eszip": string;
-                "application/json": components["schemas"]["V1UpdateFunctionBody"];
+                "application/vnd.denoland.eszip": components["schemas"]["V1UpdateFunctionBodyEszip"];
+                "application/json": components["schemas"]["V1UpdateFunctionBodyJson"];
             };
         };
         responses: {

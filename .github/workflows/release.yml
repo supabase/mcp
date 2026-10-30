@@ -205,6 +205,24 @@ jobs:
             echo "MCP registry version $VERSION already published, skipping."
           fi
 
+      # The MCP registry rejects versions npm doesn't serve yet; publish visibility lags by up to minutes.
+      # Polls the same uncached per-version endpoint the registry validates against.
+      - name: Wait for npm version to be available
+        if: ${{ steps.mcp-registry-check.outputs.already_published == 'false' }}
+        working-directory: packages/mcp-server-supabase
+        timeout-minutes: 7
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          for _ in $(seq 1 30); do
+            if curl -fsS -o /dev/null --max-time 10 "https://registry.npmjs.org/@supabase%2Fmcp-server-supabase/$VERSION"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "npm version $VERSION not available after 5 minutes" >&2
+          exit 1
+
       - name: Authenticate to MCP registry
         if: ${{ steps.mcp-registry-check.outputs.already_published == 'false' }}
         working-directory: packages/mcp-server-supabase

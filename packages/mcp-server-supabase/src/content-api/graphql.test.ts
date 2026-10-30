@@ -1,6 +1,11 @@
 import { stripIndent } from 'common-tags';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isToolCallerError } from '../errors.js';
 import { GraphQLClient } from './graphql.js';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('graphql client', () => {
   it('should load schema', async () => {
@@ -43,9 +48,11 @@ describe('graphql client', () => {
 
     await expect(
       graphqlClient.query({ query: 'invalid graphql query' })
-    ).rejects.toThrow(
-      'Invalid GraphQL query: Syntax Error: Unexpected Name "invalid"'
-    );
+    ).rejects.toMatchObject({
+      name: 'ToolCallerError',
+      message:
+        'Invalid GraphQL query: Syntax Error: Unexpected Name "invalid".',
+    });
   });
 
   it("should throw error if query doesn't match schema", async () => {
@@ -68,9 +75,11 @@ describe('graphql client', () => {
         { query: '{ invalidField }' },
         { validateSchema: true }
       )
-    ).rejects.toThrow(
-      'Invalid GraphQL query: Cannot query field "invalidField" on type "RootQueryType"'
-    );
+    ).rejects.toMatchObject({
+      name: 'ToolCallerError',
+      message:
+        'Invalid GraphQL query: Cannot query field "invalidField" on type "RootQueryType".',
+    });
   });
 
   it('bubbles up loadSchema errors', async () => {
@@ -84,5 +93,39 @@ describe('graphql client', () => {
     await expect(graphqlClient.schemaLoaded).rejects.toThrow(
       'Failed to load schema'
     );
+  });
+
+  it('keeps malformed server schema errors unbranded', async () => {
+    const graphqlClient = new GraphQLClient({
+      url: 'dummy-url',
+      loadSchema: async () => 'type Query {',
+    });
+
+    const error = await graphqlClient
+      .query({ query: '{ getHelloWorld }' }, { validateSchema: true })
+      .catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(isToolCallerError(error)).toBe(false);
+  });
+
+  it('keeps Content API failures as plain errors', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 503 })
+    );
+    const graphqlClient = new GraphQLClient({
+      url: 'https://content.example.com/graphql',
+    });
+
+    const error = await graphqlClient
+      .query({ query: '{ getHelloWorld }' })
+      .catch((error: unknown) => error);
+
+    expect(error).toMatchObject({
+      name: 'Error',
+      message:
+        'Failed to fetch Supabase Content API GraphQL schema: HTTP status 503',
+    });
+    expect(isToolCallerError(error)).toBe(false);
   });
 });

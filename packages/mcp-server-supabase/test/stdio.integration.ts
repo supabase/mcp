@@ -239,6 +239,7 @@ describe('stdio', () => {
         'create_branch',
         'create_project',
         'delete_branch',
+        'delete_feedback',
         'deploy_edge_function',
         'execute_sql',
         'generate_typescript_types',
@@ -263,6 +264,7 @@ describe('stdio', () => {
         'reset_branch',
         'restore_project',
         'search_docs',
+        'submit_feedback',
       ]);
       expect(client.getServerVersion()).toEqual({
         name: 'supabase',

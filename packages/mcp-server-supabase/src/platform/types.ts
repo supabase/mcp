@@ -119,6 +119,12 @@ export const executeSqlOptionsSchema = z.object({
   query: z.string().min(1),
   parameters: z.array(z.unknown()).optional(),
   read_only: z.boolean().optional(),
+  /**
+   * Largest result, in bytes of JSON, the caller will use. Platforms that
+   * buffer results in shared server memory should stop reading and throw once
+   * it's exceeded. Callers still check the rows they get back.
+   */
+  max_result_bytes: z.number().int().nonnegative().optional(),
 });
 
 export const applyMigrationOptionsSchema = z.object({
@@ -158,6 +164,155 @@ export const generateTypescriptTypesResultSchema = z.object({
   types: z.string(),
 });
 
+const notebookUserSchema = z
+  .object({
+    id: z.number(),
+    username: z.string(),
+  })
+  .nullable();
+
+const notebookChartConfigSchema = z.object({
+  type: z.enum(['bar', 'line']),
+  x_column: z.string(),
+  y_series: z.array(z.object({ column: z.string() })),
+  scale: z.enum(['linear', 'log']),
+  cumulative: z.boolean(),
+  show_labels: z.boolean(),
+});
+
+const notebookMarkdownCellSchema = z.object({
+  id: z.string(),
+  type: z.literal('markdown'),
+  text: z.string(),
+});
+
+const notebookDatabaseCellSchema = z.object({
+  id: z.string(),
+  type: z.literal('database'),
+  sql: z.string(),
+  row_limit: z.number(),
+  database_identifier: z.string().optional(),
+  title: z.string().optional(),
+  view: z.enum(['table', 'chart']).optional(),
+  chart: notebookChartConfigSchema.optional(),
+});
+
+const notebookLogTimeUnitSchema = z.enum([
+  'minute',
+  'hour',
+  'day',
+  'week',
+  'month',
+  'year',
+]);
+
+const notebookLogTimeRangeSchema = z.union([
+  z.object({
+    type: z.literal('absolute'),
+    start: z.string(),
+    end: z.string(),
+  }),
+  z.object({
+    type: z.literal('relative'),
+    unit: notebookLogTimeUnitSchema,
+    amount: z.number(),
+  }),
+]);
+
+const notebookLogCellSchema = z.object({
+  id: z.string(),
+  type: z.literal('log'),
+  sql: z.string(),
+  time_range: notebookLogTimeRangeSchema,
+  title: z.string().optional(),
+  view: z.enum(['table', 'chart']).optional(),
+  chart: notebookChartConfigSchema.optional(),
+});
+
+export const notebookCellSchema = z.discriminatedUnion('type', [
+  notebookMarkdownCellSchema,
+  notebookDatabaseCellSchema,
+  notebookLogCellSchema,
+]);
+
+// Cell keys to create, without server-assigned ids. Stricter than the read
+// schemas above, so a misspelled cell key fails instead of being dropped.
+const newNotebookChartConfigSchema = notebookChartConfigSchema
+  .extend({
+    y_series: z.array(
+      notebookChartConfigSchema.shape.y_series.element.strict()
+    ),
+  })
+  .strict();
+
+const newNotebookSqlSchema = z.string().trim().min(1);
+
+const newNotebookCellSchema = z.discriminatedUnion('type', [
+  notebookMarkdownCellSchema.omit({ id: true }).strict(),
+  notebookDatabaseCellSchema
+    .omit({ id: true })
+    .extend({
+      sql: newNotebookSqlSchema,
+      row_limit: z.number().int().positive(),
+      database_identifier: z.string().min(1).optional(),
+      chart: newNotebookChartConfigSchema.optional(),
+    })
+    .strict(),
+  notebookLogCellSchema
+    .omit({ id: true })
+    .extend({
+      sql: newNotebookSqlSchema,
+      time_range: z.discriminatedUnion('type', [
+        z
+          .object({
+            type: z.literal('absolute'),
+            start: z.iso.datetime({ offset: true }),
+            end: z.iso.datetime({ offset: true }),
+          })
+          .strict()
+          .refine((range) => Date.parse(range.end) > Date.parse(range.start), {
+            message: 'The end must be later than the start of the range.',
+            path: ['end'],
+          }),
+        z
+          .object({
+            type: z.literal('relative'),
+            unit: notebookLogTimeUnitSchema,
+            amount: z.number().int().positive(),
+          })
+          .strict(),
+      ]),
+      chart: newNotebookChartConfigSchema.optional(),
+    })
+    .strict(),
+]);
+
+export const createNotebookOptionsSchema = z.object({
+  name: z.string().trim().min(1),
+  description: z.string().optional(),
+  content: z.object({
+    cells: z.array(newNotebookCellSchema),
+  }),
+});
+
+export const notebookSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  favorite: z.boolean(),
+  inserted_at: z.string(),
+  updated_at: z.string(),
+  owner: notebookUserSchema,
+  updated_by: notebookUserSchema,
+});
+
+export const notebookWithContentSchema = notebookSchema.extend({
+  content: z.object({
+    schema_version: z.number(),
+    cells: z.array(notebookCellSchema),
+  }),
+});
+
 export type Organization = z.infer<typeof organizationSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type Branch = z.infer<typeof branchSchema>;
@@ -185,6 +340,11 @@ export type GenerateTypescriptTypesResult = z.infer<
 
 export type StorageConfig = z.infer<typeof storageConfigSchema>;
 export type StorageBucket = z.infer<typeof storageBucketSchema>;
+
+export type NotebookCell = z.infer<typeof notebookCellSchema>;
+export type CreateNotebookOptions = z.infer<typeof createNotebookOptionsSchema>;
+export type Notebook = z.infer<typeof notebookSchema>;
+export type NotebookWithContent = z.infer<typeof notebookWithContentSchema>;
 
 export type DatabaseOperations = {
   executeSql<T>(projectId: string, options: ExecuteSqlOptions): Promise<T[]>;
@@ -235,6 +395,7 @@ export type DebuggingOperations = {
   queryLogs?(projectId: string, options: QueryLogsOptions): Promise<unknown>;
   getSecurityAdvisors(projectId: string): Promise<unknown>;
   getPerformanceAdvisors(projectId: string): Promise<unknown>;
+  getHealthAdvisors?(projectId: string): Promise<unknown>;
 };
 
 export const apiKeyTypeSchema = z.enum(['legacy', 'publishable']);
@@ -283,6 +444,31 @@ export type SecretOperations = {
   getUpdatedAt(projectId: string, name: string): Promise<Date | undefined>;
 };
 
+export type NotebookOperations = {
+  /** Optional for platforms that only support reading notebooks. */
+  createNotebook?(
+    projectId: string,
+    options: CreateNotebookOptions
+  ): Promise<NotebookWithContent>;
+  listNotebooks(projectId: string): Promise<Notebook[]>;
+  getNotebook(
+    projectId: string,
+    notebookId: string
+  ): Promise<NotebookWithContent>;
+};
+
+export type FeedbackOperations = {
+  submit(input: {
+    feedback: string;
+    projectId?: string;
+    clientInfo?: { name: string; version: string };
+  }): Promise<{ deleteToken: string }>;
+  delete(input: {
+    deleteToken: string;
+    projectId?: string;
+  }): Promise<{ deleted: boolean }>;
+};
+
 export type SupabasePlatform = {
   init?(info: InitData): Promise<void>;
   account?: AccountOperations;
@@ -293,4 +479,6 @@ export type SupabasePlatform = {
   storage?: StorageOperations;
   branching?: BranchingOperations;
   secrets?: SecretOperations;
+  notebooks?: NotebookOperations;
+  feedback?: FeedbackOperations;
 };

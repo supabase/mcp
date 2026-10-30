@@ -22,6 +22,8 @@ jobs:
         run: |
           pnpm run build
           pnpm rebuild # To create bin links
+      - name: Packed platform consumer check
+        run: pnpm run test:packed-platform-consumer
       - name: Tests
         run: pnpm run test:coverage
       - name: Upload coverage artifact
