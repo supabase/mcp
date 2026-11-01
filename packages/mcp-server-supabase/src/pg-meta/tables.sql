@@ -75,6 +75,7 @@ FROM
         on ta.attrelid = c.confrelid and ta.attnum = cols.confkey
     where
       c.contype = 'f'
+      and c.conparentid = 0
     group by
       c.oid, c.conname, nsa.nspname, csa.relname, nta.nspname, cta.relname
   ) as relationships
