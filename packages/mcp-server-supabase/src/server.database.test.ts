@@ -825,6 +825,57 @@ describe('tools', () => {
     expect(fks('public.events_2026')).toBeUndefined();
   });
 
+  test('partitions are marked with their immediate parent', async () => {
+    const { callTool } = await setup();
+
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    await project.db.exec(`
+      create table events (
+        region text,
+        created_at date
+      ) partition by range (created_at);
+      create table events_2025 partition of events
+        for values from ('2025-01-01') to ('2026-01-01')
+        partition by list (region);
+      create table events_2025_eu partition of events_2025
+        for values in ('eu');
+      create schema archive;
+      create table archive.events_2024 partition of events
+        for values from ('2024-01-01') to ('2025-01-01');
+
+      create table logs (
+        id int
+      );
+      create table logs_2025 () inherits (logs);
+    `);
+
+    for (const verbose of [false, true]) {
+      const result = await callTool({
+        name: 'list_tables',
+        arguments: {
+          project_id: project.id,
+          schemas: ['public', 'archive'],
+          verbose,
+        },
+      });
+
+      const partitionOf = (name: string) =>
+        result.tables.find((t: { name: string }) => t.name === name)
+          .partition_of;
+
+      expect(partitionOf('public.events')).toBeUndefined();
+      expect(partitionOf('public.events_2025')).toBe('public.events');
+      expect(partitionOf('public.events_2025_eu')).toBe('public.events_2025');
+      expect(partitionOf('archive.events_2024')).toBe('public.events');
+      expect(partitionOf('public.logs')).toBeUndefined();
+      expect(partitionOf('public.logs_2025')).toBeUndefined();
+    }
+  });
+
   test('list_tables omits advisory when all tables have RLS enabled', async () => {
     const { callTool } = await setup();
 
