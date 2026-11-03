@@ -22,6 +22,7 @@ export const graphqlErrorSchema = z.object({
       column: z.number(),
     })
   ),
+  path: z.array(z.union([z.string(), z.number()])).optional(),
 });
 
 export const graphqlResponseSchema = z.object({
@@ -187,14 +188,19 @@ export class GraphQLClient {
     }
 
     if (data.errors?.length) {
-      throw new ToolCallerError(
-        `Supabase Content API GraphQL error: ${data.errors
-          .map(
-            (err) =>
-              `${err.message} (line ${err.locations[0]?.line ?? 'unknown'}, column ${err.locations[0]?.column ?? 'unknown'})`
-          )
-          .join(', ')}`
-      );
+      const message = `Supabase Content API GraphQL error: ${data.errors
+        .map(
+          (err) =>
+            `${err.message} (line ${err.locations[0]?.line ?? 'unknown'}, column ${err.locations[0]?.column ?? 'unknown'})`
+        )
+        .join(', ')}`;
+
+      // An error with a `path` happened while executing a field, so it is a
+      // Content API fault. Only errors with no `path` reflect the query itself.
+      if (data.errors.some((err) => err.path)) {
+        throw new Error(message);
+      }
+      throw new ToolCallerError(message);
     }
 
     if (!data.data) {
