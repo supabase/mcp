@@ -42,6 +42,7 @@ const tools = [
   'execute_sql',
   'apply_migration',
   'run_notebook',
+  'delete_notebook',
   'create_project',
   'create_branch',
 ] as const;
@@ -51,6 +52,7 @@ const requestKey = {
   execute_sql: 'confirm_destructive',
   apply_migration: 'confirm_destructive',
   run_notebook: 'confirm_run',
+  delete_notebook: 'confirm_delete',
   create_project: 'confirm_cost',
   create_branch: 'confirm_cost',
 } as const satisfies Record<Tool, string>;
@@ -59,6 +61,7 @@ const feature = {
   execute_sql: 'destructive_sql',
   apply_migration: 'destructive_sql',
   run_notebook: 'notebook',
+  delete_notebook: 'notebook',
   create_project: 'cost',
   create_branch: 'cost',
 } as const satisfies Record<Tool, ObservationFact['feature']>;
@@ -72,6 +75,8 @@ const expiredMessage = {
     'This confirmation expired after 10 minutes. Call `apply_migration` again to get a new confirmation.',
   run_notebook:
     'This confirmation expired after 10 minutes. Call `run_notebook` again to get a new confirmation.',
+  delete_notebook:
+    'This confirmation expired after 10 minutes. Call `delete_notebook` again to get a new confirmation.',
   create_project:
     'This confirmation expired after 10 minutes. Call `create_project` again to get a new confirmation.',
   create_branch:
@@ -93,6 +98,7 @@ const args = {
     notebook_id: 'PRIVATE_NOTEBOOK',
     expected_updated_at: updatedAt,
   },
+  delete_notebook: { project_id: projectId, notebook_id: 'PRIVATE_NOTEBOOK' },
   create_project: {
     name: 'PRIVATE_NAME',
     region: 'us-east-1',
@@ -184,6 +190,7 @@ async function setup(
     notebooks: {
       getNotebook: slowRead(async () => currentNotebook),
       listNotebooks: vi.fn(async () => []),
+      deleteNotebook: vi.fn(async () => {}),
     },
   } satisfies SupabasePlatform;
   const features = ['account', 'branching', 'database', 'notebooks'];
@@ -216,12 +223,14 @@ async function setup(
       platform.database.applyMigration,
       fake.createProject,
       fake.createBranch,
+      platform.notebooks.deleteNotebook,
     ],
     operation: {
       execute_sql: platform.database.executeSql,
       apply_migration: platform.database.applyMigration,
       run_notebook: platform.database.executeSql,
       create_project: fake.createProject,
+      delete_notebook: platform.notebooks.deleteNotebook,
       create_branch: fake.createBranch,
     },
     createBranch: fake.createBranch,

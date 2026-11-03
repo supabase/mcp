@@ -99,11 +99,13 @@ async function setup({
   capabilities = form,
   readOnly = false,
   configured = true,
+  enabledTools = configured ? ['run_notebook', 'delete_notebook'] : [],
 }: {
   cells?: NotebookCell[];
   capabilities?: ClientCapabilities;
   readOnly?: boolean;
   configured?: boolean;
+  enabledTools?: ('run_notebook' | 'delete_notebook')[];
 } = {}) {
   const saved: NotebookWithContent = {
     ...notebook,
@@ -111,11 +113,13 @@ async function setup({
   };
   const getNotebook = vi.fn(async () => saved);
   const executeSql = vi.fn(async () => []);
+  const deleteNotebook = vi.fn(async () => {});
   const queryLogs = vi.fn(async () => ({ result: [{ PRIVATE_LOG_ROW: 2 }] }));
   const platform = {
     notebooks: {
       getNotebook,
       listNotebooks: vi.fn(async () => []),
+      deleteNotebook,
     },
     database: {
       executeSql,
@@ -158,7 +162,7 @@ async function setup({
     clientCapabilities: capabilities,
     elicitation: {
       requestState: { key: 'a'.repeat(32), principal: 'PRIVATE_PRINCIPAL' },
-      confirmation: { enabledTools: configured ? ['run_notebook'] : [] },
+      confirmation: { enabledTools },
     },
     observer,
   });
@@ -170,7 +174,14 @@ async function setup({
       ...extra,
     });
   }
-  return { attempts, saved, executeSql, queryLogs, run };
+  function del(extra: Partial<Parameters<typeof callModernTool>[1]> = {}) {
+    return callModernTool(client, {
+      name: 'delete_notebook',
+      arguments: { project_id: projectId, notebook_id: notebookId },
+      ...extra,
+    });
+  }
+  return { attempts, saved, executeSql, queryLogs, deleteNotebook, run, del };
 }
 
 test('initial and missing-response reissue each records only its own confirmation facts', async () => {
@@ -371,4 +382,100 @@ test('a caught cell failure still returns one notebook operation result', async 
     'completed'
   );
   expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_CELL_ERROR');
+});
+
+test.each([
+  ['accept', 'completed'],
+  ['decline', 'declined'],
+  ['cancel', 'cancelled'],
+] as const)(
+  'delete %s records its response and deletes only on accept',
+  async (action, outcome) => {
+    const h = await setup();
+    const first = issued(await h.del());
+    const result = await h.del({
+      requestState: first.requestState,
+      inputResponses: {
+        confirm_delete:
+          action === 'accept' ? { action, content: {} } : { action },
+      },
+    });
+    expect(isInputRequiredResult(result)).toBe(false);
+    expect(h.attempts).toHaveLength(2);
+    assertAttempt(
+      h.attempts[0],
+      'delete_notebook',
+      [eligible, required('initial')],
+      'input_required'
+    );
+    assertAttempt(
+      h.attempts[1],
+      'delete_notebook',
+      [
+        eligible,
+        response(action),
+        ...(action === 'accept'
+          ? [validation('valid'), started, returned]
+          : []),
+      ],
+      outcome
+    );
+    expect(h.deleteNotebook).toHaveBeenCalledTimes(action === 'accept' ? 1 : 0);
+    expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_NOTEBOOK_NAME');
+  }
+);
+
+test('delete without form capability records a block and no operation', async () => {
+  const h = await setup({ capabilities: {} });
+  const result = await h.del();
+  expect((result as CallToolResult).isError).toBe(true);
+  assertAttempt(
+    h.attempts[0],
+    'delete_notebook',
+    [
+      {
+        kind: 'confirmation_decision',
+        feature: 'notebook',
+        route: 'blocked',
+        reason: 'capability_missing',
+      },
+    ],
+    'tool_error'
+  );
+  expect(h.deleteNotebook).not.toHaveBeenCalled();
+});
+
+test('skipping delete confirmation deletes without a prompt while runs still confirm', async () => {
+  const h = await setup({ enabledTools: ['run_notebook'] });
+  const deleted = await h.del();
+  expect(isInputRequiredResult(deleted)).toBe(false);
+  assertAttempt(
+    h.attempts[0],
+    'delete_notebook',
+    [
+      {
+        kind: 'confirmation_decision',
+        feature: 'notebook',
+        route: 'bypass',
+        reason: 'not_configured',
+      },
+      started,
+      returned,
+    ],
+    'completed'
+  );
+  expect(h.deleteNotebook).toHaveBeenCalledOnce();
+
+  issued(await h.run());
+  expect(h.executeSql).not.toHaveBeenCalled();
+});
+
+test('skipping run confirmation runs mutating cells while deletes still confirm', async () => {
+  const h = await setup({ enabledTools: ['delete_notebook'] });
+  const ran = await h.run();
+  expect(isInputRequiredResult(ran)).toBe(false);
+  expect(h.executeSql).toHaveBeenCalledOnce();
+
+  issued(await h.del());
+  expect(h.deleteNotebook).not.toHaveBeenCalled();
 });

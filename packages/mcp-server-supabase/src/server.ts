@@ -385,8 +385,15 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             readOnly,
             confirmation:
               elicitationCodec &&
-              enabledConfirmationTools.includes('run_notebook')
-                ? { codec: elicitationCodec }
+              (enabledConfirmationTools.includes('run_notebook') ||
+                enabledConfirmationTools.includes('delete_notebook'))
+                ? {
+                    codec: elicitationCodec,
+                    enabledTools: enabledConfirmationTools.filter(
+                      (tool): tool is 'run_notebook' | 'delete_notebook' =>
+                        tool === 'run_notebook' || tool === 'delete_notebook'
+                    ),
+                  }
                 : undefined,
           })
         );

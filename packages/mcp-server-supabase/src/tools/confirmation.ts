@@ -129,6 +129,18 @@ export type RunNotebookState = {
   issued_at?: IssuedAt;
 };
 
+/**
+ * Signed `requestState` payload for the `delete_notebook` confirmation, bound
+ * to the notebook version shown to the user.
+ */
+export type DeleteNotebookState = {
+  tool: 'delete_notebook';
+  project_id: string;
+  notebook_id: string;
+  updated_at: string;
+  issued_at?: IssuedAt;
+};
+
 export type DestructiveSqlState = ExecuteSqlState | ApplyMigrationState;
 export type CostConfirmationState = ProjectCostState | BranchCostState;
 
@@ -139,7 +151,8 @@ export type CostConfirmationState = ProjectCostState | BranchCostState;
 export type ConfirmationState =
   | CostConfirmationState
   | DestructiveSqlState
-  | RunNotebookState;
+  | RunNotebookState
+  | DeleteNotebookState;
 
 /**
  * Signed state for URL-mode secret collection, bound to the project and name.
@@ -179,6 +192,14 @@ export const runNotebookStateSchema = z.object({
   readOnly: z.boolean(),
   issued_at: issuedAtSchema,
 }) satisfies z.ZodType<RunNotebookState>;
+
+export const deleteNotebookStateSchema = z.object({
+  tool: z.literal('delete_notebook'),
+  project_id: z.string(),
+  notebook_id: z.string(),
+  updated_at: z.string(),
+  issued_at: issuedAtSchema,
+}) satisfies z.ZodType<DeleteNotebookState>;
 
 export type CheckConfirmationStateResult =
   | { kind: 'proceed' }
@@ -220,6 +241,7 @@ const FEATURE = {
   execute_sql: 'destructive_sql',
   apply_migration: 'destructive_sql',
   run_notebook: 'notebook',
+  delete_notebook: 'notebook',
 } as const satisfies Record<ConfirmationState['tool'], ConfirmationFeature>;
 
 // SU-495524 logs show ~0.55 s client auto-cancels; nobody reads SQL and answers in < 1 s.

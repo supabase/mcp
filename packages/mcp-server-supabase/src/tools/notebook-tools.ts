@@ -23,6 +23,7 @@ import {
   checkConfirmationState,
   isFormCapable,
   observeOperation,
+  deleteNotebookStateSchema,
   runNotebookStateSchema,
   type ElicitationState,
 } from './confirmation.js';
@@ -55,11 +56,13 @@ type NotebookToolsOptions = {
   dashboardUrl?: string;
   readOnly?: boolean;
   /**
-   * Requires confirmation for mutating database cells. Clients without
-   * form capability cannot run them while confirmation is enabled.
+   * Enables form confirmation per tool. `run_notebook` confirms only mutating
+   * database cells; `delete_notebook` always confirms. Clients without form
+   * capability cannot run either confirmed operation.
    */
   confirmation?: {
     codec: RequestStateCodec<ElicitationState>;
+    enabledTools: readonly ('run_notebook' | 'delete_notebook')[];
   };
 };
 
@@ -130,6 +133,16 @@ const runNotebookOutputSchema = z.object({
   cells: z.string(),
 });
 
+const deleteNotebookInputSchema = z.object({
+  project_id: z.string(),
+  notebook_id: z.string().describe('The id of the notebook to delete'),
+});
+
+const deleteNotebookOutputSchema = notebookSchema.pick({
+  id: true,
+  name: true,
+});
+
 export const notebookToolDefs = {
   create_notebook: {
     description:
@@ -182,6 +195,19 @@ export const notebookToolDefs = {
       destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true,
+    },
+  },
+  delete_notebook: {
+    description:
+      'Deletes a notebook from a Supabase project, removing it for everyone with access to the project. This cannot be undone. The user may need to confirm before the notebook is deleted.',
+    parameters: deleteNotebookInputSchema,
+    outputSchema: deleteNotebookOutputSchema,
+    annotations: {
+      title: 'Delete notebook',
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
     },
   },
 } as const satisfies ToolDefs;
@@ -294,6 +320,14 @@ export function getNotebookTools({
 }: NotebookToolsOptions) {
   const project_id = projectId;
   const createNotebook = notebooks.createNotebook?.bind(notebooks);
+  const runConfirmation = confirmation?.enabledTools.includes('run_notebook')
+    ? confirmation
+    : undefined;
+  const deleteConfirmation = confirmation?.enabledTools.includes(
+    'delete_notebook'
+  )
+    ? confirmation
+    : undefined;
 
   return {
     ...(createNotebook && {
@@ -394,7 +428,7 @@ export function getNotebookTools({
           }
 
           if (
-            confirmation &&
+            runConfirmation &&
             // Still validate pending approvals and honor decline/cancel if
             // the notebook or execution mode changed in the meantime.
             (mutatingCells.length > 0 ||
@@ -411,7 +445,7 @@ export function getNotebookTools({
                 'Notebook run requires confirmation, but this client does not support form elicitation. No cells were run. Use a client with form elicitation support or run in read-only mode.'
               );
             }
-            const { codec } = confirmation;
+            const { codec } = runConfirmation;
             const cellsHash = await hashObject({ cells: queryCells });
             record?.({
               kind: 'confirmation_decision',
@@ -482,7 +516,7 @@ export function getNotebookTools({
               route: 'bypass',
               reason: readOnly
                 ? 'read_only'
-                : confirmation
+                : runConfirmation
                   ? 'not_mutating'
                   : 'not_configured',
             });
@@ -517,6 +551,110 @@ export function getNotebookTools({
           });
         },
       }),
+    }),
+    delete_notebook: injectableTool({
+      ...notebookToolDefs.delete_notebook,
+      inject: { project_id },
+      execute: async (
+        { project_id, notebook_id },
+        ctx: ServerContext,
+        observation?: ToolObservation<ObservationFact>
+      ) => {
+        const receivedAt = Date.now();
+        const record = observation?.record;
+
+        if (readOnly) {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'notebook',
+            route: 'blocked',
+            reason: 'read_only',
+          });
+          throw new ToolCallerError(
+            'Cannot delete notebook in read-only mode.'
+          );
+        }
+
+        const notebook = await notebooks.getNotebook(project_id, notebook_id);
+
+        if (deleteConfirmation) {
+          if (!isFormCapable(ctx)) {
+            record?.({
+              kind: 'confirmation_decision',
+              feature: 'notebook',
+              route: 'blocked',
+              reason: 'capability_missing',
+            });
+            throw new Error(
+              'Deleting a notebook requires confirmation, but this client does not support form elicitation. The notebook was not deleted. Use a client with form elicitation support or delete it from the Supabase dashboard.'
+            );
+          }
+          const { codec } = deleteConfirmation;
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'notebook',
+            route: 'inline',
+            reason: 'eligible',
+          });
+
+          const askForConfirmation = async () =>
+            inputRequired({
+              inputRequests: {
+                confirm_delete: inputRequired.elicit({
+                  mode: 'form',
+                  message: [
+                    `Permanently delete notebook ${JSON.stringify(notebook.name)}?`,
+                    'It will be removed for everyone with access to the project. This cannot be undone.',
+                    notebookUrl(dashboardUrl, project_id, notebook_id),
+                  ].join('\n'),
+                  requestedSchema: actionOnlyElicitationSchema,
+                }),
+              },
+              requestState: await codec.mint(
+                {
+                  tool: 'delete_notebook',
+                  project_id,
+                  notebook_id,
+                  updated_at: notebook.updated_at,
+                  issued_at: Date.now(),
+                },
+                ctx
+              ),
+            });
+
+          const confirmationState = await checkConfirmationState({
+            ctx,
+            tool: 'delete_notebook',
+            schema: deleteNotebookStateSchema,
+            receivedAt,
+            requestKey: 'confirm_delete',
+            askForConfirmation,
+            argsMatch: (state) =>
+              state.project_id === project_id &&
+              state.notebook_id === notebook_id,
+            // Re-ask when the notebook was edited after approval.
+            payloadMatch: (state) => state.updated_at === notebook.updated_at,
+            declinedText: 'Notebook deletion was declined.',
+            observation,
+          });
+
+          if (confirmationState.kind !== 'proceed') {
+            return confirmationState.result;
+          }
+        } else {
+          record?.({
+            kind: 'confirmation_decision',
+            feature: 'notebook',
+            route: 'bypass',
+            reason: 'not_configured',
+          });
+        }
+
+        return observeOperation('notebook', record, async () => {
+          await notebooks.deleteNotebook(project_id, notebook_id);
+          return { id: notebook.id, name: notebook.name };
+        });
+      },
     }),
   };
 }

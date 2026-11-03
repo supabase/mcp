@@ -1455,6 +1455,205 @@ describe('run_notebook', () => {
   });
 });
 
+describe('delete_notebook', () => {
+  const markdownOnly: NotebookCell[] = [
+    { id: 'intro', type: 'markdown', text: 'Signup metrics' },
+  ];
+
+  function deleteArgs(project: { id: string }, notebook: { id: string }) {
+    return { project_id: project.id, notebook_id: notebook.id };
+  }
+
+  test('form-capable client: accept deletes the notebook', async () => {
+    const { client } = await setupModern({
+      features: ['notebooks'],
+      clientCapabilities: FORM_CAPABLE,
+      elicitationAction: 'accept',
+    });
+    const { project, notebook } = await createNotebookFixture(markdownOnly);
+
+    const result = (await client.callTool({
+      name: 'delete_notebook',
+      arguments: deleteArgs(project, notebook),
+    })) as CallToolResult;
+
+    expect(result.isError).toBeFalsy();
+    expect(parseToolResult(result)).toEqual({
+      id: notebook.id,
+      name: 'Signups',
+    });
+    expect(project.notebooks.has(notebook.id)).toBe(false);
+  });
+
+  test('asks for confirmation naming the notebook and linking to it', async () => {
+    const { client } = await setupModern({
+      features: ['notebooks'],
+      clientCapabilities: FORM_CAPABLE,
+    });
+    const { project, notebook } = await createNotebookFixture(markdownOnly);
+
+    const result = await callModernTool(client, {
+      name: 'delete_notebook',
+      arguments: deleteArgs(project, notebook),
+    });
+
+    if (!isInputRequiredResult(result)) {
+      throw new Error('expected an input_required result');
+    }
+    expect(result.inputRequests?.confirm_delete).toMatchObject({
+      params: {
+        mode: 'form',
+        message: expect.stringMatching(
+          new RegExp(
+            `^Permanently delete notebook "Signups"\\?\\n.*cannot be undone\\.\\n.*/explorer/notebook/${notebook.id}$`
+          )
+        ),
+      },
+    });
+    expect(project.notebooks.has(notebook.id)).toBe(true);
+  });
+
+  test.each([
+    ['decline', 'declined'],
+    ['cancel', 'cancelled'],
+  ] as const)(
+    'form-capable client: %s keeps the notebook',
+    async (elicitationAction, status) => {
+      const { client } = await setupModern({
+        features: ['notebooks'],
+        clientCapabilities: FORM_CAPABLE,
+        elicitationAction,
+      });
+      const { project, notebook } = await createNotebookFixture(markdownOnly);
+      freezeClock();
+
+      const result = await client.callTool({
+        name: 'delete_notebook',
+        arguments: deleteArgs(project, notebook),
+      });
+
+      expectTerminalResult(
+        result,
+        status,
+        status === 'declined'
+          ? 'Notebook deletion was declined.'
+          : "The client cancelled this confirmation 0.0 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically."
+      );
+      expect(project.notebooks.has(notebook.id)).toBe(true);
+    }
+  );
+
+  test('client without form elicitation cannot delete when confirmation is configured', async () => {
+    const { client } = await setupModern({ features: ['notebooks'] });
+    const { project, notebook } = await createNotebookFixture(markdownOnly);
+
+    const result = (await client.callTool({
+      name: 'delete_notebook',
+      arguments: deleteArgs(project, notebook),
+    })) as CallToolResult;
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      'does not support form elicitation. The notebook was not deleted.'
+    );
+    expect(project.notebooks.has(notebook.id)).toBe(true);
+  });
+
+  test('deletes without a prompt when confirmation is not configured', async () => {
+    const { callTool } = await setup({ features: ['notebooks'] });
+    const { project, notebook } = await createNotebookFixture(markdownOnly);
+
+    await callTool({
+      name: 'delete_notebook',
+      arguments: deleteArgs(project, notebook),
+    });
+
+    expect(project.notebooks.has(notebook.id)).toBe(false);
+  });
+
+  test('asks again when the notebook changed after confirmation was requested', async () => {
+    const { client } = await setupModern({
+      features: ['notebooks'],
+      clientCapabilities: FORM_CAPABLE,
+    });
+    const { project, notebook } = await createNotebookFixture(markdownOnly);
+    const args = deleteArgs(project, notebook);
+
+    const first = await callModernTool(client, {
+      name: 'delete_notebook',
+      arguments: args,
+    });
+    if (!isInputRequiredResult(first)) {
+      throw new Error('expected an input_required result');
+    }
+
+    notebook.updated_at = new Date('2099-01-01T00:00:00.000Z');
+
+    const second = await callModernTool(client, {
+      name: 'delete_notebook',
+      arguments: args,
+      requestState: first.requestState,
+      inputResponses: { confirm_delete: { action: 'accept', content: {} } },
+    });
+
+    expect(isInputRequiredResult(second)).toBe(true);
+    expect(project.notebooks.has(notebook.id)).toBe(true);
+  });
+
+  test('rejects a retry for a different notebook than the state was minted for', async () => {
+    const { client } = await setupModern({
+      features: ['notebooks'],
+      clientCapabilities: FORM_CAPABLE,
+    });
+    const { project, notebook } = await createNotebookFixture(markdownOnly);
+    const other = project.createNotebook({ name: 'Other' });
+
+    const first = await callModernTool(client, {
+      name: 'delete_notebook',
+      arguments: deleteArgs(project, notebook),
+    });
+    if (!isInputRequiredResult(first)) {
+      throw new Error('expected an input_required result');
+    }
+
+    const second = await callModernTool(client, {
+      name: 'delete_notebook',
+      arguments: deleteArgs(project, other),
+      requestState: first.requestState,
+      inputResponses: { confirm_delete: { action: 'accept', content: {} } },
+    });
+
+    if (isInputRequiredResult(second)) {
+      throw new Error('expected a CallToolResult');
+    }
+    expectTerminalResult(
+      second,
+      'error',
+      'Request state arguments do not match the current arguments.'
+    );
+    expect(project.notebooks.has(other.id)).toBe(true);
+  });
+
+  test('read-only mode hides deletion and rejects direct calls', async () => {
+    const { client, callTool } = await setup({
+      features: ['notebooks'],
+      readOnly: true,
+    });
+    const { project, notebook } = await createNotebookFixture(markdownOnly);
+
+    expect(
+      (await client.listTools()).tools.map((tool) => tool.name)
+    ).not.toContain('delete_notebook');
+    await expect(
+      callTool({
+        name: 'delete_notebook',
+        arguments: deleteArgs(project, notebook),
+      })
+    ).rejects.toThrow('Cannot delete notebook in read-only mode.');
+    expect(project.notebooks.has(notebook.id)).toBe(true);
+  });
+});
+
 describe('create_notebook', () => {
   const chart = {
     type: 'bar',
