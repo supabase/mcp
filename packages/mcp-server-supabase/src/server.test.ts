@@ -16,7 +16,7 @@ import { supabaseMcpToolSchemas } from './tools/tool-schemas.js';
 import { stripIndent } from 'common-tags';
 import gqlmin from 'gqlmin';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { globalRegistry } from 'zod/v4';
+import { globalRegistry, ZodError } from 'zod/v4';
 
 const harness = createServerHarness();
 const setup = harness.setup;
@@ -656,6 +656,100 @@ describe('feature groups', () => {
     ).rejects.toThrow('upstream down');
 
     expect(errors.map(isToolCallerError)).toEqual([true, false]);
+  });
+
+  // Hand-written zod v4 message for `.strict()` rejecting an extra key
+  // (JSON.stringify(issues, null, 2)); the client sees it today.
+  const unrecognizedExtraKeyMessage = [
+    '[',
+    '  {',
+    '    "code": "unrecognized_keys",',
+    '    "keys": [',
+    '      "extra"',
+    '    ],',
+    '    "path": [],',
+    '    "message": "Unrecognized key: \\"extra\\""',
+    '  }',
+    ']',
+  ].join('\n');
+
+  test('onToolCall reports argument and unknown-tool failures as caller errors', async () => {
+    const failures: Array<{ name: string; arguments: unknown; error: unknown }> =
+      [];
+    const { client } = await setup({
+      onToolCall: (details) => {
+        if (!details.success) {
+          failures.push({
+            name: details.name,
+            arguments: details.arguments,
+            error: details.error,
+          });
+        }
+      },
+    });
+
+    await client.callTool({
+      name: 'list_organizations',
+      arguments: { extra: true },
+    });
+    await client.callTool({ name: 'no_such_tool', arguments: { foo: 'bar' } });
+
+    expect(failures.map(({ name, arguments: args }) => [name, args])).toEqual([
+      ['list_organizations', { extra: true }],
+      ['no_such_tool', { foo: 'bar' }],
+    ]);
+
+    const parseError = failures[0]?.error as Error & {
+      cause?: unknown;
+      kind?: unknown;
+    };
+    expect(isToolCallerError(parseError)).toBe(true);
+    expect(parseError.cause).toBeInstanceOf(ZodError);
+    expect((parseError.cause as ZodError).message).toBe(
+      unrecognizedExtraKeyMessage
+    );
+    expect(parseError.message).toBe(unrecognizedExtraKeyMessage);
+    expect(parseError.kind).toBeUndefined();
+
+    const unknownToolError = failures[1]?.error as Error & { cause?: unknown };
+    expect(isToolCallerError(unknownToolError)).toBe(true);
+    expect(unknownToolError.cause).not.toBeInstanceOf(ZodError);
+    expect(unknownToolError.message).toBe('tool not found');
+  });
+
+  // Passes today: guards the client-visible result while the hook changes.
+  test('argument and unknown-tool failures keep their client result', async () => {
+    const { client } = await setup();
+
+    await expect(
+      client.callTool({
+        name: 'list_organizations',
+        arguments: { extra: true },
+      })
+    ).resolves.toEqual({
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            error: { name: 'ZodError', message: unrecognizedExtraKeyMessage },
+          }),
+        },
+      ],
+    });
+    await expect(
+      client.callTool({ name: 'no_such_tool', arguments: { foo: 'bar' } })
+    ).resolves.toEqual({
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            error: { name: 'Error', message: 'tool not found' },
+          }),
+        },
+      ],
+    });
   });
 
   test('feedback tools are hidden in read-only mode', async () => {
