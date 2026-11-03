@@ -555,7 +555,9 @@ export function getNotebookTools({
                 projectId: project_id,
                 database,
                 debugging,
-                readOnly,
+                // Unconfirmed database SQL stays in a read-only transaction
+                // even when the classifier misses a write.
+                readOnly: mutatingCells.includes(cell) ? readOnly : true,
                 maxResultBytes: remainingBytes,
               });
               results.push(result);

@@ -1234,6 +1234,87 @@ describe('run_notebook', () => {
       }
     );
 
+    test.each([
+      [
+        'a data-modifying CTE',
+        'with d as (delete from t returning *) select * from d',
+      ],
+      ['a DO block', 'do $$ begin delete from t; end $$'],
+      ['a procedure call', 'call purge()'],
+      ['a function call', 'select app.reset_all()'],
+      ['SELECT INTO', 'select 1 into new_table'],
+    ] as const)(
+      'SQL outside confirmation classification runs %s in a read-only transaction',
+      async (_, sql) => {
+        const { client, platform } = await setupModern({
+          features: RUN_FEATURES,
+          clientCapabilities: FORM_CAPABLE,
+          readOnly: false,
+        });
+        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+        const { project, notebook } = await createNotebookFixture([
+          { id: 'query', type: 'database', sql, row_limit: 100 },
+        ]);
+
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect(executeSql).toHaveBeenCalledOnce();
+        expect(executeSql).toHaveBeenCalledWith(
+          project.id,
+          expect.objectContaining({ read_only: true })
+        );
+      }
+    );
+
+    test('confirmed UPDATE runs with the server write setting', async () => {
+      const { client, platform } = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+        readOnly: false,
+      });
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const sql = 'update t set x = 1 where id = 1';
+      const { project, notebook } = await createNotebookFixture([
+        { id: 'update', type: 'database', sql, row_limit: 100 },
+      ]);
+      await project.db.exec('create table t (id int, x int)');
+      await project.db.exec('insert into t (id, x) values (1, 0)');
+
+      const first = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: runArgs(project, notebook),
+      });
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected form confirmation for UPDATE');
+      }
+      expect(first.inputRequests?.confirm_run?.params).toMatchObject({
+        mode: 'form',
+      });
+      expect(executeSql).not.toHaveBeenCalled();
+
+      const result = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: runArgs(project, notebook),
+        requestState: first.requestState,
+        inputResponses: { confirm_run: { action: 'accept', content: {} } },
+      });
+      if (isInputRequiredResult(result)) {
+        throw new Error('expected the confirmed notebook run');
+      }
+      expect(executeSql).toHaveBeenCalledOnce();
+      expect(executeSql).toHaveBeenCalledWith(
+        project.id,
+        expect.objectContaining({ query: sql, read_only: false })
+      );
+      expect(parseCellResults(parseToolResult(result).cells)).toEqual([
+        expect.objectContaining({ cell_id: 'update', status: 'success' }),
+      ]);
+    });
+
     test('form-capable client detects destructive SQL beyond the first 2000 characters', async () => {
       const { client } = await setupModern({
         features: RUN_FEATURES,
