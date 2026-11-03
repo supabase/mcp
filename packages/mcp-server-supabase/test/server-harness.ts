@@ -321,3 +321,17 @@ export function createServerHarness() {
     },
   };
 }
+
+/**
+ * Collects the raw errors the server's `onToolCall` hook receives, which is
+ * what a host sees before the error is serialized for the client.
+ */
+export function captureToolErrors() {
+  const errors: unknown[] = [];
+  const onToolCall: NonNullable<SupabaseMcpServerOptions['onToolCall']> = (
+    details
+  ) => {
+    if (!details.success) errors.push(details.error);
+  };
+  return { errors, onToolCall };
+}

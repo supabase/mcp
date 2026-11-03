@@ -16,7 +16,12 @@ import {
   expectTerminalResult,
   freezeClock,
 } from '../test/confirmation-results.js';
-import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import {
+  callModernTool,
+  captureToolErrors,
+  createServerHarness,
+} from '../test/server-harness.js';
+import { isToolCallerError, type ToolCallerError } from './errors.js';
 import { BRANCH_COST_HOURLY, getBranchCost } from './pricing.js';
 import * as pricing from './pricing.js';
 import type { SupabaseMcpServerOptions } from './server.js';
@@ -98,9 +103,11 @@ describe('tools', () => {
   });
 
   test('create branch in read-only mode throws an error', async () => {
+    const { errors, onToolCall } = captureToolErrors();
     const { callTool } = await setup({
       readOnly: true,
       features: ['account', 'branching'],
+      onToolCall,
     });
 
     const { project } = await createProjectFixture({
@@ -130,6 +137,10 @@ describe('tools', () => {
     await expect(result).rejects.toThrow(
       'Cannot create a branch in read-only mode.'
     );
+    // A refusal, not a confirmation step, so it carries no kind.
+    expect(errors).toHaveLength(1);
+    expect(isToolCallerError(errors[0])).toBe(true);
+    expect((errors[0] as ToolCallerError).kind).toBeUndefined();
   });
 
   test('delete branch', async () => {
@@ -663,8 +674,52 @@ describe('tools', () => {
     );
   });
 
+  test('create branch without confirm_cost_id on a capability-free client needs confirmation', async () => {
+    // With confirmation configured the schema makes confirm_cost_id optional,
+    // so the missing ID reaches the tool instead of failing argument parsing.
+    const { errors, onToolCall } = captureToolErrors();
+    const { callTool } = await setup({
+      features: ['branching'],
+      elicitation: {
+        requestState: ELICITATION_REQUEST_STATE,
+        confirmation: COST_CONFIRMATION,
+      },
+      onToolCall,
+    });
+
+    const org = await createOrganization({
+      name: 'Paid Org',
+      plan: 'pro',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    const branchName = 'test-branch';
+    const createBranchPromise = callTool({
+      name: 'create_branch',
+      arguments: {
+        project_id: project.id,
+        name: branchName,
+      },
+    });
+
+    await expect(createBranchPromise).rejects.toThrow(
+      /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
+    );
+    expect(errors).toHaveLength(1);
+    expect(isToolCallerError(errors[0])).toBe(true);
+    expect((errors[0] as ToolCallerError).kind).toBe('confirmation_required');
+  });
+
   test('create branch with mismatched cost confirmation fails as a caller error', async () => {
-    const { callTool } = await setup({ features: ['branching'] });
+    const { errors, onToolCall } = captureToolErrors();
+    const { callTool } = await setup({ features: ['branching'], onToolCall });
 
     const org = await createOrganization({
       name: 'My Org',
@@ -693,6 +748,9 @@ describe('tools', () => {
       message:
         'Cost confirmation ID does not match the expected cost of creating a branch.',
     });
+    expect(errors).toHaveLength(1);
+    expect(isToolCallerError(errors[0])).toBe(true);
+    expect((errors[0] as ToolCallerError).kind).toBe('confirmation_required');
   });
 
   describe('create_branch cost confirmation via elicitation', () => {

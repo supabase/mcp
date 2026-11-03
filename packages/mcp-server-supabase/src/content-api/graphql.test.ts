@@ -128,4 +128,31 @@ describe('graphql client', () => {
     });
     expect(isToolCallerError(error)).toBe(false);
   });
+
+  it('reports GraphQL errors the Content API returns for a query as caller errors', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({
+        data: null,
+        errors: [
+          {
+            message: 'Cannot query field "nope" on type "Query".',
+            locations: [{ line: 1, column: 3 }],
+          },
+        ],
+      })
+    );
+    const graphqlClient = new GraphQLClient({
+      url: 'https://content.example.com/graphql',
+    });
+
+    const error = await graphqlClient
+      .query({ query: '{ nope }' })
+      .catch((error: unknown) => error);
+
+    expect(error).toMatchObject({
+      message:
+        'Supabase Content API GraphQL error: Cannot query field "nope" on type "Query". (line 1, column 3)',
+    });
+    expect(isToolCallerError(error)).toBe(true);
+  });
 });

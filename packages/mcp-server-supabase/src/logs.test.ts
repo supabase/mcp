@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { isToolCallerError } from './errors.js';
 import { DAY_MS, getClickHouseLogQuery, resolveLogWindow } from './logs.js';
 import type { LogsService } from './platform/types.js';
 
@@ -74,28 +75,43 @@ describe('resolveLogWindow', () => {
     expect(iso_timestamp_end).toBe('2024-02-01T10:00:00.000Z');
   });
 
-  test('rejects a malformed iso_timestamp_end', () => {
-    expect(() => resolveLogWindow(undefined, 'not-a-timestamp')).toThrow(
-      /Invalid iso_timestamp_end/
-    );
-  });
+  test.each([
+    {
+      input: 'a malformed iso_timestamp_end',
+      start: undefined,
+      end: 'not-a-timestamp',
+      message:
+        'Invalid iso_timestamp_end: "not-a-timestamp". Expected an ISO 8601 timestamp.',
+    },
+    {
+      input: 'a malformed iso_timestamp_start',
+      start: 'not-a-timestamp',
+      end: '2024-02-01T11:00:00.000Z',
+      message:
+        'Invalid iso_timestamp_start: "not-a-timestamp". Expected an ISO 8601 timestamp.',
+    },
+    {
+      input: 'a start at or after the end',
+      start: '2024-02-01T11:00:00.000Z',
+      end: '2024-02-01T10:00:00.000Z',
+      message: 'iso_timestamp_start must be before iso_timestamp_end.',
+    },
+    {
+      input: 'a window longer than 24 hours',
+      start: '2024-02-01T00:00:00.000Z',
+      end: '2024-02-02T00:00:00.001Z',
+      message: 'The log window can be at most 24 hours.',
+    },
+  ])('rejects $input as a caller error', ({ start, end, message }) => {
+    let error: unknown;
+    try {
+      resolveLogWindow(start, end);
+    } catch (caught) {
+      error = caught;
+    }
 
-  test('rejects a malformed iso_timestamp_start', () => {
-    expect(() =>
-      resolveLogWindow('not-a-timestamp', '2024-02-01T11:00:00.000Z')
-    ).toThrow(/Invalid iso_timestamp_start/);
-  });
-
-  test('rejects a start at or after the end', () => {
-    expect(() =>
-      resolveLogWindow('2024-02-01T11:00:00.000Z', '2024-02-01T10:00:00.000Z')
-    ).toThrow(/must be before/);
-  });
-
-  test('rejects a window longer than 24 hours', () => {
-    expect(() =>
-      resolveLogWindow('2024-02-01T00:00:00.000Z', '2024-02-02T00:00:00.001Z')
-    ).toThrow(/at most 24 hours/);
+    expect(error).toMatchObject({ message });
+    expect(isToolCallerError(error)).toBe(true);
   });
 
   test('accepts a window exactly 24 hours long', () => {
