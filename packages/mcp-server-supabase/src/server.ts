@@ -97,12 +97,6 @@ export type SupabaseMcpServerOptions = {
   features?: string[];
 
   /**
-   * @internal Registers the unreleased `create_notebook` and `run_notebook`
-   * tools. Off by default; not exposed through the CLI or HTTP query params.
-   */
-  unreleasedNotebookTools?: boolean;
-
-  /**
    * Callback for after a supabase tool is called.
    */
   onToolCall?: ToolCallCallback;
@@ -218,7 +212,6 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     observer,
     elicitation,
     skills,
-    unreleasedNotebookTools = false,
   } = options;
 
   if (elicitation?.secretCollection) {
@@ -407,26 +400,24 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       }
 
       if (notebooks && enabledFeatures.has('notebooks')) {
-        const notebookTools = getNotebookTools({
-          notebooks,
-          // Feature groups control tool discovery, not the operations that
-          // notebook cells can run. The notebooks group owns this tool.
-          database,
-          debugging,
-          projectId,
-          dashboardUrl,
-          readOnly,
-          confirmation:
-            elicitationCodec &&
-            enabledConfirmationTools.includes('run_notebook')
-              ? { codec: elicitationCodec }
-              : undefined,
-        });
-        if (!unreleasedNotebookTools) {
-          delete notebookTools.create_notebook;
-          delete notebookTools.run_notebook;
-        }
-        Object.assign(tools, notebookTools);
+        Object.assign(
+          tools,
+          getNotebookTools({
+            notebooks,
+            // Feature groups control tool discovery, not the operations that
+            // notebook cells can run. The notebooks group owns this tool.
+            database,
+            debugging,
+            projectId,
+            dashboardUrl,
+            readOnly,
+            confirmation:
+              elicitationCodec &&
+              enabledConfirmationTools.includes('run_notebook')
+                ? { codec: elicitationCodec }
+                : undefined,
+          })
+        );
       }
 
       if (feedback && enabledFeatures.has('feedback')) {

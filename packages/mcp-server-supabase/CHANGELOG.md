@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.15.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.14.0...mcp-server-supabase-v0.15.0) (2026-10-29)
+
+
+### Features
+
+* `submit_feedback` and `delete_feedback` tools ([#474](https://github.com/supabase/mcp/issues/474)) ([f50318a](https://github.com/supabase/mcp/commit/f50318a15ea5b73dffd3b754d5968bb526fdbec4))
+* mark client-caused tool errors as ToolCallerError ([#480](https://github.com/supabase/mcp/issues/480)) ([4a619c1](https://github.com/supabase/mcp/commit/4a619c13f6dd054bac4ee7fbd3757dd27509ac63))
+* **mcp-server-supabase:** detect instant elicitation cancels ([#483](https://github.com/supabase/mcp/issues/483)) ([5ad1a2a](https://github.com/supabase/mcp/commit/5ad1a2ac3410cf8368af1310f2ffd1783a7685a7))
+
+
+### Bug Fixes
+
+* **mcp-server-supabase:** return a tool error when a confirmation expires ([#490](https://github.com/supabase/mcp/issues/490)) ([5ab9a98](https://github.com/supabase/mcp/commit/5ab9a9800c4834eebf640472301cc4284959a819))
+* **mcp-server-supabase:** use POSIX path resolution for edge function filenames ([#393](https://github.com/supabase/mcp/issues/393)) ([55d2d24](https://github.com/supabase/mcp/commit/55d2d24dff85f5893dcfb7aee48d911d54edc08d))
+* **mcp:** don't split an UPDATE on a semicolon inside a dollar-quoted value ([#482](https://github.com/supabase/mcp/issues/482)) ([9f07410](https://github.com/supabase/mcp/commit/9f0741069409169e60a7f984b4cf8e9e0d1b7397))
+* **mcp:** don't split an UPDATE on a semicolon inside a quoted value ([#459](https://github.com/supabase/mcp/issues/459)) ([6d93b50](https://github.com/supabase/mcp/commit/6d93b50e0a4fae23626fe59fb1a8e05f90e26891))
+* **pg-meta:** order list_tables columns by ordinal position ([c242e63](https://github.com/supabase/mcp/commit/c242e63b38ed1cea5d5bd2f32e49aa38d290776a))
+* **pg-meta:** order primary key columns by key position and exclude INCLUDE columns ([#382](https://github.com/supabase/mcp/issues/382)) ([25d357c](https://github.com/supabase/mcp/commit/25d357c20849453fbee08f2e000fecf0c032f076))
+
 ## [0.14.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.13.0...mcp-server-supabase-v0.14.0) (2026-10-14)
 
 
