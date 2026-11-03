@@ -163,6 +163,7 @@ const supabaseObserver: Supabase.RequestObserver = (context) => {
       | 'execute_sql'
       | 'apply_migration'
       | 'run_notebook'
+      | 'delete_notebook'
       | 'other' = context.tool;
     void tool;
   } else {

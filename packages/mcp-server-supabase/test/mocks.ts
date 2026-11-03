@@ -1136,6 +1136,31 @@ export const mockManagementApi = [
       });
     }
   ),
+
+  /**
+   * Delete notebook
+   */
+  http.delete<{ ref: string; id: string }>(
+    `${API_URL}/v2/projects/:ref/notebooks/:id`,
+    ({ params }) => {
+      const project = mockProjects.get(params.ref);
+      if (!project) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Project not found' } },
+          { status: 404 }
+        );
+      }
+
+      if (!project.notebooks.delete(params.id)) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Notebook not found' } },
+          { status: 404 }
+        );
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    }
+  ),
 ];
 
 export function setupMockApis({

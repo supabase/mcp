@@ -476,17 +476,25 @@ describe('feature groups', () => {
       'list_notebooks',
       'get_notebook',
       'run_notebook',
+      'delete_notebook',
     ]);
   });
 
   test('platforms without notebook creation keep their existing notebook tools', async () => {
     const { client } = await setup({
       features: ['notebooks'],
-      platform: { notebooks: { listNotebooks: vi.fn(), getNotebook: vi.fn() } },
+      platform: {
+        notebooks: {
+          listNotebooks: vi.fn(),
+          getNotebook: vi.fn(),
+          deleteNotebook: vi.fn(),
+        },
+      },
     });
     expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
       'list_notebooks',
       'get_notebook',
+      'delete_notebook',
     ]);
   });
 

@@ -455,6 +455,7 @@ export type NotebookOperations = {
     projectId: string,
     notebookId: string
   ): Promise<NotebookWithContent>;
+  deleteNotebook(projectId: string, notebookId: string): Promise<void>;
 };
 
 export type FeedbackOperations = {

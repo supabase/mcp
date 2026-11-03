@@ -962,6 +962,14 @@ export function createSupabaseApiPlatform(
 
       return { id, ...attributes };
     },
+    async deleteNotebook(projectId: string, notebookId: string) {
+      const response = await managementApiV2Client.DELETE(
+        '/v2/projects/{ref}/notebooks/{id}',
+        { params: { path: { ref: projectId, id: notebookId } } }
+      );
+
+      assertSuccessV2(response, 'Failed to delete notebook');
+    },
   };
 
   const platform: SupabasePlatform = {
