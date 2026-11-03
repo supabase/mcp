@@ -674,8 +674,11 @@ describe('feature groups', () => {
   ].join('\n');
 
   test('onToolCall reports argument and unknown-tool failures as caller errors', async () => {
-    const failures: Array<{ name: string; arguments: unknown; error: unknown }> =
-      [];
+    const failures: Array<{
+      name: string;
+      arguments: unknown;
+      error: unknown;
+    }> = [];
     const { client } = await setup({
       onToolCall: (details) => {
         if (!details.success) {
