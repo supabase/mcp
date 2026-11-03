@@ -700,20 +700,20 @@ describe('run_notebook', () => {
     ]);
   });
 
-  test('log cells pass the remaining run budget through to the logs request', async () => {
+  test('log cells pass the remaining run budget to queryLogs without forwarding it to the logs API', async () => {
     const platform = createSupabaseApiPlatform({
       accessToken: ACCESS_TOKEN,
       apiUrl: API_URL,
     });
     const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
     const { callTool } = await setup({ platform, features: RUN_FEATURES });
-    let requestedMaxResultBytes: string | null = null;
+    let requestedQuery: Record<string, string> | undefined;
     harness.mockServer!.use(
       http.get(
         `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
         ({ request }) => {
-          requestedMaxResultBytes = new URL(request.url).searchParams.get(
-            'max_result_bytes'
+          requestedQuery = Object.fromEntries(
+            new URL(request.url).searchParams
           );
           return HttpResponse.json({ result: [{ count: 1 }], error: null });
         }
@@ -726,7 +726,11 @@ describe('run_notebook', () => {
         id: 'logs',
         type: 'log',
         sql,
-        time_range: { type: 'relative', unit: 'hour', amount: 1 },
+        time_range: {
+          type: 'absolute',
+          start: '2026-09-01T00:00:00.000Z',
+          end: '2026-09-01T01:00:00.000Z',
+        },
       },
     ]);
 
@@ -744,7 +748,11 @@ describe('run_notebook', () => {
       project.id,
       expect.objectContaining({ sql, max_result_bytes: 999_989 })
     );
-    expect(requestedMaxResultBytes).toBe('999989');
+    expect(requestedQuery).toEqual({
+      sql,
+      iso_timestamp_start: '2026-09-01T00:00:00.000Z',
+      iso_timestamp_end: '2026-09-01T01:00:00.000Z',
+    });
   });
 
   test('log cells query the cell time range', async () => {
