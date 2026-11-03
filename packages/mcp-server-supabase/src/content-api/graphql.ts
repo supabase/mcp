@@ -187,7 +187,7 @@ export class GraphQLClient {
     }
 
     if (data.errors?.length) {
-      throw new Error(
+      throw new ToolCallerError(
         `Supabase Content API GraphQL error: ${data.errors
           .map(
             (err) =>
