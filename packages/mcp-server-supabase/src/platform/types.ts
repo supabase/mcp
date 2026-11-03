@@ -158,6 +158,11 @@ export const queryLogsOptionsSchema = z.object({
   sql: z.string().min(1),
   iso_timestamp_start: z.string().optional(),
   iso_timestamp_end: z.string().optional(),
+  /**
+   * Stop reading the response once it exceeds this many bytes and fail the
+   * call. Omitted means no limit; callers still check the rows they get back.
+   */
+  max_result_bytes: z.number().int().nonnegative().optional(),
 });
 
 export const generateTypescriptTypesResultSchema = z.object({

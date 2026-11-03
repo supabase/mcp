@@ -283,6 +283,89 @@ describe('run_notebook', () => {
     }
   );
 
+  test('refuses 51 query cells before execution or confirmation', async () => {
+    const { client, platform } = await setupModern({
+      features: RUN_FEATURES,
+      clientCapabilities: FORM_CAPABLE,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
+    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+    const cells: NotebookCell[] = [
+      { id: 'intro', type: 'markdown', text: 'Run limits' },
+      ...Array.from(
+        { length: 49 },
+        (_, i): NotebookCell => ({
+          id: `read-${i}`,
+          type: 'database',
+          sql: 'select 1 as one',
+          row_limit: 100,
+        })
+      ),
+      {
+        id: 'logs',
+        type: 'log',
+        sql: 'select * from logs',
+        time_range: { type: 'relative', unit: 'hour', amount: 1 },
+      },
+      {
+        id: 'write',
+        type: 'database',
+        sql: 'delete from films',
+        row_limit: 100,
+      },
+    ];
+    const { project, notebook } = await createNotebookFixture(cells);
+
+    const result = await callModernTool(client, {
+      name: 'run_notebook',
+      arguments: runArgs(project, notebook),
+    });
+
+    expect(isInputRequiredResult(result)).toBe(false);
+    expect(result).toMatchObject({ isError: true });
+    expect(JSON.stringify(result)).toContain('50');
+    expect(JSON.stringify(result)).toMatch(/split/i);
+    expect(executeSql).not.toHaveBeenCalled();
+    expect(queryLogs).not.toHaveBeenCalled();
+  });
+
+  test('runs exactly 50 query cells even with markdown in the notebook', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
+    const { callTool } = await setup({ platform, features: RUN_FEATURES });
+    const cells: NotebookCell[] = [
+      { id: 'intro', type: 'markdown', text: 'Run limits' },
+      ...Array.from(
+        { length: 50 },
+        (_, i): NotebookCell => ({
+          id: `read-${i}`,
+          type: 'database',
+          sql: 'select 1 as one',
+          row_limit: 100,
+        })
+      ),
+    ];
+    const { project, notebook } = await createNotebookFixture(cells);
+
+    const result = await callTool({
+      name: 'run_notebook',
+      arguments: runArgs(project, notebook),
+    });
+
+    expect(executeSql).toHaveBeenCalledTimes(50);
+    expect(parseCellResults(result.cells)).toEqual(
+      Array.from({ length: 50 }, (_, i) => ({
+        cell_id: `read-${i}`,
+        type: 'database',
+        status: 'success',
+        rows: [{ one: 1 }],
+      }))
+    );
+  });
+
   test('runs query cells in notebook order and skips markdown', async () => {
     const { callTool } = await setup({ features: RUN_FEATURES });
     harness.mockServer?.use(
@@ -407,6 +490,71 @@ describe('run_notebook', () => {
     expect(
       executeSql.mock.calls.map(([, options]) => options.max_result_bytes)
     ).toEqual([1_000_000, 999_989]);
+  });
+
+  test('skips database and log cells after earlier rows spend the run budget', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    // JSON for [{ value: ... }] has 14 framing bytes, leaving 999986
+    // payload bytes for a result of exactly 1000000 bytes.
+    const executeSql = vi
+      .spyOn(platform.database!, 'executeSql')
+      .mockResolvedValue([{ value: 'x'.repeat(999_986) }]);
+    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+    const { callTool } = await setup({ platform, features: RUN_FEATURES });
+    const { project, notebook } = await createNotebookFixture([
+      {
+        id: 'fills-budget',
+        type: 'database',
+        sql: 'select 1',
+        row_limit: 100,
+      },
+      {
+        id: 'later-database',
+        title: 'Later database',
+        type: 'database',
+        sql: 'select 2',
+        row_limit: 100,
+      },
+      {
+        id: 'later-logs',
+        title: 'Later logs',
+        type: 'log',
+        sql: 'select * from logs',
+        time_range: { type: 'relative', unit: 'hour', amount: 1 },
+      },
+    ]);
+
+    const result = await callTool({
+      name: 'run_notebook',
+      arguments: runArgs(project, notebook),
+    });
+
+    expect(parseCellResults(result.cells)).toEqual([
+      expect.objectContaining({
+        cell_id: 'fills-budget',
+        type: 'database',
+        status: 'success',
+      }),
+      {
+        cell_id: 'later-database',
+        title: 'Later database',
+        type: 'database',
+        status: 'skipped',
+        reason: 'run result budget spent',
+      },
+      {
+        cell_id: 'later-logs',
+        title: 'Later logs',
+        type: 'log',
+        status: 'skipped',
+        reason: 'run result budget spent',
+      },
+    ]);
+    expect(executeSql).toHaveBeenCalledOnce();
+    expect(queryLogs).not.toHaveBeenCalled();
   });
 
   test('a cell whose rows exceed the run budget fails without stopping later cells', async () => {
@@ -552,6 +700,53 @@ describe('run_notebook', () => {
     ]);
   });
 
+  test('log cells pass the remaining run budget through to the logs request', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+    const { callTool } = await setup({ platform, features: RUN_FEATURES });
+    let requestedMaxResultBytes: string | null = null;
+    harness.mockServer!.use(
+      http.get(
+        `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
+        ({ request }) => {
+          requestedMaxResultBytes = new URL(request.url).searchParams.get(
+            'max_result_bytes'
+          );
+          return HttpResponse.json({ result: [{ count: 1 }], error: null });
+        }
+      )
+    );
+    const sql = 'select count(*) from logs';
+    const { project, notebook } = await createNotebookFixture([
+      { id: 'db', type: 'database', sql: 'select 1 as one', row_limit: 100 },
+      {
+        id: 'logs',
+        type: 'log',
+        sql,
+        time_range: { type: 'relative', unit: 'hour', amount: 1 },
+      },
+    ]);
+
+    const result = await callTool({
+      name: 'run_notebook',
+      arguments: runArgs(project, notebook),
+    });
+
+    expect(parseCellResults(result.cells)).toEqual([
+      expect.objectContaining({ cell_id: 'db', rows: [{ one: 1 }] }),
+      expect.objectContaining({ cell_id: 'logs', rows: [{ count: 1 }] }),
+    ]);
+    // [{"one":1}] is 11 bytes; the log query has 999989 bytes left.
+    expect(queryLogs).toHaveBeenCalledWith(
+      project.id,
+      expect.objectContaining({ sql, max_result_bytes: 999_989 })
+    );
+    expect(requestedMaxResultBytes).toBe('999989');
+  });
+
   test('log cells query the cell time range', async () => {
     const platform = createSupabaseApiPlatform({
       accessToken: ACCESS_TOKEN,
@@ -582,6 +777,7 @@ describe('run_notebook', () => {
       sql,
       iso_timestamp_start: '2026-09-01T00:00:00.000Z',
       iso_timestamp_end: '2026-09-01T06:00:00.000Z',
+      max_result_bytes: 1_000_000,
     });
   });
 

@@ -315,8 +315,7 @@ export function createSupabaseApiPlatform(
       return response.data;
     },
     async queryLogs(projectId: string, options: QueryLogsOptions) {
-      const { sql, iso_timestamp_start, iso_timestamp_end } =
-        queryLogsOptionsSchema.parse(options);
+      const query = queryLogsOptionsSchema.parse(options);
 
       const response = await managementApiClient.GET(
         '/v1/projects/{ref}/analytics/endpoints/logs',
@@ -325,11 +324,7 @@ export function createSupabaseApiPlatform(
             path: {
               ref: projectId,
             },
-            query: {
-              sql,
-              iso_timestamp_start,
-              iso_timestamp_end,
-            },
+            query,
           },
         }
       );
