@@ -197,12 +197,7 @@ async function setup(
     },
     confirmation: { enabledTools: [...tools] },
   };
-  const serverOptions = {
-    platform,
-    features,
-    elicitation,
-    unreleasedNotebookTools: true,
-  };
+  const serverOptions = { platform, features, elicitation };
   const main = await setupObservation(serverOptions);
   // A second server with the same key and principal, so state minted on the
   // form client verifies here too; only the client capabilities differ.

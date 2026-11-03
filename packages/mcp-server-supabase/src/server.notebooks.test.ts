@@ -22,11 +22,7 @@ import { HttpResponse, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const harness = createServerHarness();
-// Exercises the unreleased tools; server.test.ts covers the default gate.
-const setup = (options: Parameters<typeof harness.setup>[0] = {}) =>
-  harness.setup({ unreleasedNotebookTools: true, ...options });
-const setupModern = (options: Parameters<typeof harness.setupModern>[0] = {}) =>
-  harness.setupModern({ unreleasedNotebookTools: true, ...options });
+const { setup, setupModern } = harness;
 
 beforeEach(() => harness.reset());
 afterEach(() => harness.close());
