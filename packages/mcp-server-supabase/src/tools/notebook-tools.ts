@@ -585,7 +585,7 @@ export function getNotebookTools({
               route: 'blocked',
               reason: 'capability_missing',
             });
-            throw new Error(
+            throw new ToolCallerError(
               'Deleting a notebook requires confirmation, but this client does not support form elicitation. The notebook was not deleted. Use a client with form elicitation support or delete it from the Supabase dashboard.'
             );
           }

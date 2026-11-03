@@ -1556,6 +1556,7 @@ describe('delete_notebook', () => {
     expect(JSON.stringify(result.content)).toContain(
       'does not support form elicitation. The notebook was not deleted.'
     );
+    expect(JSON.stringify(result.content)).toContain('ToolCallerError');
     expect(project.notebooks.has(notebook.id)).toBe(true);
   });
 
