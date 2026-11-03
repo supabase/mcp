@@ -10,7 +10,11 @@ export type {
   RequestObservation,
   RequestObserver,
 } from './observation.js';
-export { isToolCallerError, ToolCallerError } from './errors.js';
+export {
+  isToolCallerError,
+  ToolCallerError,
+  type ToolCallerErrorKind,
+} from './errors.js';
 export type { ToolCallCallback } from '@supabase/mcp-utils';
 export {
   createFeedbackOperations,

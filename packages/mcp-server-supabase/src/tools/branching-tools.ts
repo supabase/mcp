@@ -289,7 +289,9 @@ export function getBranchingTools({
         // Legacy clients only: form-capable clients returned above. Without
         // this, a missing ID would hit the opaque hash-mismatch error below.
         if (!confirm_cost_id) {
-          throw new ToolCallerError(missingConfirmCostIdMessage);
+          throw new ToolCallerError(missingConfirmCostIdMessage, {
+            kind: 'confirmation_required',
+          });
         }
 
         const cost = getBranchCost();
@@ -304,7 +306,8 @@ export function getBranchingTools({
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
           throw new ToolCallerError(
-            'Cost confirmation ID does not match the expected cost of creating a branch.'
+            'Cost confirmation ID does not match the expected cost of creating a branch.',
+            { kind: 'confirmation_required' }
           );
         }
         return await observeOperation('cost', observation?.record, () =>
