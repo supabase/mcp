@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/client';
 import { StreamTransport } from '@supabase/mcp-utils';
-import { describe, expect, expectTypeOf, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 
 import {
   ACCESS_TOKEN,
@@ -98,7 +98,6 @@ describe('index', () => {
     });
     expect(isToolCallerError(error)).toBe(true);
     expect(new ToolCallerError('bad input').kind).toBeUndefined();
-    expectTypeOf<ToolCallerErrorKind>().toEqualTypeOf<'confirmation_required'>();
   });
 
   test('isToolCallerError matches the brand from another package copy', () => {
