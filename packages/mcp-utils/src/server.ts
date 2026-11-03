@@ -14,6 +14,7 @@ import type {
 } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 
+import { ToolCallerError } from './errors.js';
 import type { ExtractParams } from './types.js';
 import { assertValidUri, compareUris, matchUriTemplate } from './util.js';
 import { beginObservation } from './observation.js';
@@ -566,21 +567,46 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
       });
       let outcome: ObservationEnd['result'] = 'handler_error';
 
+      const reportToolCall = (details: ToolCallDetails) => {
+        try {
+          options.onToolCall?.(details);
+        } catch (error) {
+          // Don't fail the tool call if the callback fails
+          console.error('Failed to run tool callback', error);
+        }
+      };
+
       try {
         const tools = await getTools(ctx);
+        const rawArgs = request.params.arguments ?? {};
+        const tool = toolName in tools ? tools[toolName] : undefined;
 
-        if (!(toolName in tools)) {
-          throw new Error('tool not found');
-        }
-
-        const tool = tools[toolName];
-
+        // The client still sees the original error; the hook gets a caller error.
         if (!tool) {
-          throw new Error('tool not found');
+          const error = new Error('tool not found');
+          reportToolCall({
+            name: toolName,
+            arguments: rawArgs,
+            success: false,
+            error: new ToolCallerError(error.message),
+          });
+          throw error;
         }
-        const args = tool.parameters
-          .strict()
-          .parse(request.params.arguments ?? {});
+
+        const parsed = tool.parameters.strict().safeParse(rawArgs);
+        if (!parsed.success) {
+          reportToolCall({
+            name: toolName,
+            arguments: rawArgs,
+            annotations: tool.annotations,
+            success: false,
+            error: new ToolCallerError(parsed.error.message, {
+              cause: parsed.error,
+            }),
+          });
+          throw parsed.error;
+        }
+        const args = parsed.data;
 
         const executeWithCallback = async (
           tool: Tool<z.ZodObject<any>, z.ZodObject<any>, Fact>
@@ -591,17 +617,12 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
             .then((data: unknown) => ({ success: true as const, data }))
             .catch((error) => ({ success: false as const, error }));
 
-          try {
-            options.onToolCall?.({
-              name: toolName,
-              arguments: args,
-              annotations: tool.annotations,
-              ...res,
-            });
-          } catch (error) {
-            // Don't fail the tool call if the callback fails
-            console.error('Failed to run tool callback', error);
-          }
+          reportToolCall({
+            name: toolName,
+            arguments: args,
+            annotations: tool.annotations,
+            ...res,
+          });
 
           // Unwrap result
           if (!res.success) {
