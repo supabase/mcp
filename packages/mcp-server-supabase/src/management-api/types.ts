@@ -3333,6 +3333,9 @@ export interface components {
             } | {
                 /** @enum {string} */
                 type: "btree_gist_nan_reindex";
+            } | {
+                /** @enum {string} */
+                type: "collation_reindex_required";
             })[];
         };
         DatabaseUpgradeStatusResponse_Output: {
