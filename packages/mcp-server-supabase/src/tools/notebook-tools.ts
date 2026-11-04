@@ -414,6 +414,11 @@ export function getNotebookTools({
 
           const queryCells = notebook.content.cells.filter(isQueryCell);
           if (queryCells.length > MAX_RUN_QUERY_CELLS) {
+            record?.({
+              kind: 'notebook_run',
+              outcome: 'refused',
+              reason: 'too_many_cells',
+            });
             throw new ToolCallerError(
               `This notebook has ${queryCells.length} query cells; run_notebook allows at most ${MAX_RUN_QUERY_CELLS}. Split the notebook and run each part separately. No cells were run.`
             );
@@ -538,6 +543,9 @@ export function getNotebookTools({
           // depend on writes made by earlier ones.
           return observeOperation('notebook', record, async () => {
             const results: CellResult[] = [];
+            let executed = 0;
+            let skipped = 0;
+            let errored = 0;
             let remainingBytes = MAX_RUN_RESULT_BYTES;
             for (const cell of queryCells) {
               if (remainingBytes === 0) {
@@ -548,6 +556,7 @@ export function getNotebookTools({
                   status: 'skipped',
                   reason: 'run result budget spent',
                 });
+                skipped++;
                 continue;
               }
 
@@ -561,8 +570,19 @@ export function getNotebookTools({
                 maxResultBytes: remainingBytes,
               });
               results.push(result);
+              executed++;
+              if (result.status === 'error') errored++;
               remainingBytes -= bytes;
             }
+
+            record?.({
+              kind: 'notebook_run',
+              outcome: 'completed',
+              executed,
+              skipped,
+              errored,
+              budget_exhausted: remainingBytes === 0,
+            });
 
             return {
               id: notebook.id,

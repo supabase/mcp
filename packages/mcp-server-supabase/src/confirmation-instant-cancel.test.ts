@@ -64,7 +64,10 @@ const feature = {
   delete_notebook: 'notebook',
   create_project: 'cost',
   create_branch: 'cost',
-} as const satisfies Record<Tool, ObservationFact['feature']>;
+} as const satisfies Record<
+  Tool,
+  Extract<ObservationFact, { kind: 'confirmation_decision' }>['feature']
+>;
 
 // AI-1372: hand-written from the spec. The tool name is the one being
 // called; the lifetime is the default 600 s TTL.

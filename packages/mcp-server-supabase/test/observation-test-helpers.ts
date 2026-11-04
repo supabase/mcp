@@ -185,7 +185,12 @@ function issued(
     throw new Error('expected input_required');
   return result;
 }
-function factBuilders(feature: ObservationFact['feature']) {
+function factBuilders(
+  feature: Extract<
+    ObservationFact,
+    { kind: 'confirmation_decision' }
+  >['feature']
+) {
   function decision(
     route: Extract<ObservationFact, { kind: 'confirmation_decision' }>['route'],
     reason: Extract<

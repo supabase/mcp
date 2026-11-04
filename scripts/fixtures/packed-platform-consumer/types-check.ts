@@ -153,6 +153,15 @@ const sqlFacts = [
     disposition: 'threw',
     durationMs: 2,
   },
+  { kind: 'notebook_run', outcome: 'refused', reason: 'too_many_cells' },
+  {
+    kind: 'notebook_run',
+    outcome: 'completed',
+    executed: 3,
+    skipped: 2,
+    errored: 1,
+    budget_exhausted: true,
+  },
 ] satisfies Supabase.ObservationFact[];
 void sqlFacts;
 const supabaseObserver: Supabase.RequestObserver = (context) => {
@@ -172,6 +181,21 @@ const supabaseObserver: Supabase.RequestObserver = (context) => {
   }
   return {
     record: (fact) => {
+      if (fact.kind === 'notebook_run') {
+        if (fact.outcome === 'completed') {
+          const counts: Readonly<{
+            executed: number;
+            skipped: number;
+            errored: number;
+            budget_exhausted: boolean;
+          }> = fact;
+          void counts;
+        } else {
+          const reason: 'too_many_cells' = fact.reason;
+          void reason;
+        }
+        return;
+      }
       const feature: 'cost' | 'destructive_sql' | 'notebook' = fact.feature;
       void feature;
       if (fact.kind === 'operation' && fact.disposition !== 'started') {
