@@ -457,9 +457,12 @@ describe('run_notebook', () => {
       },
     });
 
-    await expect(result).rejects.toThrow(
-      'Call get_notebook again and retry run_notebook'
-    );
+    await expect(result).rejects.toMatchObject({
+      name: 'ToolCallerError',
+      message: expect.stringContaining(
+        'Call get_notebook again and retry run_notebook'
+      ),
+    });
   });
 
   test('a log cell error reaches the reader and later cells still run', async () => {
@@ -825,10 +828,18 @@ describe('run_notebook', () => {
           name: 'run_notebook',
           arguments: runArgs(project, notebook),
         });
-        expect(result).toMatchObject({ isError: true });
-        expect(JSON.stringify(result)).toContain(
-          'does not support form elicitation'
-        );
+        if (isInputRequiredResult(result)) {
+          throw new Error('expected a CallToolResult');
+        }
+        expect(result.isError).toBe(true);
+        expect(parseToolResult(result)).toEqual({
+          error: {
+            name: 'ToolCallerError',
+            message: expect.stringContaining(
+              'does not support form elicitation'
+            ),
+          },
+        });
         expect(executeSql).not.toHaveBeenCalled();
         expect(queryLogs).not.toHaveBeenCalled();
       }
@@ -1553,9 +1564,14 @@ describe('delete_notebook', () => {
     })) as CallToolResult;
 
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      'does not support form elicitation. The notebook was not deleted.'
-    );
+    expect(parseToolResult(result)).toEqual({
+      error: {
+        name: 'ToolCallerError',
+        message: expect.stringContaining(
+          'does not support form elicitation. The notebook was not deleted.'
+        ),
+      },
+    });
     expect(project.notebooks.has(notebook.id)).toBe(true);
   });
 
@@ -2006,7 +2022,19 @@ describe('create_notebook', () => {
     [
       401,
       { message: 'Unauthorized' },
+      'Error',
       'Unauthorized. Please provide a valid access token',
+    ],
+    [
+      403,
+      {
+        error: {
+          code: 'notebook_disabled',
+          message: "Notebooks aren't available for your account yet",
+        },
+      },
+      'ToolCallerError',
+      "Notebooks aren't available for your account yet",
     ],
     [
       403,
@@ -2016,10 +2044,23 @@ describe('create_notebook', () => {
           message: 'Insufficient notebook permissions',
         },
       },
+      'ToolCallerError',
       'Insufficient notebook permissions',
     ],
-    [500, {}, 'Failed to create notebook'],
-  ])('surfaces API errors (%s)', async (status, body, message) => {
+    [
+      429,
+      { error: { code: 'rate_limited', message: 'Too many requests' } },
+      'Error',
+      'Too many requests',
+    ],
+    [
+      500,
+      { error: { code: 'internal_server_error', message: 'Internal error' } },
+      'Error',
+      'Internal error',
+    ],
+    [500, {}, 'Error', 'Failed to create notebook'],
+  ])('surfaces API errors (%s %j)', async (status, body, name, message) => {
     const { callTool } = await setup({ features: ['notebooks'] });
     harness.mockServer!.use(
       http.post(`${API_URL}/v2/projects/:ref/notebooks`, () =>
@@ -2031,7 +2072,10 @@ describe('create_notebook', () => {
         name: 'create_notebook',
         arguments: { project_id: 'test-project', ...proposal },
       })
-    ).rejects.toThrow(message);
+    ).rejects.toMatchObject({
+      name,
+      message: expect.stringContaining(message),
+    });
   });
 
   test.each([false, true])(
