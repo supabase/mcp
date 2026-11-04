@@ -676,7 +676,12 @@ describe('run_notebook', () => {
   });
 
   test('a failing cell does not stop later cells', async () => {
-    const { callTool } = await setup({ features: RUN_FEATURES });
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
+    const { callTool } = await setup({ platform, features: RUN_FEATURES });
     const { project, notebook } = await createNotebookFixture([
       { id: 'bad', type: 'database', sql: 'invalid sql', row_limit: 100 },
       { id: 'good', type: 'database', sql: 'select 2 as two', row_limit: 100 },
@@ -701,6 +706,9 @@ describe('run_notebook', () => {
         rows: [{ two: 2 }],
       },
     ]);
+    expect(
+      executeSql.mock.calls.map(([, options]) => options.max_result_bytes)
+    ).toEqual([1_000_000, 1_000_000]);
   });
 
   test('passes each database cell the result budget earlier cells left', async () => {
@@ -880,16 +888,53 @@ describe('run_notebook', () => {
     expect(queryLogs).not.toHaveBeenCalled();
   });
 
-  test('a cell whose rows exceed the run budget fails without stopping later cells', async () => {
-    const { callTool } = await setup({ features: RUN_FEATURES });
+  test('an oversized cell spends the remaining budget and skips later database and log cells', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    // Each [{ value: ... }] result has 14 JSON framing bytes.
+    const firstRows = [{ value: 'x'.repeat(599_986) }];
+    const oversizedRows = [{ value: 'y'.repeat(1_999_986) }];
+    const executeSql = vi
+      .spyOn(platform.database!, 'executeSql')
+      .mockResolvedValueOnce(firstRows)
+      .mockResolvedValueOnce(oversizedRows)
+      .mockResolvedValueOnce(oversizedRows)
+      .mockResolvedValueOnce([{ one: 1 }]);
+    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+    const { callTool } = await setup({ platform, features: RUN_FEATURES });
     const { project, notebook } = await createNotebookFixture([
       {
-        id: 'big',
+        id: 'first',
         type: 'database',
-        sql: "select repeat('x', 1000000) as big",
+        sql: 'select 1 as first',
         row_limit: 100,
       },
-      { id: 'one', type: 'database', sql: 'select 1 as one', row_limit: 100 },
+      {
+        id: 'oversized',
+        type: 'database',
+        sql: 'select 2 as oversized',
+        row_limit: 100,
+      },
+      {
+        id: 'later-oversized',
+        type: 'database',
+        sql: 'select 3 as oversized',
+        row_limit: 100,
+      },
+      {
+        id: 'later-logs',
+        type: 'log',
+        sql: 'select * from logs',
+        time_range: { type: 'relative', unit: 'hour', amount: 1 },
+      },
+      {
+        id: 'later-small',
+        type: 'database',
+        sql: 'select 1 as one',
+        row_limit: 100,
+      },
     ]);
 
     const result = await callTool({
@@ -898,20 +943,42 @@ describe('run_notebook', () => {
     });
 
     expect(parseCellResults(result.cells)).toEqual([
-      {
-        cell_id: 'big',
-        type: 'database',
-        status: 'error',
-        error:
-          'The query ran, but its result is larger than the 1000000 bytes left for this run, so no rows were returned. Add a LIMIT or select fewer columns.',
-      },
-      {
-        cell_id: 'one',
+      expect.objectContaining({
+        cell_id: 'first',
         type: 'database',
         status: 'success',
-        rows: [{ one: 1 }],
+      }),
+      {
+        cell_id: 'oversized',
+        type: 'database',
+        status: 'error',
+        error: expect.stringContaining(
+          'result is larger than the 400000 bytes left for this run'
+        ),
+      },
+      {
+        cell_id: 'later-oversized',
+        type: 'database',
+        status: 'skipped',
+        reason: 'run result budget spent',
+      },
+      {
+        cell_id: 'later-logs',
+        type: 'log',
+        status: 'skipped',
+        reason: 'run result budget spent',
+      },
+      {
+        cell_id: 'later-small',
+        type: 'database',
+        status: 'skipped',
+        reason: 'run result budget spent',
       },
     ]);
+    expect(
+      executeSql.mock.calls.map(([, options]) => options.max_result_bytes)
+    ).toEqual([1_000_000, 400_000]);
+    expect(queryLogs).not.toHaveBeenCalled();
   });
 
   test('rejects a run when the notebook changed since expected_updated_at', async () => {

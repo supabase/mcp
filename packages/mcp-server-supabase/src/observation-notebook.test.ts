@@ -490,6 +490,46 @@ test('completed notebook_run excludes invalid ids from execution and budget-skip
   ).toEqual([completed(1, 2, 0, true)]);
 });
 
+test('an oversized cell records the remaining budget as spent and later cells as skipped', async () => {
+  const h = await setup({
+    cells: [
+      { ...writeCell, id: 'first', sql: 'SELECT 1' },
+      { ...writeCell, id: 'oversized', sql: 'SELECT 2' },
+      { ...writeCell, id: 'later-oversized', sql: 'SELECT 3' },
+      logCell,
+      { ...writeCell, id: 'later-small', sql: 'SELECT 4' },
+    ],
+  });
+  // JSON for [{ value: ... }] adds 14 bytes to each payload.
+  h.executeSql
+    .mockResolvedValueOnce([{ value: 'x'.repeat(599_986) }])
+    .mockResolvedValueOnce([{ value: 'y'.repeat(1_999_986) }]);
+
+  const result = await h.run();
+
+  expect(isInputRequiredResult(result)).toBe(false);
+  expect((result as CallToolResult).isError).not.toBe(true);
+  expect(h.executeSql).toHaveBeenCalledTimes(2);
+  expect(h.queryLogs).not.toHaveBeenCalled();
+  expect(h.attempts).toHaveLength(1);
+  assertAttempt(
+    h.attempts[0],
+    'run_notebook',
+    [
+      {
+        kind: 'confirmation_decision',
+        feature: 'notebook',
+        route: 'bypass',
+        reason: 'not_mutating',
+      },
+      started,
+      completed(2, 3, 1, true),
+      returned,
+    ],
+    'completed'
+  );
+});
+
 test.each([
   ['accept', 'completed'],
   ['decline', 'declined'],
