@@ -71,8 +71,9 @@ export function assertSuccessV2<
 
     if (errorContent) {
       const { message } = errorContent.error;
-      // A 4xx is the caller's request, like a notebook feature that isn't enabled for them.
-      throw response.response.status < 500
+      const { status } = response.response;
+      // A 4xx is the caller's request; a 429 can come from our own call volume, like pagination.
+      throw status < 500 && status !== 429
         ? new ToolCallerError(message)
         : new Error(message);
     }

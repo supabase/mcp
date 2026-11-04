@@ -1564,10 +1564,14 @@ describe('delete_notebook', () => {
     })) as CallToolResult;
 
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      'does not support form elicitation. The notebook was not deleted.'
-    );
-    expect(JSON.stringify(result.content)).toContain('ToolCallerError');
+    expect(parseToolResult(result)).toEqual({
+      error: {
+        name: 'ToolCallerError',
+        message: expect.stringContaining(
+          'does not support form elicitation. The notebook was not deleted.'
+        ),
+      },
+    });
     expect(project.notebooks.has(notebook.id)).toBe(true);
   });
 
@@ -2042,6 +2046,12 @@ describe('create_notebook', () => {
       },
       'ToolCallerError',
       'Insufficient notebook permissions',
+    ],
+    [
+      429,
+      { error: { code: 'rate_limited', message: 'Too many requests' } },
+      'Error',
+      'Too many requests',
     ],
     [
       500,
