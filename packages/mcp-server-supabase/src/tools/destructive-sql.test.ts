@@ -190,4 +190,63 @@ describe('isDestructiveSql', () => {
   ])('existing explicit-column detection is preserved: %s', (sql) => {
     expect(isDestructiveSql(sql)).toBe(true);
   });
+
+  test.each([
+    "EXPLAIN (ANALYZE FALSE, FORMAT JSON) SELECT '...; DELETE FROM fictional_table_only_in_literal;'::text",
+    'EXPLAIN DELETE FROM films;',
+    'EXPLAIN UPDATE films SET title = null;',
+    'explain verbose delete from films',
+    'EXPLAIN (ANALYZE FALSE) DELETE FROM films;',
+    'EXPLAIN (ANALYZE OFF) DELETE FROM films;',
+    'EXPLAIN (analyse 0) DELETE FROM films;',
+    'EXPLAIN (VERBOSE, COSTS OFF, FORMAT JSON) DELETE FROM films;',
+    'EXPLAIN(FORMAT JSON)DELETE FROM films',
+    "EXPLAIN SELECT 'DROP TABLE films';",
+    "EXPLAIN SELECT E'it\\'s; DROP TABLE films';",
+    'EXPLAIN SELECT $t$a; DROP TABLE films$t$;',
+    'EXPLAIN SELECT 1 -- ; DROP TABLE films\n;',
+    'EXPLAIN /* ; TRUNCATE films */ SELECT 1;',
+    'EXPLAIN SELECT 1; EXPLAIN (ANALYZE FALSE) DELETE FROM films;',
+    'EXPLAIN SELECT 1;\n-- trailing comment\n',
+  ])('planner-only EXPLAIN does not match: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(false);
+  });
+
+  test.each([
+    'EXPLAIN ANALYZE DELETE FROM films;',
+    'EXPLAIN ANALYSE DELETE FROM films;',
+    'EXPLAIN ANALYZE VERBOSE DELETE FROM films;',
+    'EXPLAIN (ANALYZE) DELETE FROM films;',
+    'EXPLAIN (ANALYZE TRUE) DELETE FROM films;',
+    'EXPLAIN (ANALYZE ON, FORMAT JSON) DELETE FROM films;',
+    'EXPLAIN (FORMAT JSON, ANALYZE 1) DELETE FROM films;',
+    'EXPLAIN /**/ ANALYZE UPDATE films SET title = null;',
+    'EXPLAIN SELECT 1; DROP TABLE films;',
+    'DROP TABLE films; EXPLAIN SELECT 1;',
+    'EXPLAIN SELECT 1; UPDATE films SET title = null;',
+    "EXPLAIN SELECT 1; EXECUTE 'DROP TABLE films';",
+  ])('EXPLAIN that executes, or with other statements, matches: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+
+  test.each([
+    "EXPLAIN (ANALYZE 'false') DELETE FROM films;",
+    'EXPLAIN ("analyze" false) DELETE FROM films;',
+    'EXPLAIN (ANALYZE maybe) DELETE FROM films;',
+    'EXPLAIN (ANALYZE FALSE FALSE) DELETE FROM films;',
+    'EXPLAIN (ANALYZE FALSE DELETE FROM films;',
+  ])('unparseable EXPLAIN options keep the warning: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+
+  test('EXPLAIN ANALYZE of a read keeps its existing classification', () => {
+    expect(isDestructiveSql('EXPLAIN ANALYZE SELECT * FROM films;')).toBe(
+      false
+    );
+    expect(
+      isDestructiveSql(
+        'EXPLAIN ANALYZE UPDATE films SET title = null WHERE id = 1;'
+      )
+    ).toBe(false);
+  });
 });
