@@ -2920,7 +2920,6 @@ describe('create_notebook', () => {
       id: expect.any(String),
       name: proposal.name,
       updated_at: expect.any(String),
-      url: `https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${created.id}`,
     });
     const listed = await callTool({
       name: 'list_notebooks',
@@ -2974,9 +2973,6 @@ describe('create_notebook', () => {
     });
     expect(project.notebooks.has(created.id)).toBe(true);
     expect(other.notebooks.size).toBe(0);
-    expect(created.url).toBe(
-      `https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${created.id}`
-    );
     const fetched = await callTool({
       name: 'get_notebook',
       arguments: { notebook_id: created.id },

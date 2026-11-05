@@ -92,13 +92,11 @@ const createNotebookInputSchema = z.object({
   ),
 });
 
-const createNotebookOutputSchema = notebookSchema
-  .pick({ id: true, name: true, updated_at: true })
-  .extend({
-    url: z
-      .string()
-      .describe('Dashboard link to give the user for this notebook.'),
-  });
+const createNotebookOutputSchema = notebookSchema.pick({
+  id: true,
+  name: true,
+  updated_at: true,
+});
 
 const listNotebooksInputSchema = z.object({
   project_id: z.string(),
@@ -429,12 +427,7 @@ export function getNotebookTools({
             project_id,
             options
           );
-          return {
-            id,
-            name,
-            updated_at,
-            url: notebookUrl(dashboardUrl, project_id, id),
-          };
+          return { id, name, updated_at };
         },
       }),
     }),
