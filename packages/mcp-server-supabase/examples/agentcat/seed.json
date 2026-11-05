@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "variables": {
+    "project_ref": "<non-production-project-ref>"
+  },
+  "sessions": [
+    {
+      "id": "seed-001",
+      "messages": [
+        {
+          "role": "user",
+          "content": "List the Supabase projects I can access."
+        }
+      ]
+    },
+    {
+      "id": "seed-002",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Find the Supabase documentation for Row Level Security policies."
+        }
+      ]
+    },
+    {
+      "id": "seed-003",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Show the details for the non-production project <non-production-project-ref>."
+        }
+      ]
+    },
+    {
+      "id": "seed-004",
+      "messages": [
+        {
+          "role": "user",
+          "content": "List the public schema tables in <non-production-project-ref>."
+        }
+      ]
+    },
+    {
+      "id": "seed-005",
+      "messages": [
+        {
+          "role": "user",
+          "content": "List the database migrations and installed extensions in <non-production-project-ref>."
+        }
+      ]
+    },
+    {
+      "id": "seed-006",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Check the security advisors for <non-production-project-ref>."
+        },
+        {
+          "role": "user",
+          "content": "Now check the performance advisors for the same project."
+        }
+      ]
+    },
+    {
+      "id": "seed-007",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Show recent Postgres error logs for <non-production-project-ref>."
+        }
+      ]
+    },
+    {
+      "id": "seed-008",
+      "messages": [
+        {
+          "role": "user",
+          "content": "List the Edge Functions in <non-production-project-ref>."
+        }
+      ]
+    },
+    {
+      "id": "seed-009",
+      "messages": [
+        {
+          "role": "user",
+          "content": "List the development branches for <non-production-project-ref>."
+        }
+      ]
+    },
+    {
+      "id": "seed-010",
+      "messages": [
+        {
+          "role": "user",
+          "content": "List the storage buckets in <non-production-project-ref>."
+        }
+      ]
+    },
+    {
+      "id": "seed-011",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Find the Supabase documentation for restoring a project from a backup."
+        }
+      ]
+    },
+    {
+      "id": "seed-012",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Compare the available database and debugging tools for <non-production-project-ref>, without changing the project."
+        }
+      ]
+    }
+  ]
+}
