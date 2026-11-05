@@ -19,7 +19,6 @@ export {
 export type { FeedbackOperations, SupabasePlatform } from './platform/index.js';
 export {
   createSupabaseMcpServer,
-  DEFAULT_FEATURES,
   type SupabaseMcpServerOptions,
 } from './server.js';
 export { createSupabaseMcpHandler } from './transports/http.js';

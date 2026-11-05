@@ -1,4 +1,6 @@
 import {
+  ACCESS_TOKEN,
+  API_URL,
   contentApiMockSchema,
   createOrganization,
   createProject,
@@ -9,15 +11,11 @@ import {
 } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
 import { isToolCallerError } from './errors.js';
+import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { createMcpHandler } from '@modelcontextprotocol/server';
-import {
-  createSupabaseMcpServer,
-  DEFAULT_FEATURES,
-  instructions,
-} from './server.js';
+import { createSupabaseMcpServer, instructions } from './server.js';
 import { supabaseMcpToolSchemas } from './tools/tool-schemas.js';
-import type { FeatureGroup } from './types.js';
 import { stripIndent } from 'common-tags';
 import gqlmin from 'gqlmin';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -503,20 +501,20 @@ describe('feature groups', () => {
     ]);
   });
 
-  test('appending notebooks to DEFAULT_FEATURES adds notebook tools to the defaults', async () => {
-    const listToolNames = async (features?: FeatureGroup[]) => {
-      const { client } = await setup({ features });
+  test('notebook tools are enabled by default when the platform supports them', async () => {
+    const listDefaultToolNames = async (platform?: SupabasePlatform) => {
+      const { client } = await setup({ platform });
       return (await client.listTools()).tools.map((tool) => tool.name);
     };
+    const { notebooks: _, ...platformWithoutNotebooks } =
+      createSupabaseApiPlatform({ accessToken: ACCESS_TOKEN, apiUrl: API_URL });
 
-    const defaultTools = await listToolNames();
-    const toolNames = await listToolNames([...DEFAULT_FEATURES, 'notebooks']);
-
-    expect(toolNames).toEqual(expect.arrayContaining(defaultTools));
-    expect(toolNames).toEqual(
+    expect(await listDefaultToolNames()).toEqual(
       expect.arrayContaining(['list_notebooks', 'get_notebook'])
     );
-    expect(defaultTools).not.toContain('list_notebooks');
+    expect(
+      await listDefaultToolNames(platformWithoutNotebooks)
+    ).not.toContain('list_notebooks');
   });
 
   test('feedback tools', async () => {

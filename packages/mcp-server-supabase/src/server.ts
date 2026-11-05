@@ -147,8 +147,7 @@ export type SupabaseMcpServerOptions = {
   };
 };
 
-/** Features enabled when `features` is omitted, before filtering by platform support. */
-export const DEFAULT_FEATURES: readonly FeatureGroup[] = [
+const DEFAULT_FEATURES: FeatureGroup[] = [
   'docs',
   'account',
   'database',
@@ -157,6 +156,7 @@ export const DEFAULT_FEATURES: readonly FeatureGroup[] = [
   'functions',
   'branching',
   'feedback',
+  'notebooks',
 ];
 
 export const PLATFORM_INDEPENDENT_FEATURES: FeatureGroup[] = ['docs'];
