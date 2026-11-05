@@ -151,6 +151,8 @@ function blankQuotedSpans(sql: string): string {
 }
 
 const dollarQuoteTag = /\$(?:[a-z_\u0080-\uffff][\w\u0080-\uffff]*)?\$/iy;
+const valueDollarQuoteStatement =
+  /^\s*(?:update\s|explain(?![\w$\u0080-\uffff]))/i;
 
 // Split on semicolons, except those inside a single-quoted string literal
 // (including E'' strings with backslash escapes) or a double-quoted
@@ -158,13 +160,13 @@ const dollarQuoteTag = /\$(?:[a-z_\u0080-\uffff][\w\u0080-\uffff]*)?\$/iy;
 // Quoted spans and comment bodies are blanked in the returned statements so a
 // later WHERE check cannot see tokens that only appeared inside a literal or
 // a comment (`-- where needed`).
-// A dollar-quoted string inside an UPDATE is a value, so it is blanked like a
-// quoted span (`SET note = $t$a; b$t$`). Inside other dollar-quoted bodies and
-// comments, quotes are not tracked and every semicolon still splits, as
-// before: a function or DO body is code whose statements are checked one by
-// one. Block comments nest; `--` ends at a bare `\r` or `\n`. If a quote is
-// left unterminated, fall back to the plain split rather than letting it hide
-// the rest of the input.
+// A dollar-quoted string inside an UPDATE or EXPLAIN is a value, so it is
+// blanked like a quoted span (`SET note = $t$a; b$t$`). Inside other
+// dollar-quoted bodies and comments, quotes are not tracked and every
+// semicolon still splits, as before: a function or DO body is code whose
+// statements are checked one by one. Block comments nest; `--` ends at a bare
+// `\r` or `\n`. If a quote is left unterminated, fall back to the plain split
+// rather than letting it hide the rest of the input.
 function splitStatements(sql: string): string[] {
   const statements: string[] = [];
   let blanked = '';
@@ -238,7 +240,7 @@ function splitStatements(sql: string): string[] {
     if (ch === '$' && !/[\w$\u0080-\uffff]/.test(sql[i - 1] ?? '')) {
       dollarQuoteTag.lastIndex = i;
       const tag = dollarQuoteTag.exec(sql)?.[0];
-      if (tag !== undefined && /^\s*update\s/i.test(blanked)) {
+      if (tag !== undefined && valueDollarQuoteStatement.test(blanked)) {
         const end = sql.indexOf(tag, i + tag.length);
         if (end === -1) {
           return sql.split(';').map(blankQuotedSpans);
@@ -314,6 +316,82 @@ export function isUpdateWithoutWhere(sql: string): boolean {
   );
 }
 
+const explainStart = /^\s*explain(?![\w$\u0080-\uffff])\s*/i;
+const legacyExplainOptions =
+  /^(?:(analy[sz]e)(?![\w$\u0080-\uffff])\s*)?(?:verbose(?![\w$\u0080-\uffff])\s*)?/i;
+
+type Explain =
+  | { kind: 'plan' }
+  | { kind: 'analyze'; body: string }
+  | { kind: 'unparsed' };
+
+// Only ANALYZE runs the statement: https://www.postgresql.org/docs/current/sql-explain.html
+// `statement` comes from splitStatements, so literals are already blanked.
+function parseExplain(statement: string): Explain | undefined {
+  const start = explainStart.exec(statement);
+  if (!start) {
+    return undefined;
+  }
+  const rest = statement.slice(start[0].length);
+  if (!rest.startsWith('(')) {
+    const legacy = legacyExplainOptions.exec(rest)!;
+    return legacy[1]
+      ? { kind: 'analyze', body: rest.slice(legacy[0].length) }
+      : { kind: 'plan' };
+  }
+  const close = rest.indexOf(')');
+  if (close === -1) {
+    return { kind: 'unparsed' };
+  }
+  let analyze = false;
+  for (const option of rest.slice(1, close).split(',')) {
+    const [name = '', value, ...extra] = option.trim().split(/\s+/);
+    if (!/^[a-z_]\w*$/i.test(name) || extra.length > 0) {
+      return { kind: 'unparsed' };
+    }
+    if (!/^analy[sz]e$/i.test(name)) {
+      continue;
+    }
+    const flag = value?.toLowerCase();
+    if (
+      flag === undefined ||
+      flag === 'true' ||
+      flag === 'on' ||
+      flag === '1'
+    ) {
+      analyze = true;
+    } else if (flag !== 'false' && flag !== 'off' && flag !== '0') {
+      return { kind: 'unparsed' };
+    }
+  }
+  return analyze
+    ? { kind: 'analyze', body: rest.slice(close + 1) }
+    : { kind: 'plan' };
+}
+
 export function isDestructiveSql(sql: string): boolean {
+  const explains = splitStatements(sql)
+    .map((statement) => statement.replace(/--|\/\*|\*\//g, ' '))
+    .filter((statement) => statement.trim() !== '')
+    .map(parseExplain);
+  if (explains.some((explain) => explain?.kind === 'unparsed')) {
+    return true;
+  }
+  if (
+    explains.length > 0 &&
+    explains.every((explain) => explain?.kind === 'plan')
+  ) {
+    return false;
+  }
+  if (
+    explains.some(
+      (explain) =>
+        explain?.kind === 'analyze' &&
+        (checkDestructiveQuery(explain.body) ||
+          isUpdateWithoutWhere(explain.body))
+    )
+  ) {
+    return true;
+  }
   return checkDestructiveQuery(sql) || isUpdateWithoutWhere(sql);
 }
