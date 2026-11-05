@@ -950,7 +950,7 @@ describe('startLocalHttpEntry', () => {
     }
   );
 
-  test('a green API URL sends notebook confirmation links to the green dashboard', async () => {
+  test('a green API URL sends notebook confirmation and create links to the green dashboard', async () => {
     await entry.close();
     entry = await startEntry({ apiUrl: 'https://api.supabase.green' });
     const { project } = await createProjectFixture();
@@ -979,6 +979,15 @@ describe('startLocalHttpEntry', () => {
               attributes: { ...notebook.attributes, content: notebook.content },
             },
           })
+      ),
+      http.post('https://api.supabase.green/v2/projects/:ref/notebooks', () =>
+        HttpResponse.json({
+          data: {
+            type: 'notebook',
+            id: notebook.id,
+            attributes: { ...notebook.attributes, content: notebook.content },
+          },
+        })
       )
     );
     const client = await connect(
@@ -1013,6 +1022,26 @@ describe('startLocalHttpEntry', () => {
     }
     expect(params.message.split('\n').at(-1)).toBe(
       `Run notebook? https://supabase.green/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`
+    );
+    const created = toolOutput(
+      await client.callTool({
+        name: 'create_notebook',
+        arguments: {
+          name: 'Green notebook',
+          content: {
+            cells: [
+              {
+                type: 'database',
+                sql: "update films set title = 'x' where id = 1",
+                row_limit: 100,
+              },
+            ],
+          },
+        },
+      })
+    );
+    expect(created.url).toBe(
+      `https://supabase.green/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`
     );
   });
 
