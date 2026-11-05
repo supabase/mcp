@@ -314,6 +314,45 @@ describe('tools', () => {
     ]);
   });
 
+  test('list tables returns the check expression for NOT VALID and NO INHERIT constraints', async () => {
+    const { callTool } = await setup();
+
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    await project.db.exec(`
+      create table checks (a integer, b integer, c integer);
+      alter table checks add constraint a_positive check (a > 0) not valid;
+      alter table checks add constraint b_positive check (b > 0) no inherit;
+      alter table checks add constraint c_positive check (c > 0);
+    `);
+
+    const result = await callTool({
+      name: 'list_tables',
+      arguments: {
+        project_id: project.id,
+        schemas: ['public'],
+        verbose: true,
+      },
+    });
+
+    const checksTable = result.tables.find(
+      (t: { name: string }) => t.name === 'public.checks'
+    );
+    expect(
+      checksTable.columns.map((c: { name: string; check?: string }) => [
+        c.name,
+        c.check,
+      ])
+    ).toEqual([
+      ['a', 'a > 0'],
+      ['b', 'b > 0'],
+      ['c', 'c > 0'],
+    ]);
+  });
+
   test('composite FK is grouped as one constraint with positionally ordered columns', async () => {
     const { callTool } = await setup();
 
