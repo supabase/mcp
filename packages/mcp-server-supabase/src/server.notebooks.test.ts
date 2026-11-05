@@ -652,18 +652,79 @@ describe('run_notebook', () => {
         reason: 'run result budget spent',
       },
     ]);
+    const cells = parseCellResults(result.cells);
+    expect(cells[1].error.match(/Later cells were skipped\./g)).toHaveLength(1);
+    expect(cells[1].error).toMatch(/ Later cells were skipped\.$/);
     expect(
       executeSql.mock.calls.map(([, options]) => options.max_result_bytes)
     ).toEqual([1_000_000, 400_000]);
     expect(queryLogs).not.toHaveBeenCalled();
   });
 
+  test('an oversized last cell reports its remaining budget without claiming later cells were skipped', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const executeSql = vi
+      .spyOn(platform.database!, 'executeSql')
+      .mockResolvedValueOnce([{ value: 'x'.repeat(599_986) }])
+      .mockResolvedValueOnce([{ value: 'y'.repeat(1_999_986) }]);
+    const { callTool } = await setup({ platform, features: RUN_FEATURES });
+    const { project, notebook } = await createNotebookFixture([
+      { id: 'first', type: 'database', sql: 'select 1', row_limit: 100 },
+      { id: 'last', type: 'database', sql: 'select 2', row_limit: 100 },
+    ]);
+
+    const result = await callTool({
+      name: 'run_notebook',
+      arguments: runArgs(project, notebook),
+    });
+
+    const cells = parseCellResults(result.cells);
+    expect(cells).toEqual([
+      expect.objectContaining({
+        cell_id: 'first',
+        type: 'database',
+        status: 'success',
+      }),
+      {
+        cell_id: 'last',
+        type: 'database',
+        status: 'error',
+        error: expect.stringContaining(
+          'result is larger than the 400000 bytes left for this run'
+        ),
+      },
+    ]);
+    expect(cells[1].error).not.toContain('Later cells were skipped.');
+    expect(
+      executeSql.mock.calls.map(([, options]) => options.max_result_bytes)
+    ).toEqual([1_000_000, 400_000]);
+  });
+
   test.each([
-    'Result exceeds the available bytes',
-    'Result exceeds the available bytes. Later cells were skipped.',
+    {
+      message: 'Result exceeds the available bytes',
+      hasLaterCell: true,
+    },
+    {
+      message: 'Result exceeds the available bytes. Later cells were skipped.',
+      hasLaterCell: true,
+    },
+    {
+      message: 'Result exceeds the available bytes',
+      hasLaterCell: false,
+    },
+    {
+      message: 'Result exceeds the available bytes. Later cells were skipped.',
+      hasLaterCell: false,
+      expectedError: 'Result exceeds the available bytes.',
+    },
   ])(
-    'adapter byte-limit errors stop later cells without repeating the skip notice',
-    async (message) => {
+    'adapter byte-limit errors mention skipped cells only when later cells exist ($message, later: $hasLaterCell)',
+    async (row) => {
+      const { message, hasLaterCell } = row;
       const platform = createSupabaseApiPlatform({
         accessToken: ACCESS_TOKEN,
         apiUrl: API_URL,
@@ -677,7 +738,7 @@ describe('run_notebook', () => {
         .mockRejectedValueOnce(error);
       const { callTool } = await setup({ platform, features: RUN_FEATURES });
       const { project, notebook } = await createNotebookFixture(
-        [1, 2, 3, 4].map(
+        (hasLaterCell ? [1, 2, 3, 4] : [1, 2]).map(
           (number): NotebookCell => ({
             id: `query-${number}`,
             type: 'database',
@@ -698,21 +759,28 @@ describe('run_notebook', () => {
           cell_id: 'query-2',
           type: 'database',
           status: 'error',
-          error:
-            'Result exceeds the available bytes. Later cells were skipped.',
+          error: hasLaterCell
+            ? 'Result exceeds the available bytes. Later cells were skipped.'
+            : 'expectedError' in row
+              ? row.expectedError
+              : 'Result exceeds the available bytes',
         },
-        {
-          cell_id: 'query-3',
-          type: 'database',
-          status: 'skipped',
-          reason: 'run result budget spent',
-        },
-        {
-          cell_id: 'query-4',
-          type: 'database',
-          status: 'skipped',
-          reason: 'run result budget spent',
-        },
+        ...(hasLaterCell
+          ? [
+              {
+                cell_id: 'query-3',
+                type: 'database',
+                status: 'skipped',
+                reason: 'run result budget spent',
+              },
+              {
+                cell_id: 'query-4',
+                type: 'database',
+                status: 'skipped',
+                reason: 'run result budget spent',
+              },
+            ]
+          : []),
       ]);
       expect(executeSql).toHaveBeenCalledTimes(2);
       expect(
