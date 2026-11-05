@@ -508,13 +508,23 @@ describe('feature groups', () => {
     };
     const { notebooks: _, ...platformWithoutNotebooks } =
       createSupabaseApiPlatform({ accessToken: ACCESS_TOKEN, apiUrl: API_URL });
+    const notebookTools = [
+      'create_notebook',
+      'list_notebooks',
+      'get_notebook',
+      'run_notebook',
+      'delete_notebook',
+    ];
 
     expect(await listDefaultToolNames()).toEqual(
-      expect.arrayContaining(['list_notebooks', 'get_notebook'])
+      expect.arrayContaining(notebookTools)
     );
-    expect(await listDefaultToolNames(platformWithoutNotebooks)).not.toContain(
-      'list_notebooks'
+    const toolsWithoutAdapter = await listDefaultToolNames(
+      platformWithoutNotebooks
     );
+    for (const name of notebookTools) {
+      expect(toolsWithoutAdapter).not.toContain(name);
+    }
   });
 
   test('feedback tools', async () => {
