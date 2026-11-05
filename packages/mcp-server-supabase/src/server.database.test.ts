@@ -1144,6 +1144,64 @@ describe('tools', () => {
     );
   });
 
+  // Real Management API body for a ref that fails zProjectRef (AI-1425).
+  const malformedRefMessage = 'ref: ref must be exactly 20 characters long';
+  const malformedRefHint =
+    "Copy the ref exactly as returned by list_projects (id) or list_branches (project_ref), depending on whether you're working with the main project or a branch; do not retype or shorten it.";
+
+  test.each([
+    ...projectScopedDbTools.filter(({ tool }) =>
+      ['execute_sql', 'apply_migration'].includes(tool)
+    ),
+    {
+      tool: 'get_project',
+      method: 'get',
+      endpoint: '/v1/projects/:projectId',
+      args: (projectId: string) => ({ id: projectId }),
+    },
+  ] as const)(
+    'malformed ref for $tool tells the agent to re-copy it',
+    async ({ tool, method, endpoint, args }) => {
+      const { callTool } = await setup();
+
+      harness.mockServer?.use(
+        http[method](`${API_URL}${endpoint}`, () =>
+          HttpResponse.json({ message: malformedRefMessage }, { status: 400 })
+        )
+      );
+
+      await expect(
+        callTool({ name: tool, arguments: args('abcdefghijklmnopqrs') })
+      ).rejects.toThrow(`${malformedRefMessage}. ${malformedRefHint}`);
+    }
+  );
+
+  test('other 400 errors are not given the ref hint', async () => {
+    const { callTool } = await setup();
+
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    harness.mockServer?.use(
+      http.post(`${API_URL}/v1/projects/:projectId/database/query`, () =>
+        HttpResponse.json(
+          { message: 'query: Invalid input: expected string' },
+          { status: 400 }
+        )
+      )
+    );
+
+    const error = await callTool({
+      name: 'execute_sql',
+      arguments: { project_id: project.id, query: 'select 1;' },
+    }).catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain(malformedRefHint);
+  });
+
   test('invalid sql for apply_migration', async () => {
     const { callTool } = await setup();
 
