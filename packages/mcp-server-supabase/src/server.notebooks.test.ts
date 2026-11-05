@@ -283,51 +283,72 @@ describe('run_notebook', () => {
     }
   );
 
-  test('refuses 51 query cells before execution or confirmation', async () => {
-    const { client, platform } = await setupModern({
-      features: RUN_FEATURES,
-      clientCapabilities: FORM_CAPABLE,
-    });
-    const executeSql = vi.spyOn(platform.database!, 'executeSql');
-    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
-    const cells: NotebookCell[] = [
-      { id: 'intro', type: 'markdown', text: 'Run limits' },
-      ...Array.from(
-        { length: 49 },
-        (_, i): NotebookCell => ({
-          id: `read-${i}`,
+  test.each([
+    {
+      selection: 'omitted',
+      selectedCount: undefined,
+      message:
+        'This notebook has 120 query cells. run_notebook runs at most 50 query cells per call. Call run_notebook again with cells set to the next 50 or fewer query-cell ids. No cells were run.',
+    },
+    {
+      selection: '51 query-cell ids',
+      selectedCount: 51,
+      message:
+        'You selected 51 query cells. run_notebook runs at most 50 query cells per call. Call run_notebook again with cells set to the next 50 or fewer query-cell ids. No cells were run.',
+    },
+  ])(
+    'refuses an over-cap notebook with $selection before prompting or executing',
+    async ({ selectedCount, message }) => {
+      const { client, platform } = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+      const cells: NotebookCell[] = [
+        {
+          id: 'write',
           type: 'database',
-          sql: 'select 1 as one',
+          sql: 'delete from films',
           row_limit: 100,
-        })
-      ),
-      {
-        id: 'logs',
-        type: 'log',
-        sql: 'select * from logs',
-        time_range: { type: 'relative', unit: 'hour', amount: 1 },
-      },
-      {
-        id: 'write',
-        type: 'database',
-        sql: 'delete from films',
-        row_limit: 100,
-      },
-    ];
-    const { project, notebook } = await createNotebookFixture(cells);
+        },
+        {
+          id: 'logs',
+          type: 'log',
+          sql: 'select * from logs',
+          time_range: { type: 'relative', unit: 'hour', amount: 1 },
+        },
+        ...Array.from(
+          { length: 118 },
+          (_, i): NotebookCell => ({
+            id: `read-${i}`,
+            type: 'database',
+            sql: 'select 1 as one',
+            row_limit: 100,
+          })
+        ),
+      ];
+      const { project, notebook } = await createNotebookFixture(cells);
 
-    const result = await callModernTool(client, {
-      name: 'run_notebook',
-      arguments: runArgs(project, notebook),
-    });
+      const result = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: {
+          ...runArgs(project, notebook),
+          ...(selectedCount === undefined
+            ? {}
+            : { cells: cells.slice(0, selectedCount).map((cell) => cell.id) }),
+        },
+      });
 
-    expect(isInputRequiredResult(result)).toBe(false);
-    expect(result).toMatchObject({ isError: true });
-    expect(JSON.stringify(result)).toContain('50');
-    expect(JSON.stringify(result)).toMatch(/split/i);
-    expect(executeSql).not.toHaveBeenCalled();
-    expect(queryLogs).not.toHaveBeenCalled();
-  });
+      expect(isInputRequiredResult(result)).toBe(false);
+      expect(result).toMatchObject({ isError: true });
+      expect(executeSql).not.toHaveBeenCalled();
+      expect(queryLogs).not.toHaveBeenCalled();
+      expect(parseToolResult(result as CallToolResult)).toEqual({
+        error: { name: 'ToolCallerError', message },
+      });
+    }
+  );
 
   test('runs exactly 50 query cells even with markdown in the notebook', async () => {
     const platform = createSupabaseApiPlatform({
@@ -507,36 +528,6 @@ describe('run_notebook', () => {
     expect(error.name).toBe('ToolCallerError');
     expect(error.message).toContain('missing');
     expect(error.message).toContain('intro');
-    expect(executeSql).not.toHaveBeenCalled();
-    expect(queryLogs).not.toHaveBeenCalled();
-  });
-
-  test('refuses 51 selected query cells even when the notebook has more', async () => {
-    const { client, platform } = await setupModern({
-      features: RUN_FEATURES,
-      clientCapabilities: FORM_CAPABLE,
-    });
-    const executeSql = vi.spyOn(platform.database!, 'executeSql');
-    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
-    const cells: NotebookCell[] = Array.from({ length: 52 }, (_, i) => ({
-      id: `read-${i}`,
-      type: 'database',
-      sql: 'select 1 as one',
-      row_limit: 100,
-    }));
-    const { project, notebook } = await createNotebookFixture(cells);
-
-    const result = await callModernTool(client, {
-      name: 'run_notebook',
-      arguments: {
-        ...runArgs(project, notebook),
-        cells: cells.slice(0, 51).map((cell) => cell.id),
-      },
-    });
-
-    expect(isInputRequiredResult(result)).toBe(false);
-    expect(result).toMatchObject({ isError: true });
-    expect(JSON.stringify(result)).toContain('50');
     expect(executeSql).not.toHaveBeenCalled();
     expect(queryLogs).not.toHaveBeenCalled();
   });
