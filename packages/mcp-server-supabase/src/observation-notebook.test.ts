@@ -207,7 +207,16 @@ async function setup({
       ...extra,
     });
   }
-  return { attempts, saved, executeSql, queryLogs, deleteNotebook, run, del };
+  return {
+    attempts,
+    saved,
+    executeSql,
+    queryLogs,
+    deleteNotebook,
+    run,
+    del,
+    client,
+  };
 }
 
 test('initial and missing-response reissue each records only its own confirmation facts', async () => {
@@ -437,6 +446,39 @@ test('a run over 50 query cells records refusal without executing cells', async 
   expect(h.queryLogs).not.toHaveBeenCalled();
 });
 
+test('cancelling after the first database cell prevents later execution and leaves the run incomplete', async () => {
+  const h = await setup({
+    cells: [1, 2, 3].map(
+      (number): NotebookCell => ({
+        ...writeCell,
+        id: `query-${number}`,
+        sql: `SELECT ${number}`,
+      })
+    ),
+  });
+  const controller = new AbortController();
+  h.executeSql.mockImplementationOnce(async () => {
+    controller.abort();
+    return [];
+  });
+
+  await h.client
+    .request(
+      {
+        method: 'tools/call',
+        params: { name: 'run_notebook', arguments: runArgs },
+      },
+      { allowInputRequired: true, signal: controller.signal }
+    )
+    .catch(() => undefined);
+
+  await vi.waitFor(() => expect(h.attempts[0]?.ends).toHaveLength(1));
+  expect(h.executeSql).toHaveBeenCalledOnce();
+  expect(
+    h.attempts[0]!.facts.filter((fact) => fact.kind === 'notebook_run')
+  ).toEqual([]);
+});
+
 test('a completed run counts errored cells and cells skipped after the budget is spent', async () => {
   const h = await setup({
     cells: Array.from({ length: 5 }, (_, index) => ({
@@ -528,6 +570,32 @@ test('an oversized cell records the remaining budget as spent and later cells as
     ],
     'completed'
   );
+});
+
+test('adapter byte-limit errors record the run budget as exhausted', async () => {
+  const h = await setup({
+    cells: [1, 2, 3, 4].map(
+      (number): NotebookCell => ({
+        ...writeCell,
+        id: `query-${number}`,
+        sql: `SELECT ${number}`,
+      })
+    ),
+  });
+  const error = new Error('PRIVATE_CELL_ERROR');
+  error.name = 'ResultTooLargeError';
+  h.executeSql.mockResolvedValueOnce([]).mockRejectedValueOnce(error);
+
+  const result = await h.run();
+
+  expect(isInputRequiredResult(result)).toBe(false);
+  expect((result as CallToolResult).isError).not.toBe(true);
+  expect(h.executeSql).toHaveBeenCalledTimes(2);
+  expect(h.attempts).toHaveLength(1);
+  expect(
+    h.attempts[0]!.facts.filter((fact) => fact.kind === 'notebook_run')
+  ).toEqual([completed(2, 2, 1, true)]);
+  expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_CELL_ERROR');
 });
 
 test.each([

@@ -981,6 +981,69 @@ describe('run_notebook', () => {
     expect(queryLogs).not.toHaveBeenCalled();
   });
 
+  test.each([
+    'Result exceeds the available bytes',
+    'Result exceeds the available bytes. Later cells were skipped.',
+  ])(
+    'adapter byte-limit errors stop later cells without repeating the skip notice',
+    async (message) => {
+      const platform = createSupabaseApiPlatform({
+        accessToken: ACCESS_TOKEN,
+        apiUrl: API_URL,
+      });
+      const error = new Error(message);
+      error.name = 'ResultTooLargeError';
+      const executeSql = vi
+        .spyOn(platform.database!, 'executeSql')
+        .mockResolvedValue([])
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(error);
+      const { callTool } = await setup({ platform, features: RUN_FEATURES });
+      const { project, notebook } = await createNotebookFixture(
+        [1, 2, 3, 4].map(
+          (number): NotebookCell => ({
+            id: `query-${number}`,
+            type: 'database',
+            sql: `select ${number} as value`,
+            row_limit: 100,
+          })
+        )
+      );
+
+      const result = await callTool({
+        name: 'run_notebook',
+        arguments: runArgs(project, notebook),
+      });
+
+      expect(parseCellResults(result.cells)).toEqual([
+        { cell_id: 'query-1', type: 'database', status: 'success', rows: [] },
+        {
+          cell_id: 'query-2',
+          type: 'database',
+          status: 'error',
+          error:
+            'Result exceeds the available bytes. Later cells were skipped.',
+        },
+        {
+          cell_id: 'query-3',
+          type: 'database',
+          status: 'skipped',
+          reason: 'run result budget spent',
+        },
+        {
+          cell_id: 'query-4',
+          type: 'database',
+          status: 'skipped',
+          reason: 'run result budget spent',
+        },
+      ]);
+      expect(executeSql).toHaveBeenCalledTimes(2);
+      expect(
+        executeSql.mock.calls.map(([, options]) => options.max_result_bytes)
+      ).toEqual([1_000_000, 999_998]);
+    }
+  );
+
   test('rejects a run when the notebook changed since expected_updated_at', async () => {
     const { callTool } = await setup({ features: RUN_FEATURES });
     const { project, notebook } = await createNotebookFixture([
@@ -995,9 +1058,12 @@ describe('run_notebook', () => {
       },
     });
 
-    await expect(result).rejects.toThrow(
-      'Call get_notebook again and retry run_notebook'
-    );
+    await expect(result).rejects.toMatchObject({
+      name: 'ToolCallerError',
+      message: expect.stringContaining(
+        'Call get_notebook again and retry run_notebook'
+      ),
+    });
   });
 
   test('a log cell error reaches the reader and later cells still run', async () => {
@@ -1419,10 +1485,18 @@ describe('run_notebook', () => {
           name: 'run_notebook',
           arguments: runArgs(project, notebook),
         });
-        expect(result).toMatchObject({ isError: true });
-        expect(JSON.stringify(result)).toContain(
-          'does not support form elicitation'
-        );
+        if (isInputRequiredResult(result)) {
+          throw new Error('expected a CallToolResult');
+        }
+        expect(result.isError).toBe(true);
+        expect(parseToolResult(result)).toEqual({
+          error: {
+            name: 'ToolCallerError',
+            message: expect.stringContaining(
+              'does not support form elicitation'
+            ),
+          },
+        });
         expect(executeSql).not.toHaveBeenCalled();
         expect(queryLogs).not.toHaveBeenCalled();
       }
@@ -1730,23 +1804,102 @@ describe('run_notebook', () => {
     );
 
     test.each([
+      ['procedure', 'call refresh_metrics()'],
+      ['anonymous block', 'do $$ begin perform 1; end $$'],
+      ['materialized view refresh', 'refresh materialized view metrics'],
       [
-        'a data-modifying CTE',
-        'with d as (delete from t returning *) select * from d',
+        'transaction mode change',
+        'set transaction read write; select 1 as value',
       ],
-      ['a DO block', 'do $$ begin delete from t; end $$'],
-      ['a procedure call', 'call purge()'],
-      ['a function call', 'select app.reset_all()'],
-      ['SELECT INTO', 'select 1 into new_table'],
+      ['transaction start', 'begin read write; select 1 as value'],
+      [
+        'comment-separated transaction mode change',
+        'set/**/transaction read write; select 1 as value',
+      ],
+      [
+        'write after a quoted comment marker',
+        "select '--' as marker; update films set id = 1 where id = 2",
+      ],
+      [
+        'data-changing common table expression',
+        'with x as (insert into films (id) values (1) returning id) select id from x',
+      ],
+      [
+        'analyzed write',
+        'explain analyze update films set id = 1 where id = 2',
+      ],
     ] as const)(
-      'SQL outside confirmation classification runs %s in a read-only transaction',
+      '%s requires confirmation before a notebook database cell uses the server write setting',
       async (_, sql) => {
         const { client, platform } = await setupModern({
           features: RUN_FEATURES,
           clientCapabilities: FORM_CAPABLE,
           readOnly: false,
         });
-        const executeSql = vi.spyOn(platform.database!, 'executeSql');
+        const executeSql = vi
+          .spyOn(platform.database!, 'executeSql')
+          .mockResolvedValue([]);
+        const { project, notebook } = await createNotebookFixture([
+          { id: 'query', type: 'database', sql, row_limit: 100 },
+        ]);
+        const args = runArgs(project, notebook);
+
+        const first = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: args,
+        });
+        if (!isInputRequiredResult(first)) {
+          throw new Error(
+            'expected form confirmation before database execution'
+          );
+        }
+        expect(first.inputRequests?.confirm_run?.params).toMatchObject({
+          mode: 'form',
+        });
+        expect(executeSql).not.toHaveBeenCalled();
+
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: args,
+          requestState: first.requestState,
+          inputResponses: { confirm_run: { action: 'accept', content: {} } },
+        });
+        if (isInputRequiredResult(result)) {
+          throw new Error('expected a confirmed notebook run');
+        }
+        expect(result.isError).not.toBe(true);
+        expect(executeSql).toHaveBeenCalledOnce();
+        expect(executeSql).toHaveBeenCalledWith(
+          project.id,
+          expect.objectContaining({ query: sql, read_only: false })
+        );
+        expect(parseCellResults(parseToolResult(result).cells)).toEqual([
+          expect.objectContaining({ cell_id: 'query', status: 'success' }),
+        ]);
+      }
+    );
+
+    test.each([
+      ['simple selection', 'select 1 as value'],
+      [
+        'read-only common table expression',
+        'with x as (select 1 as value) select value from x',
+      ],
+      ['explained selection', 'explain select 1'],
+      ['configuration display', 'show server_version'],
+      ['selection calling a function', 'select app.reset_all()'],
+      ['selection into a table', 'select 1 into new_table'],
+    ] as const)(
+      '%s runs without confirmation with the adapter read_only setting',
+      async (_, sql) => {
+        const { client, platform } = await setupModern({
+          features: RUN_FEATURES,
+          clientCapabilities: FORM_CAPABLE,
+          readOnly: false,
+        });
+        const executeSql = vi
+          .spyOn(platform.database!, 'executeSql')
+          .mockResolvedValue([]);
         const { project, notebook } = await createNotebookFixture([
           { id: 'query', type: 'database', sql, row_limit: 100 },
         ]);
@@ -1757,6 +1910,7 @@ describe('run_notebook', () => {
         });
 
         expect(isInputRequiredResult(result)).toBe(false);
+        expect(result).not.toHaveProperty('isError', true);
         expect(executeSql).toHaveBeenCalledOnce();
         expect(executeSql).toHaveBeenCalledWith(
           project.id,
@@ -2426,9 +2580,14 @@ describe('delete_notebook', () => {
     })) as CallToolResult;
 
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      'does not support form elicitation. The notebook was not deleted.'
-    );
+    expect(parseToolResult(result)).toEqual({
+      error: {
+        name: 'ToolCallerError',
+        message: expect.stringContaining(
+          'does not support form elicitation. The notebook was not deleted.'
+        ),
+      },
+    });
     expect(project.notebooks.has(notebook.id)).toBe(true);
   });
 
@@ -2879,7 +3038,19 @@ describe('create_notebook', () => {
     [
       401,
       { message: 'Unauthorized' },
+      'Error',
       'Unauthorized. Please provide a valid access token',
+    ],
+    [
+      403,
+      {
+        error: {
+          code: 'notebook_disabled',
+          message: "Notebooks aren't available for your account yet",
+        },
+      },
+      'ToolCallerError',
+      "Notebooks aren't available for your account yet",
     ],
     [
       403,
@@ -2889,10 +3060,23 @@ describe('create_notebook', () => {
           message: 'Insufficient notebook permissions',
         },
       },
+      'ToolCallerError',
       'Insufficient notebook permissions',
     ],
-    [500, {}, 'Failed to create notebook'],
-  ])('surfaces API errors (%s)', async (status, body, message) => {
+    [
+      429,
+      { error: { code: 'rate_limited', message: 'Too many requests' } },
+      'Error',
+      'Too many requests',
+    ],
+    [
+      500,
+      { error: { code: 'internal_server_error', message: 'Internal error' } },
+      'Error',
+      'Internal error',
+    ],
+    [500, {}, 'Error', 'Failed to create notebook'],
+  ])('surfaces API errors (%s %j)', async (status, body, name, message) => {
     const { callTool } = await setup({ features: ['notebooks'] });
     harness.mockServer!.use(
       http.post(`${API_URL}/v2/projects/:ref/notebooks`, () =>
@@ -2904,7 +3088,10 @@ describe('create_notebook', () => {
         name: 'create_notebook',
         arguments: { project_id: 'test-project', ...proposal },
       })
-    ).rejects.toThrow(message);
+    ).rejects.toMatchObject({
+      name,
+      message: expect.stringContaining(message),
+    });
   });
 
   test.each([false, true])(

@@ -135,6 +135,7 @@ const listTablesOutputSchema = z.object({
       rls_enabled: z.boolean(),
       rows: z.number().nullable(),
       comment: z.string().nullable().optional(),
+      partition_of: z.string().optional(),
       columns: z
         .array(
           z.object({
@@ -318,6 +319,7 @@ export function getDatabaseTools({
             primary_keys,
             relationships,
             comment,
+            partition_of,
 
             // Modified passthrough
             schema,
@@ -331,6 +333,7 @@ export function getDatabaseTools({
 
               // Omit fields when empty
               ...(comment !== null && { comment }),
+              ...(partition_of !== null && { partition_of }),
             };
 
             if (!verbose) {
