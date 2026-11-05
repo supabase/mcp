@@ -1572,6 +1572,10 @@ describe('run_notebook', () => {
         'with x as (select 1 as value) select value from x',
       ],
       ['explained selection', 'explain select 1'],
+      [
+        'planner-only EXPLAIN of a DELETE',
+        'EXPLAIN (ANALYZE FALSE) DELETE FROM films',
+      ],
       ['configuration display', 'show server_version'],
       ['selection calling a function', 'select app.reset_all()'],
       ['selection into a table', 'select 1 into new_table'],

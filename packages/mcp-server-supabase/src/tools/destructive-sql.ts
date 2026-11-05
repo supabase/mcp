@@ -109,9 +109,13 @@ export function checkDestructiveQuery(sql: string): boolean {
   return checkDestructiveQueryFromScan(sql, lexSql(sql));
 }
 
+const valueDollarQuoteStatement =
+  /^\s*(?:update\s|explain(?![\w$\u0080-\uffff]))/i;
+
 // Dollar and comment bodies still expose their semicolons to this policy:
 // UPDATE statements inside DO bodies must remain visible. Dollar values in
-// UPDATE statements are masked so a WHERE in a value cannot change the result.
+// UPDATE and EXPLAIN are masked so a WHERE or semicolon in a value cannot
+// change the statement classification.
 function splitStatements(sql: string, scan: SqlScan): string[] {
   if (scan.unterminated && scan.unterminated !== 'block-comment') {
     // Keep the historical plain-split fallback for incomplete quoted input.
@@ -128,7 +132,6 @@ function splitStatements(sql: string, scan: SqlScan): string[] {
       .join('');
     return masked.split(';');
   }
-
   const statements: string[] = [];
   let blanked = '';
   const append = (text: string) => {
@@ -172,7 +175,7 @@ function splitStatements(sql: string, scan: SqlScan): string[] {
       case 'dollar-body': {
         const tagEnd = sql.indexOf('$', span.start + 1) + 1;
         const tag = sql.slice(span.start, tagEnd);
-        if (/^\s*update\s/i.test(blanked)) {
+        if (valueDollarQuoteStatement.test(blanked)) {
           blanked += tag + tag;
         } else {
           append(sql.slice(span.start, span.end));
@@ -198,8 +201,86 @@ export function isUpdateWithoutWhere(sql: string): boolean {
   return isUpdateWithoutWhereFromScan(sql, lexSql(sql));
 }
 
+const explainStart = /^\s*explain(?![\w$\u0080-\uffff])\s*/i;
+const legacyExplainOptions =
+  /^(?:(analy[sz]e)(?![\w$\u0080-\uffff])\s*)?(?:verbose(?![\w$\u0080-\uffff])\s*)?/i;
+
+type Explain =
+  | { kind: 'plan' }
+  | { kind: 'analyze'; body: string }
+  | { kind: 'unparsed' };
+
+// Only ANALYZE runs the statement: https://www.postgresql.org/docs/current/sql-explain.html
+// `statement` comes from splitStatements, so literals are already blanked.
+function parseExplain(statement: string): Explain | undefined {
+  const start = explainStart.exec(statement);
+  if (!start) {
+    return undefined;
+  }
+  const rest = statement.slice(start[0].length);
+  if (!rest.startsWith('(')) {
+    const legacy = legacyExplainOptions.exec(rest)!;
+    return legacy[1]
+      ? { kind: 'analyze', body: rest.slice(legacy[0].length) }
+      : { kind: 'plan' };
+  }
+  const close = rest.indexOf(')');
+  if (close === -1) {
+    return { kind: 'unparsed' };
+  }
+  let analyze = false;
+  for (const option of rest.slice(1, close).split(',')) {
+    const [name = '', value, ...extra] = option.trim().split(/\s+/);
+    if (!/^[a-z_]\w*$/i.test(name) || extra.length > 0) {
+      return { kind: 'unparsed' };
+    }
+    if (!/^analy[sz]e$/i.test(name)) {
+      continue;
+    }
+    const flag = value?.toLowerCase();
+    if (
+      flag === undefined ||
+      flag === 'true' ||
+      flag === 'on' ||
+      flag === '1'
+    ) {
+      analyze = true;
+    } else if (flag !== 'false' && flag !== 'off' && flag !== '0') {
+      return { kind: 'unparsed' };
+    }
+  }
+  return analyze
+    ? { kind: 'analyze', body: rest.slice(close + 1) }
+    : { kind: 'plan' };
+}
+
+/** `statement` has quoted spans and comments masked by the shared lexer. */
+export function isPlannerOnlyExplainStatement(statement: string): boolean {
+  return parseExplain(statement)?.kind === 'plan';
+}
+
 export function isDestructiveSql(sql: string): boolean {
   const scan = lexSql(sql);
+  let hasStatement = false;
+  let onlyPlans = true;
+  for (const raw of splitStatements(sql, scan)) {
+    const statement = raw.replace(/--|\/\*|\*\//g, ' ').trim();
+    if (!statement) continue;
+    hasStatement = true;
+    const explain = parseExplain(statement);
+    if (explain?.kind === 'unparsed') return true;
+    if (explain?.kind === 'analyze') {
+      const bodyScan = lexSql(explain.body);
+      if (
+        checkDestructiveQueryFromScan(explain.body, bodyScan) ||
+        isUpdateWithoutWhereFromScan(explain.body, bodyScan)
+      ) {
+        return true;
+      }
+    }
+    if (explain?.kind !== 'plan') onlyPlans = false;
+  }
+  if (hasStatement && onlyPlans) return false;
   return (
     checkDestructiveQueryFromScan(sql, scan) ||
     isUpdateWithoutWhereFromScan(sql, scan)
