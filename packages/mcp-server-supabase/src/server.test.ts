@@ -512,9 +512,9 @@ describe('feature groups', () => {
     expect(await listDefaultToolNames()).toEqual(
       expect.arrayContaining(['list_notebooks', 'get_notebook'])
     );
-    expect(
-      await listDefaultToolNames(platformWithoutNotebooks)
-    ).not.toContain('list_notebooks');
+    expect(await listDefaultToolNames(platformWithoutNotebooks)).not.toContain(
+      'list_notebooks'
+    );
   });
 
   test('feedback tools', async () => {
