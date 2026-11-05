@@ -34,7 +34,7 @@ function hasDestructiveStart(sql: string, starts: RegExp): boolean {
 }
 
 const updateWithoutWhereRegex =
-  /(?:^|;)\s*update\s+(?:"(?:[^"]|"")*"|[\w]+)(?:\.(?:"(?:[^"]|"")*"|[\w]+))?\s+set\s+[\w\W]+?(?!\s*where\s)/is;
+  /(?:^|;)\s*update\s+(?:only\s+)?(?:"(?:[^"]|"")*"|[\w]+)(?:\.(?:"(?:[^"]|"")*"|[\w]+))?(?:\s+(?:as\s+)?(?:"(?:[^"]|"")*"|[\w]+))?\s+set\s+[\w\W]+?(?!\s*where\s)/is;
 
 function removeComments(sql: string, scan: SqlScan): string {
   let parts: string[] | undefined;
@@ -188,13 +188,20 @@ function splitStatements(sql: string, scan: SqlScan): string[] {
   return statements;
 }
 
+// splitStatements keeps comment markers in place of comment bodies.
+function stripCommentMarkers(statement: string): string {
+  return statement.replace(/--|\/\*|\*\//g, ' ').trim();
+}
+
 function isUpdateWithoutWhereFromScan(sql: string, scan: SqlScan): boolean {
-  return splitStatements(sql, scan).some(
-    (statement) =>
-      statement.trim().toLowerCase().startsWith('update') &&
+  return splitStatements(sql, scan).some((raw) => {
+    const statement = stripCommentMarkers(raw);
+    return (
+      statement.toLowerCase().startsWith('update') &&
       updateWithoutWhereRegex.test(statement) &&
       !/where\s/i.test(statement)
-  );
+    );
+  });
 }
 
 export function isUpdateWithoutWhere(sql: string): boolean {
@@ -264,7 +271,7 @@ export function isDestructiveSql(sql: string): boolean {
   let hasStatement = false;
   let onlyPlans = true;
   for (const raw of splitStatements(sql, scan)) {
-    const statement = raw.replace(/--|\/\*|\*\//g, ' ').trim();
+    const statement = stripCommentMarkers(raw);
     if (!statement) continue;
     hasStatement = true;
     const explain = parseExplain(statement);
