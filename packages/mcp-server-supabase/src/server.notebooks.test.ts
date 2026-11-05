@@ -283,51 +283,72 @@ describe('run_notebook', () => {
     }
   );
 
-  test('refuses 51 query cells before execution or confirmation', async () => {
-    const { client, platform } = await setupModern({
-      features: RUN_FEATURES,
-      clientCapabilities: FORM_CAPABLE,
-    });
-    const executeSql = vi.spyOn(platform.database!, 'executeSql');
-    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
-    const cells: NotebookCell[] = [
-      { id: 'intro', type: 'markdown', text: 'Run limits' },
-      ...Array.from(
-        { length: 49 },
-        (_, i): NotebookCell => ({
-          id: `read-${i}`,
+  test.each([
+    {
+      selection: 'omitted',
+      selectedCount: undefined,
+      message:
+        'This notebook has 120 query cells. run_notebook runs at most 50 query cells per call. Call run_notebook again with cells set to the next 50 or fewer query-cell ids. No cells were run.',
+    },
+    {
+      selection: '51 query-cell ids',
+      selectedCount: 51,
+      message:
+        'You selected 51 query cells. run_notebook runs at most 50 query cells per call. Call run_notebook again with cells set to the next 50 or fewer query-cell ids. No cells were run.',
+    },
+  ])(
+    'refuses an over-cap notebook with $selection before prompting or executing',
+    async ({ selectedCount, message }) => {
+      const { client, platform } = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+      const cells: NotebookCell[] = [
+        {
+          id: 'write',
           type: 'database',
-          sql: 'select 1 as one',
+          sql: 'delete from films',
           row_limit: 100,
-        })
-      ),
-      {
-        id: 'logs',
-        type: 'log',
-        sql: 'select * from logs',
-        time_range: { type: 'relative', unit: 'hour', amount: 1 },
-      },
-      {
-        id: 'write',
-        type: 'database',
-        sql: 'delete from films',
-        row_limit: 100,
-      },
-    ];
-    const { project, notebook } = await createNotebookFixture(cells);
+        },
+        {
+          id: 'logs',
+          type: 'log',
+          sql: 'select * from logs',
+          time_range: { type: 'relative', unit: 'hour', amount: 1 },
+        },
+        ...Array.from(
+          { length: 118 },
+          (_, i): NotebookCell => ({
+            id: `read-${i}`,
+            type: 'database',
+            sql: 'select 1 as one',
+            row_limit: 100,
+          })
+        ),
+      ];
+      const { project, notebook } = await createNotebookFixture(cells);
 
-    const result = await callModernTool(client, {
-      name: 'run_notebook',
-      arguments: runArgs(project, notebook),
-    });
+      const result = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: {
+          ...runArgs(project, notebook),
+          ...(selectedCount === undefined
+            ? {}
+            : { cells: cells.slice(0, selectedCount).map((cell) => cell.id) }),
+        },
+      });
 
-    expect(isInputRequiredResult(result)).toBe(false);
-    expect(result).toMatchObject({ isError: true });
-    expect(JSON.stringify(result)).toContain('50');
-    expect(JSON.stringify(result)).toMatch(/split/i);
-    expect(executeSql).not.toHaveBeenCalled();
-    expect(queryLogs).not.toHaveBeenCalled();
-  });
+      expect(isInputRequiredResult(result)).toBe(false);
+      expect(result).toMatchObject({ isError: true });
+      expect(executeSql).not.toHaveBeenCalled();
+      expect(queryLogs).not.toHaveBeenCalled();
+      expect(parseToolResult(result as CallToolResult)).toEqual({
+        error: { name: 'ToolCallerError', message },
+      });
+    }
+  );
 
   test('runs exactly 50 query cells even with markdown in the notebook', async () => {
     const platform = createSupabaseApiPlatform({
@@ -364,6 +385,214 @@ describe('run_notebook', () => {
         rows: [{ one: 1 }],
       }))
     );
+  });
+
+  test('runs mixed valid and invalid ids once in the required order', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
+    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+    const { callTool } = await setup({ platform, features: RUN_FEATURES });
+    harness.mockServer!.use(
+      http.get(
+        `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
+        () =>
+          HttpResponse.json({
+            result: [{ event_message: 'Selected' }],
+            error: null,
+          })
+      )
+    );
+    const { project, notebook } = await createNotebookFixture([
+      { id: 'intro', type: 'markdown', text: 'Choose cells' },
+      { id: 'first', type: 'database', sql: 'select 1 as one', row_limit: 100 },
+      {
+        id: 'excluded',
+        type: 'database',
+        sql: 'select 9 as nine',
+        row_limit: 100,
+      },
+      {
+        id: 'logs',
+        type: 'log',
+        sql: 'select * from logs',
+        time_range: { type: 'relative', unit: 'hour', amount: 1 },
+      },
+      { id: 'last', type: 'database', sql: 'select 2 as two', row_limit: 100 },
+    ]);
+
+    const result = await callTool({
+      name: 'run_notebook',
+      arguments: {
+        ...runArgs(project, notebook),
+        cells: [
+          'missing',
+          'last',
+          'intro',
+          'logs',
+          'missing',
+          'first',
+          'intro',
+          'first',
+        ],
+      },
+    });
+
+    expect(parseCellResults(result.cells)).toEqual([
+      {
+        cell_id: 'first',
+        type: 'database',
+        status: 'success',
+        rows: [{ one: 1 }],
+      },
+      {
+        cell_id: 'logs',
+        type: 'log',
+        status: 'success',
+        rows: [{ event_message: 'Selected' }],
+      },
+      {
+        cell_id: 'last',
+        type: 'database',
+        status: 'success',
+        rows: [{ two: 2 }],
+      },
+      {
+        cell_id: 'missing',
+        status: 'skipped',
+        reason: 'not found in this notebook',
+      },
+      {
+        cell_id: 'intro',
+        status: 'skipped',
+        reason: 'not a query cell',
+      },
+    ]);
+    expect(executeSql.mock.calls.map(([, options]) => options.query)).toEqual([
+      'select 1 as one limit 100;',
+      'select 2 as two limit 100;',
+    ]);
+    expect(queryLogs).toHaveBeenCalledOnce();
+  });
+
+  test('rejects an empty selection without executing or prompting', async () => {
+    const { client, platform } = await setupModern({
+      features: RUN_FEATURES,
+      clientCapabilities: FORM_CAPABLE,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
+    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+    const { project, notebook } = await createNotebookFixture([
+      { id: 'read', type: 'database', sql: 'select 1 as one', row_limit: 100 },
+    ]);
+
+    const result = await callModernTool(client, {
+      name: 'run_notebook',
+      arguments: { ...runArgs(project, notebook), cells: [] },
+    });
+
+    expect(isInputRequiredResult(result)).toBe(false);
+    expect(result).toMatchObject({ isError: true });
+    expect(parseToolResult(result as CallToolResult).error.name).toBe(
+      'ToolCallerError'
+    );
+    expect(executeSql).not.toHaveBeenCalled();
+    expect(queryLogs).not.toHaveBeenCalled();
+  });
+
+  test('rejects all-invalid ids without executing or prompting', async () => {
+    const { client, platform } = await setupModern({
+      features: RUN_FEATURES,
+      clientCapabilities: FORM_CAPABLE,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
+    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+    const { project, notebook } = await createNotebookFixture([
+      { id: 'intro', type: 'markdown', text: 'Introduction' },
+      { id: 'read', type: 'database', sql: 'select 1 as one', row_limit: 100 },
+    ]);
+
+    const result = await callModernTool(client, {
+      name: 'run_notebook',
+      arguments: {
+        ...runArgs(project, notebook),
+        cells: ['missing', 'intro', 'missing'],
+      },
+    });
+
+    expect(isInputRequiredResult(result)).toBe(false);
+    expect(result).toMatchObject({ isError: true });
+    const error = parseToolResult(result as CallToolResult).error;
+    expect(error.name).toBe('ToolCallerError');
+    expect(error.message).toContain('missing');
+    expect(error.message).toContain('intro');
+    expect(executeSql).not.toHaveBeenCalled();
+    expect(queryLogs).not.toHaveBeenCalled();
+  });
+
+  test('runs 50 valid selected cells despite extra invalid ids', async () => {
+    const { client, platform } = await setupModern({
+      features: RUN_FEATURES,
+      clientCapabilities: FORM_CAPABLE,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
+    const cells: NotebookCell[] = [
+      { id: 'intro', type: 'markdown', text: 'Run limits' },
+      ...Array.from(
+        { length: 50 },
+        (_, i): NotebookCell => ({
+          id: `read-${i}`,
+          type: 'database',
+          sql: 'select 1 as one',
+          row_limit: 100,
+        })
+      ),
+      {
+        id: 'excluded-write',
+        type: 'database',
+        sql: 'delete from films',
+        row_limit: 100,
+      },
+    ];
+    const { project, notebook } = await createNotebookFixture(cells);
+
+    const result = await callModernTool(client, {
+      name: 'run_notebook',
+      arguments: {
+        ...runArgs(project, notebook),
+        cells: [
+          'missing',
+          'intro',
+          ...cells.slice(1, 51).map((cell) => cell.id),
+        ],
+      },
+    });
+
+    expect(isInputRequiredResult(result)).toBe(false);
+    expect(result).not.toHaveProperty('isError', true);
+    expect(executeSql).toHaveBeenCalledTimes(50);
+    expect(
+      parseCellResults(parseToolResult(result as CallToolResult).cells)
+    ).toEqual([
+      ...Array.from({ length: 50 }, (_, i) => ({
+        cell_id: `read-${i}`,
+        type: 'database',
+        status: 'success',
+        rows: [{ one: 1 }],
+      })),
+      {
+        cell_id: 'missing',
+        status: 'skipped',
+        reason: 'not found in this notebook',
+      },
+      {
+        cell_id: 'intro',
+        status: 'skipped',
+        reason: 'not a query cell',
+      },
+    ]);
   });
 
   test('runs query cells in notebook order and skips markdown', async () => {
@@ -559,6 +788,91 @@ describe('run_notebook', () => {
         type: 'log',
         status: 'skipped',
         reason: 'run result budget spent',
+      },
+    ]);
+    expect(executeSql).toHaveBeenCalledOnce();
+    expect(queryLogs).not.toHaveBeenCalled();
+  });
+
+  test('budget exhaustion skips only later selected cells', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const executeSql = vi
+      .spyOn(platform.database!, 'executeSql')
+      .mockResolvedValue([{ value: 'x'.repeat(999_986) }]);
+    const queryLogs = vi.spyOn(platform.debugging!, 'queryLogs');
+    const { callTool } = await setup({ platform, features: RUN_FEATURES });
+    const { project, notebook } = await createNotebookFixture([
+      { id: 'intro', type: 'markdown', text: 'Budget notes' },
+      {
+        id: 'fills-budget',
+        type: 'database',
+        sql: 'select 1',
+        row_limit: 100,
+      },
+      {
+        id: 'excluded',
+        type: 'database',
+        sql: 'select 9',
+        row_limit: 100,
+      },
+      {
+        id: 'later-database',
+        type: 'database',
+        sql: 'select 2',
+        row_limit: 100,
+      },
+      {
+        id: 'later-logs',
+        type: 'log',
+        sql: 'select * from logs',
+        time_range: { type: 'relative', unit: 'hour', amount: 1 },
+      },
+    ]);
+
+    const result = await callTool({
+      name: 'run_notebook',
+      arguments: {
+        ...runArgs(project, notebook),
+        cells: [
+          'missing',
+          'later-logs',
+          'fills-budget',
+          'intro',
+          'later-database',
+        ],
+      },
+    });
+
+    expect(parseCellResults(result.cells)).toEqual([
+      expect.objectContaining({
+        cell_id: 'fills-budget',
+        type: 'database',
+        status: 'success',
+      }),
+      {
+        cell_id: 'later-database',
+        type: 'database',
+        status: 'skipped',
+        reason: 'run result budget spent',
+      },
+      {
+        cell_id: 'later-logs',
+        type: 'log',
+        status: 'skipped',
+        reason: 'run result budget spent',
+      },
+      {
+        cell_id: 'missing',
+        status: 'skipped',
+        reason: 'not found in this notebook',
+      },
+      {
+        cell_id: 'intro',
+        status: 'skipped',
+        reason: 'not a query cell',
       },
     ]);
     expect(executeSql).toHaveBeenCalledOnce();
@@ -1406,6 +1720,103 @@ describe('run_notebook', () => {
       );
     });
 
+    test('selecting only SELECT bypasses confirmation despite an unselected UPDATE', async () => {
+      const { client, platform } = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const { project, notebook } = await createNotebookFixture([
+        {
+          id: 'read',
+          type: 'database',
+          sql: 'select 1 as one',
+          row_limit: 100,
+        },
+        {
+          id: 'update',
+          type: 'database',
+          sql: "update films set title = 'x' where id = 1",
+          row_limit: 100,
+        },
+      ]);
+
+      const result = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: {
+          ...runArgs(project, notebook),
+          cells: ['missing', 'read'],
+        },
+      });
+
+      expect(isInputRequiredResult(result)).toBe(false);
+      expect(result).not.toHaveProperty('isError', true);
+      expect(
+        parseCellResults(parseToolResult(result as CallToolResult).cells)
+      ).toEqual([
+        {
+          cell_id: 'read',
+          type: 'database',
+          status: 'success',
+          rows: [{ one: 1 }],
+        },
+        {
+          cell_id: 'missing',
+          status: 'skipped',
+          reason: 'not found in this notebook',
+        },
+      ]);
+      expect(executeSql).toHaveBeenCalledOnce();
+      expect(executeSql).toHaveBeenCalledWith(
+        project.id,
+        expect.objectContaining({
+          query: 'select 1 as one limit 100;',
+          read_only: true,
+        })
+      );
+    });
+
+    test('selecting only UPDATE prompts with selected query-cell counts', async () => {
+      const { client, platform } = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const { project, notebook } = await createNotebookFixture([
+        {
+          id: 'read',
+          type: 'database',
+          sql: 'select 1 as one',
+          row_limit: 100,
+        },
+        {
+          id: 'update',
+          type: 'database',
+          sql: "update films set title = 'x' where id = 1",
+          row_limit: 100,
+        },
+      ]);
+
+      const result = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: {
+          ...runArgs(project, notebook),
+          cells: ['update', 'missing'],
+        },
+      });
+
+      if (!isInputRequiredResult(result)) {
+        throw new Error('expected confirmation for the selected UPDATE');
+      }
+      expect(result.inputRequests?.confirm_run?.params).toMatchObject({
+        mode: 'form',
+        message: expect.stringContaining(
+          'This notebook modifies data or schema in 1 of 1 query cells.'
+        ),
+      });
+      expect(executeSql).not.toHaveBeenCalled();
+    });
+
     test.each([
       [
         'a later INSERT after a semicolon',
@@ -2016,6 +2427,107 @@ describe('run_notebook', () => {
         },
       });
       expect(executeSql).not.toHaveBeenCalled();
+    });
+
+    test('approval for selection A re-prompts for a changed selection B', async () => {
+      const { client, platform } = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const { project, notebook } = await createNotebookFixture([
+        {
+          id: 'update-a',
+          type: 'database',
+          sql: "update films set title = 'a' where id = 1",
+          row_limit: 100,
+        },
+        {
+          id: 'update-b',
+          type: 'database',
+          sql: "update films set title = 'b' where id = 1",
+          row_limit: 100,
+        },
+      ]);
+      const args = runArgs(project, notebook);
+      const first = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: { ...args, cells: ['update-a'] },
+      });
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected confirmation for selection A');
+      }
+
+      const second = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: { ...args, cells: ['update-b'] },
+        requestState: first.requestState,
+        inputResponses: { confirm_run: { action: 'accept', content: {} } },
+      });
+
+      if (!isInputRequiredResult(second)) {
+        throw new Error('expected fresh confirmation for selection B');
+      }
+      expect(second.inputRequests?.confirm_run?.params).toMatchObject({
+        mode: 'form',
+        message: expect.stringContaining('1 of 1 query cells'),
+      });
+      expect(executeSql).not.toHaveBeenCalled();
+    });
+
+    test('approval for selection A accepts an added invalid id without another prompt', async () => {
+      const { client, platform } = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: FORM_CAPABLE,
+      });
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+      const { project, notebook } = await createNotebookFixture([
+        {
+          id: 'update-a',
+          type: 'database',
+          sql: "update films set title = 'a' where id = 1",
+          row_limit: 100,
+        },
+      ]);
+      await project.db.exec('create table films (id int, title text)');
+      await project.db.exec(
+        "insert into films (id, title) values (1, 'before')"
+      );
+      const args = runArgs(project, notebook);
+      const first = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: { ...args, cells: ['update-a'] },
+      });
+      if (!isInputRequiredResult(first)) {
+        throw new Error('expected confirmation for selection A');
+      }
+      expect(executeSql).not.toHaveBeenCalled();
+
+      const second = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: { ...args, cells: ['update-a', 'typo'] },
+        requestState: first.requestState,
+        inputResponses: { confirm_run: { action: 'accept', content: {} } },
+      });
+
+      expect(isInputRequiredResult(second)).toBe(false);
+      expect(second).not.toHaveProperty('isError', true);
+      expect(executeSql).toHaveBeenCalledOnce();
+      expect(
+        parseCellResults(parseToolResult(second as CallToolResult).cells)
+      ).toEqual([
+        {
+          cell_id: 'update-a',
+          type: 'database',
+          status: 'success',
+          rows: [],
+        },
+        {
+          cell_id: 'typo',
+          status: 'skipped',
+          reason: 'not found in this notebook',
+        },
+      ]);
     });
 
     test('rejects a retry for a different notebook than the state was minted for', async () => {

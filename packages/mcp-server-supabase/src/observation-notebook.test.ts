@@ -502,6 +502,36 @@ test('a completed run counts errored cells and cells skipped after the budget is
   ).toEqual([completed(3, 2, 1, true)]);
 });
 
+test('completed notebook_run excludes invalid ids from execution and budget-skip counts', async () => {
+  const h = await setup({
+    cells: [
+      { id: 'intro', type: 'markdown', text: 'PRIVATE_NOTEBOOK_CONTENT' },
+      ...Array.from({ length: 5 }, (_, index) => ({
+        ...writeCell,
+        id: `query-${index}`,
+        sql: `SELECT ${index}`,
+      })),
+    ],
+  });
+  // A JSON array containing one string uses four framing bytes.
+  h.executeSql.mockResolvedValueOnce(['x'.repeat(999_996)]);
+
+  const result = await h.run({
+    arguments: {
+      ...runArgs,
+      cells: ['missing', 'query-4', 'intro', 'query-0', 'query-2'],
+    },
+  });
+
+  expect(isInputRequiredResult(result)).toBe(false);
+  expect((result as CallToolResult).isError).not.toBe(true);
+  expect(h.executeSql).toHaveBeenCalledOnce();
+  expect(h.attempts).toHaveLength(1);
+  expect(
+    h.attempts[0]!.facts.filter((fact) => fact.kind === 'notebook_run')
+  ).toEqual([completed(1, 2, 0, true)]);
+});
+
 test('an oversized cell records the remaining budget as spent and later cells as skipped', async () => {
   const h = await setup({
     cells: [
