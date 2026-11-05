@@ -71,6 +71,22 @@ const eligible = {
   route: 'inline',
   reason: 'eligible',
 };
+function completed(
+  executed: number,
+  skipped: number,
+  errored: number,
+  budget_exhausted: boolean
+) {
+  return {
+    kind: 'notebook_run',
+    outcome: 'completed',
+    executed,
+    skipped,
+    errored,
+    budget_exhausted,
+  };
+}
+
 function required(reason: 'initial' | 'missing_response' | 'changed_quote') {
   return { kind: 'input_required', feature: 'notebook', mode: 'form', reason };
 }
@@ -112,7 +128,13 @@ async function setup({
     content: { schema_version: 1, cells: [...cells] },
   };
   const getNotebook = vi.fn(async () => saved);
-  const executeSql = vi.fn(async () => []);
+  const executeSql = vi.fn(
+    async (
+      ..._args: Parameters<
+        NonNullable<SupabasePlatform['database']>['executeSql']
+      >
+    ) => [] as unknown[]
+  );
   const deleteNotebook = vi.fn(async () => {});
   const queryLogs = vi.fn(async () => ({ result: [{ PRIVATE_LOG_ROW: 2 }] }));
   const platform = {
@@ -122,7 +144,11 @@ async function setup({
       deleteNotebook,
     },
     database: {
-      executeSql,
+      executeSql: async <T>(
+        ...args: Parameters<
+          NonNullable<SupabasePlatform['database']>['executeSql']
+        >
+      ) => (await executeSql(...args)) as T[],
       applyMigration: vi.fn(async () => {}),
       listMigrations: vi.fn(async () => []),
     },
@@ -181,7 +207,16 @@ async function setup({
       ...extra,
     });
   }
-  return { attempts, saved, executeSql, queryLogs, deleteNotebook, run, del };
+  return {
+    attempts,
+    saved,
+    executeSql,
+    queryLogs,
+    deleteNotebook,
+    run,
+    del,
+    client,
+  };
 }
 
 test('initial and missing-response reissue each records only its own confirmation facts', async () => {
@@ -231,11 +266,16 @@ test.each([
         eligible,
         response(action),
         ...(action === 'accept'
-          ? [validation('valid'), started, returned]
+          ? [validation('valid'), started, completed(2, 0, 0, false), returned]
           : []),
       ],
       outcome
     );
+    if (action === 'decline') {
+      expect(
+        h.attempts[1]!.facts.filter((fact) => fact.kind === 'notebook_run')
+      ).toEqual([]);
+    }
     expect(h.executeSql).toHaveBeenCalledTimes(action === 'accept' ? 1 : 0);
     expect(h.queryLogs).toHaveBeenCalledTimes(action === 'accept' ? 1 : 0);
   }
@@ -345,6 +385,7 @@ test.each([
           reason,
         },
         started,
+        completed(2, 0, 0, false),
         returned,
       ],
       'completed'
@@ -377,10 +418,153 @@ test('a caught cell failure still returns one notebook operation result', async 
         reason: 'not_mutating',
       },
       started,
+      completed(2, 0, 1, false),
       returned,
     ],
     'completed'
   );
+  expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_CELL_ERROR');
+});
+
+test('a run over 50 query cells records refusal without executing cells', async () => {
+  const h = await setup({
+    cells: Array.from({ length: 51 }, (_, index) => ({
+      ...writeCell,
+      id: `query-${index}`,
+      sql: `SELECT ${index}`,
+    })),
+  });
+  const result = await h.run();
+  expect((result as CallToolResult).isError).toBe(true);
+  expect(h.attempts).toHaveLength(1);
+  expect(
+    h.attempts[0]!.facts.filter((fact) => fact.kind === 'notebook_run')
+  ).toEqual([
+    { kind: 'notebook_run', outcome: 'refused', reason: 'too_many_cells' },
+  ]);
+  expect(h.executeSql).not.toHaveBeenCalled();
+  expect(h.queryLogs).not.toHaveBeenCalled();
+});
+
+test('cancelling after the first database cell prevents later execution and leaves the run incomplete', async () => {
+  const h = await setup({
+    cells: [1, 2, 3].map(
+      (number): NotebookCell => ({
+        ...writeCell,
+        id: `query-${number}`,
+        sql: `SELECT ${number}`,
+      })
+    ),
+  });
+  const controller = new AbortController();
+  h.executeSql.mockImplementationOnce(async () => {
+    controller.abort();
+    return [];
+  });
+
+  await h.client
+    .request(
+      {
+        method: 'tools/call',
+        params: { name: 'run_notebook', arguments: runArgs },
+      },
+      { allowInputRequired: true, signal: controller.signal }
+    )
+    .catch(() => undefined);
+
+  await vi.waitFor(() => expect(h.attempts[0]?.ends).toHaveLength(1));
+  expect(h.executeSql).toHaveBeenCalledOnce();
+  expect(
+    h.attempts[0]!.facts.filter((fact) => fact.kind === 'notebook_run')
+  ).toEqual([]);
+});
+
+test('a completed run counts errored cells and cells skipped after the budget is spent', async () => {
+  const h = await setup({
+    cells: Array.from({ length: 5 }, (_, index) => ({
+      ...writeCell,
+      id: `query-${index}`,
+      sql: `SELECT ${index}`,
+    })),
+  });
+  // [] uses two bytes; the third executed cell fills the remaining 999,998 bytes.
+  h.executeSql
+    .mockResolvedValueOnce([])
+    .mockRejectedValueOnce(new Error('PRIVATE_CELL_ERROR'))
+    .mockResolvedValueOnce(['x'.repeat(999_994)]);
+  const result = await h.run();
+  expect(isInputRequiredResult(result)).toBe(false);
+  expect((result as CallToolResult).isError).not.toBe(true);
+  expect(h.executeSql).toHaveBeenCalledTimes(3);
+  expect(h.attempts).toHaveLength(1);
+  expect(
+    h.attempts[0]!.facts.filter((fact) => fact.kind === 'notebook_run')
+  ).toEqual([completed(3, 2, 1, true)]);
+});
+
+test('an oversized cell records the remaining budget as spent and later cells as skipped', async () => {
+  const h = await setup({
+    cells: [
+      { ...writeCell, id: 'first', sql: 'SELECT 1' },
+      { ...writeCell, id: 'oversized', sql: 'SELECT 2' },
+      { ...writeCell, id: 'later-oversized', sql: 'SELECT 3' },
+      logCell,
+      { ...writeCell, id: 'later-small', sql: 'SELECT 4' },
+    ],
+  });
+  // JSON for [{ value: ... }] adds 14 bytes to each payload.
+  h.executeSql
+    .mockResolvedValueOnce([{ value: 'x'.repeat(599_986) }])
+    .mockResolvedValueOnce([{ value: 'y'.repeat(1_999_986) }]);
+
+  const result = await h.run();
+
+  expect(isInputRequiredResult(result)).toBe(false);
+  expect((result as CallToolResult).isError).not.toBe(true);
+  expect(h.executeSql).toHaveBeenCalledTimes(2);
+  expect(h.queryLogs).not.toHaveBeenCalled();
+  expect(h.attempts).toHaveLength(1);
+  assertAttempt(
+    h.attempts[0],
+    'run_notebook',
+    [
+      {
+        kind: 'confirmation_decision',
+        feature: 'notebook',
+        route: 'bypass',
+        reason: 'not_mutating',
+      },
+      started,
+      completed(2, 3, 1, true),
+      returned,
+    ],
+    'completed'
+  );
+});
+
+test('adapter byte-limit errors record the run budget as exhausted', async () => {
+  const h = await setup({
+    cells: [1, 2, 3, 4].map(
+      (number): NotebookCell => ({
+        ...writeCell,
+        id: `query-${number}`,
+        sql: `SELECT ${number}`,
+      })
+    ),
+  });
+  const error = new Error('PRIVATE_CELL_ERROR');
+  error.name = 'ResultTooLargeError';
+  h.executeSql.mockResolvedValueOnce([]).mockRejectedValueOnce(error);
+
+  const result = await h.run();
+
+  expect(isInputRequiredResult(result)).toBe(false);
+  expect((result as CallToolResult).isError).not.toBe(true);
+  expect(h.executeSql).toHaveBeenCalledTimes(2);
+  expect(h.attempts).toHaveLength(1);
+  expect(
+    h.attempts[0]!.facts.filter((fact) => fact.kind === 'notebook_run')
+  ).toEqual([completed(2, 2, 1, true)]);
   expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_CELL_ERROR');
 });
 

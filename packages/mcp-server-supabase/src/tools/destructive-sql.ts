@@ -1,3 +1,5 @@
+import { lexSql, type SqlScan } from './sql-lexer.js';
+
 /** Adapted from supabase/supabase apps/studio (SQLEditor.constants.ts, SQLEditor.utils.ts, lib/helpers.ts), Apache-2.0. */
 
 const sqlIdentifier = String.raw`(?:"(?:[^"]|"")+"|[a-z_\u0080-\uffff][\w$\u0080-\uffff]*)`;
@@ -34,35 +36,26 @@ function hasDestructiveStart(sql: string, starts: RegExp): boolean {
 const updateWithoutWhereRegex =
   /(?:^|;)\s*update\s+(?:"(?:[^"]|"")*"|[\w]+)(?:\.(?:"(?:[^"]|"")*"|[\w]+))?\s+set\s+[\w\W]+?(?!\s*where\s)/is;
 
-export function removeCommentsFromSql(sql: string): string {
-  // Removing single-line comments:
-  let cleanedSql = sql.replace(/--.*$/gm, '');
-
-  // Advance past each closed block once. A missing terminator must not make
-  // every subsequent /* retry the same suffix. This remains a comment heuristic,
-  // not a SQL lexer (including inside string literals).
-  const parts: string[] = [];
+function removeComments(sql: string, scan: SqlScan): string {
+  let parts: string[] | undefined;
   let offset = 0;
-  let start = cleanedSql.indexOf('/*', offset);
-  while (start !== -1) {
-    const end = cleanedSql.indexOf('*/', start + 2);
-    if (end === -1) {
-      break;
+  for (const span of scan.spans) {
+    if (span.kind === 'line-comment' || span.kind === 'block-comment') {
+      (parts ??= []).push(sql.slice(offset, span.start));
+      offset = span.end;
     }
-    parts.push(cleanedSql.slice(offset, start));
-    offset = end + 2;
-    start = cleanedSql.indexOf('/*', offset);
   }
-  if (offset !== 0) {
-    parts.push(cleanedSql.slice(offset));
-    cleanedSql = parts.join('');
-  }
-
-  return cleanedSql;
+  if (!parts) return sql;
+  parts.push(sql.slice(offset));
+  return parts.join('');
 }
 
-export function checkDestructiveQuery(sql: string): boolean {
-  const cleanedSql = removeCommentsFromSql(sql);
+export function removeCommentsFromSql(sql: string): string {
+  return removeComments(sql, lexSql(sql));
+}
+
+function checkDestructiveQueryFromScan(sql: string, scan: SqlScan): boolean {
+  const cleanedSql = removeComments(sql, scan);
   // Retain the broad explicit-column warning, but search its suffix only once.
   const alter = /(?:^|;)\s*alter\s+table\s+/i.exec(cleanedSql);
   if (
@@ -112,208 +105,100 @@ export function checkDestructiveQuery(sql: string): boolean {
   return false;
 }
 
-// Blank quoted spans while splitting so the WHERE scan shares one lexer with
-// statement boundaries. E'' / e'' strings treat backslash as an escape
-// (`E'it\'s'`), matching Postgres. Doubled quotes stay part of the same span.
-function blankQuotedSpans(sql: string): string {
-  let out = '';
-  let i = 0;
-  while (i < sql.length) {
-    const ch = sql[i]!;
-    if (ch === "'" || ch === '"') {
-      const backslashEscapes =
-        ch === "'" &&
-        /e/i.test(sql[i - 1] ?? '') &&
-        !/[\w$\u0080-\uffff]/.test(sql[i - 2] ?? '');
-      let j = i + 1;
-      let closed = false;
-      while (j < sql.length) {
-        if (backslashEscapes && sql[j] === '\\') {
-          j += 2;
-        } else if (sql[j] === ch) {
-          if (sql[j + 1] !== ch) {
-            closed = true;
-            break;
-          }
-          j += 2;
-        } else {
-          j++;
-        }
-      }
-      out += ch === "'" ? "''" : '""';
-      i = closed ? j + 1 : sql.length;
-      continue;
-    }
-    out += ch;
-    i++;
-  }
-  return out;
+export function checkDestructiveQuery(sql: string): boolean {
+  return checkDestructiveQueryFromScan(sql, lexSql(sql));
 }
 
-const dollarQuoteTag = /\$(?:[a-z_\u0080-\uffff][\w\u0080-\uffff]*)?\$/iy;
 const valueDollarQuoteStatement =
   /^\s*(?:update\s|explain(?![\w$\u0080-\uffff]))/i;
 
-// Split on semicolons, except those inside a single-quoted string literal
-// (including E'' strings with backslash escapes) or a double-quoted
-// identifier, so `SET note = 'a; b' WHERE ...` stays one statement.
-// Quoted spans and comment bodies are blanked in the returned statements so a
-// later WHERE check cannot see tokens that only appeared inside a literal or
-// a comment (`-- where needed`).
-// A dollar-quoted string inside an UPDATE or EXPLAIN is a value, so it is
-// blanked like a quoted span (`SET note = $t$a; b$t$`). Inside other
-// dollar-quoted bodies and comments, quotes are not tracked and every
-// semicolon still splits, as before: a function or DO body is code whose
-// statements are checked one by one. Block comments nest; `--` ends at a bare
-// `\r` or `\n`. If a quote is left unterminated, fall back to the plain split
-// rather than letting it hide the rest of the input.
-function splitStatements(sql: string): string[] {
+// Dollar and comment bodies still expose their semicolons to this policy:
+// UPDATE statements inside DO bodies must remain visible. Dollar values in
+// UPDATE and EXPLAIN are masked so a WHERE or semicolon in a value cannot
+// change the statement classification.
+function splitStatements(sql: string, scan: SqlScan): string[] {
+  if (scan.unterminated && scan.unterminated !== 'block-comment') {
+    // Keep the historical plain-split fallback for incomplete quoted input.
+    const masked = scan.spans
+      .map((span) =>
+        span.kind === 'string' ||
+        span.kind === 'e-string' ||
+        span.kind === 'quoted-identifier'
+          ? span.kind === 'quoted-identifier'
+            ? '""'
+            : "''"
+          : sql.slice(span.start, span.end)
+      )
+      .join('');
+    return masked.split(';');
+  }
   const statements: string[] = [];
   let blanked = '';
-  let i = 0;
-  let dollarUntil: string | undefined;
-  let blockDepth = 0;
-  let inLineComment = false;
-
-  const push = () => {
-    statements.push(blanked);
-    blanked = '';
+  const append = (text: string) => {
+    let offset = 0;
+    for (let separator = text.indexOf(';'); separator >= 0; ) {
+      blanked += text.slice(offset, separator);
+      statements.push(blanked);
+      blanked = '';
+      offset = separator + 1;
+      separator = text.indexOf(';', offset);
+    }
+    blanked += text.slice(offset);
   };
 
-  while (i < sql.length) {
-    const ch = sql[i]!;
-
-    if (inLineComment) {
-      if (ch === '\n' || ch === '\r') {
-        inLineComment = false;
-        blanked += ch;
-      }
-      i++;
-      continue;
-    }
-
-    if (blockDepth > 0) {
-      if (ch === ';') {
-        push();
-        i++;
-        continue;
-      }
-      if (ch === '/' && sql[i + 1] === '*') {
+  for (const span of scan.spans) {
+    switch (span.kind) {
+      case 'code':
+        append(sql.slice(span.start, span.end));
+        break;
+      case 'line-comment':
+        blanked += '--';
+        break;
+      case 'block-comment': {
         blanked += '/*';
-        blockDepth++;
-        i += 2;
-        continue;
-      }
-      if (ch === '*' && sql[i + 1] === '/') {
-        blanked += '*/';
-        blockDepth--;
-        i += 2;
-        continue;
-      }
-      i++;
-      continue;
-    }
-
-    if (dollarUntil !== undefined) {
-      if (ch === ';') {
-        push();
-        i++;
-        continue;
-      }
-      if (sql.startsWith(dollarUntil, i)) {
-        blanked += dollarUntil;
-        i += dollarUntil.length;
-        dollarUntil = undefined;
-        continue;
-      }
-      blanked += ch;
-      i++;
-      continue;
-    }
-
-    if (ch === ';') {
-      push();
-      i++;
-      continue;
-    }
-
-    if (ch === '$' && !/[\w$\u0080-\uffff]/.test(sql[i - 1] ?? '')) {
-      dollarQuoteTag.lastIndex = i;
-      const tag = dollarQuoteTag.exec(sql)?.[0];
-      if (tag !== undefined && valueDollarQuoteStatement.test(blanked)) {
-        const end = sql.indexOf(tag, i + tag.length);
-        if (end === -1) {
-          return sql.split(';').map(blankQuotedSpans);
-        }
-        blanked += tag + tag;
-        i = end + tag.length;
-        continue;
-      }
-      if (tag !== undefined) {
-        blanked += tag;
-        dollarUntil = tag;
-        i += tag.length;
-        continue;
-      }
-    }
-
-    if (ch === '-' && sql[i + 1] === '-') {
-      blanked += '--';
-      inLineComment = true;
-      i += 2;
-      continue;
-    }
-
-    if (ch === '/' && sql[i + 1] === '*') {
-      blanked += '/*';
-      blockDepth = 1;
-      i += 2;
-      continue;
-    }
-
-    if (ch === "'" || ch === '"') {
-      const backslashEscapes =
-        ch === "'" &&
-        /e/i.test(sql[i - 1] ?? '') &&
-        !/[\w$\u0080-\uffff]/.test(sql[i - 2] ?? '');
-      let j = i + 1;
-      let closed = false;
-      while (j < sql.length) {
-        if (backslashEscapes && sql[j] === '\\') {
-          j += 2;
-        } else if (sql[j] === ch) {
-          if (sql[j + 1] !== ch) {
-            closed = true;
-            break;
+        for (let i = span.start + 2; i < span.end; i++) {
+          if (sql[i] === ';') {
+            statements.push(blanked);
+            blanked = '';
           }
-          j += 2;
-        } else {
-          j++;
         }
+        if (scan.unterminated !== 'block-comment') blanked += '*/';
+        break;
       }
-      if (!closed) {
-        return sql.split(';').map(blankQuotedSpans);
+      case 'string':
+      case 'e-string':
+        blanked += "''";
+        break;
+      case 'quoted-identifier':
+        blanked += '""';
+        break;
+      case 'dollar-body': {
+        const tagEnd = sql.indexOf('$', span.start + 1) + 1;
+        const tag = sql.slice(span.start, tagEnd);
+        if (valueDollarQuoteStatement.test(blanked)) {
+          blanked += tag + tag;
+        } else {
+          append(sql.slice(span.start, span.end));
+        }
+        break;
       }
-      blanked += ch === "'" ? "''" : '""';
-      i = j + 1;
-      continue;
     }
-
-    blanked += ch;
-    i++;
   }
-  push();
+  statements.push(blanked);
   return statements;
 }
 
-export function isUpdateWithoutWhere(sql: string): boolean {
-  const updateStatements = splitStatements(sql).filter((statement) =>
-    statement.trim().toLowerCase().startsWith('update')
-  );
-  return updateStatements.some(
+function isUpdateWithoutWhereFromScan(sql: string, scan: SqlScan): boolean {
+  return splitStatements(sql, scan).some(
     (statement) =>
-      updateWithoutWhereRegex.test(statement) && !/where\s/i.test(statement)
+      statement.trim().toLowerCase().startsWith('update') &&
+      updateWithoutWhereRegex.test(statement) &&
+      !/where\s/i.test(statement)
   );
+}
+
+export function isUpdateWithoutWhere(sql: string): boolean {
+  return isUpdateWithoutWhereFromScan(sql, lexSql(sql));
 }
 
 const explainStart = /^\s*explain(?![\w$\u0080-\uffff])\s*/i;
@@ -369,29 +254,35 @@ function parseExplain(statement: string): Explain | undefined {
     : { kind: 'plan' };
 }
 
+/** `statement` has quoted spans and comments masked by the shared lexer. */
+export function isPlannerOnlyExplainStatement(statement: string): boolean {
+  return parseExplain(statement)?.kind === 'plan';
+}
+
 export function isDestructiveSql(sql: string): boolean {
-  const explains = splitStatements(sql)
-    .map((statement) => statement.replace(/--|\/\*|\*\//g, ' '))
-    .filter((statement) => statement.trim() !== '')
-    .map(parseExplain);
-  if (explains.some((explain) => explain?.kind === 'unparsed')) {
-    return true;
+  const scan = lexSql(sql);
+  let hasStatement = false;
+  let onlyPlans = true;
+  for (const raw of splitStatements(sql, scan)) {
+    const statement = raw.replace(/--|\/\*|\*\//g, ' ').trim();
+    if (!statement) continue;
+    hasStatement = true;
+    const explain = parseExplain(statement);
+    if (explain?.kind === 'unparsed') return true;
+    if (explain?.kind === 'analyze') {
+      const bodyScan = lexSql(explain.body);
+      if (
+        checkDestructiveQueryFromScan(explain.body, bodyScan) ||
+        isUpdateWithoutWhereFromScan(explain.body, bodyScan)
+      ) {
+        return true;
+      }
+    }
+    if (explain?.kind !== 'plan') onlyPlans = false;
   }
-  if (
-    explains.length > 0 &&
-    explains.every((explain) => explain?.kind === 'plan')
-  ) {
-    return false;
-  }
-  if (
-    explains.some(
-      (explain) =>
-        explain?.kind === 'analyze' &&
-        (checkDestructiveQuery(explain.body) ||
-          isUpdateWithoutWhere(explain.body))
-    )
-  ) {
-    return true;
-  }
-  return checkDestructiveQuery(sql) || isUpdateWithoutWhere(sql);
+  if (hasStatement && onlyPlans) return false;
+  return (
+    checkDestructiveQueryFromScan(sql, scan) ||
+    isUpdateWithoutWhereFromScan(sql, scan)
+  );
 }

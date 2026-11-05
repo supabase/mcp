@@ -115,14 +115,19 @@ export const deployEdgeFunctionOptionsSchema = z.object({
   ),
 });
 
+export class ResultTooLargeError extends Error {
+  override name = 'ResultTooLargeError';
+}
+
 export const executeSqlOptionsSchema = z.object({
   query: z.string().min(1),
   parameters: z.array(z.unknown()).optional(),
   read_only: z.boolean().optional(),
   /**
    * Largest result, in bytes of JSON, the caller will use. Platforms that
-   * buffer results in shared server memory should stop reading and throw once
-   * it's exceeded. Callers still check the rows they get back.
+   * buffer results in shared server memory should stop reading at this limit
+   * and throw an error whose name is 'ResultTooLargeError'. Callers also check
+   * the rows they get back.
    */
   max_result_bytes: z.number().int().nonnegative().optional(),
 });
@@ -158,6 +163,12 @@ export const queryLogsOptionsSchema = z.object({
   sql: z.string().min(1),
   iso_timestamp_start: z.string().optional(),
   iso_timestamp_end: z.string().optional(),
+  /**
+   * Stop reading the response once it exceeds this many bytes and fail the
+   * call with an error whose name is 'ResultTooLargeError'. Omitted means no
+   * limit; callers still check the rows they get back.
+   */
+  max_result_bytes: z.number().int().nonnegative().optional(),
 });
 
 export const generateTypescriptTypesResultSchema = z.object({
