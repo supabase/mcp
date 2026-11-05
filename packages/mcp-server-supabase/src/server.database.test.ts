@@ -1147,7 +1147,7 @@ describe('tools', () => {
   // Real Management API body for a ref that fails zProjectRef (AI-1425).
   const malformedRefMessage = 'ref: ref must be exactly 20 characters long';
   const malformedRefHint =
-    'Copy the project ID exactly as returned by list_projects; do not retype or shorten it.';
+    'Copy the ref exactly as returned by list_projects (id) or list_branches (project_ref); do not retype or shorten it.';
 
   test.each([
     ...projectScopedDbTools.filter(({ tool }) =>
