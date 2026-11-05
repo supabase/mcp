@@ -67,7 +67,7 @@ export function assertSuccess<
         malformedRefMessagePattern.test(errorContent.message)
       ) {
         throw new Error(
-          `${errorContent.message.replace(/\.$/, '')}. Copy the ref exactly as returned by list_projects (id) or list_branches (project_ref); do not retype or shorten it.`
+          `${errorContent.message.replace(/\.$/, '')}. Copy the ref exactly as returned by list_projects (id) or list_branches (project_ref), depending on whether you're working with the main project or a branch; do not retype or shorten it.`
         );
       }
 
