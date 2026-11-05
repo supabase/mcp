@@ -284,6 +284,13 @@ function isPlainNotebookRead(sql: string): boolean {
   }
 }
 
+function withSkippedNotice(message: string, hasLaterCell: boolean): string {
+  const notice = 'Later cells were skipped.';
+  const base = message.replace(/\s*Later cells were skipped\./g, '').trimEnd();
+  if (!hasLaterCell) return base;
+  return base ? `${base}${/[.!?]$/.test(base) ? '' : '.'} ${notice}` : notice;
+}
+
 /**
  * Runs one query cell, returning its rows or the error it failed with, and how
  * many bytes of the run's result budget it spent.
@@ -296,12 +303,14 @@ async function runQueryCell(
     debugging,
     readOnly,
     maxResultBytes,
+    hasLaterCell,
   }: {
     projectId: string;
     database?: DatabaseOperations;
     debugging?: DebuggingOperations;
     readOnly?: boolean;
     maxResultBytes: number;
+    hasLaterCell: boolean;
   }
 ): Promise<{ result: CellResult; bytes: number }> {
   const base = {
@@ -352,7 +361,10 @@ async function runQueryCell(
         result: {
           ...base,
           status: 'error',
-          error: `The query ran, but its result is larger than the ${maxResultBytes} bytes left for this run, so no rows were returned. Later cells were skipped. Add a LIMIT or select fewer columns.`,
+          error: withSkippedNotice(
+            `The query ran, but its result is larger than the ${maxResultBytes} bytes left for this run, so no rows were returned. Add a LIMIT or select fewer columns.`,
+            hasLaterCell
+          ),
         },
         bytes: maxResultBytes,
       };
@@ -370,13 +382,9 @@ async function runQueryCell(
         : oversized && 'message' in error && typeof error.message === 'string'
           ? error.message
           : String(error);
-    const prefix = oversized ? message.trimEnd() : message;
-    const errorMessage =
-      oversized && !message.includes('Later cells were skipped.')
-        ? prefix
-          ? `${prefix}${/[.!?]$/.test(prefix) ? '' : '.'} Later cells were skipped.`
-          : 'Later cells were skipped.'
-        : message;
+    const errorMessage = oversized
+      ? withSkippedNotice(message, hasLaterCell)
+      : message;
     return {
       result: { ...base, status: 'error', error: errorMessage },
       bytes: oversized ? maxResultBytes : 0,
@@ -647,7 +655,8 @@ export function getNotebookTools({
             let skipped = 0;
             let errored = 0;
             let remainingBytes = MAX_RUN_RESULT_BYTES;
-            for (const cell of queryCells) {
+            for (let index = 0; index < queryCells.length; index++) {
+              const cell = queryCells[index]!;
               ctx.mcpReq.signal.throwIfAborted();
               if (remainingBytes <= 0) {
                 results.push({
@@ -669,6 +678,7 @@ export function getNotebookTools({
                 // database statements use the server's normal mode.
                 readOnly: mutatingCells.includes(cell) ? readOnly : true,
                 maxResultBytes: remainingBytes,
+                hasLaterCell: index + 1 < queryCells.length,
               });
               results.push(result);
               executed++;
