@@ -37,6 +37,7 @@ import {
   resolveLogCellWindow,
   type QueryCell,
 } from './notebook-cells.js';
+import { lexSql } from './sql-lexer.js';
 import {
   injectableTool,
   wrapWithUntrustedDataBoundary,
@@ -244,84 +245,20 @@ type CellResult =
  */
 const MAX_RUN_RESULT_BYTES = 1_000_000;
 
-const dollarQuoteStart = /\$(?:[a-z_][a-z_0-9]*)?\$/iy;
 const readStatementStart = /^\s*(select|values|table|show|explain|with)\b/i;
 const dataChangeKeyword = /\b(insert|update|delete|merge)\b/i;
 
-// Mask comments and quoted SQL so keywords and semicolons inside them cannot
-// affect the notebook's statement check. Keep a space at each masked span.
-function notebookSqlCode(sql: string): string | undefined {
-  let parts: string[] | undefined;
-  let start = 0;
-  for (let i = 0; i < sql.length; ) {
-    const char = sql[i];
-    let end = i;
-    if (char === '-' && sql[i + 1] === '-') {
-      end = sql.indexOf('\n', i + 2);
-      if (end === -1) end = sql.length;
-    } else if (char === '/' && sql[i + 1] === '*') {
-      let depth = 1;
-      end = i + 2;
-      while (depth && end < sql.length) {
-        if (sql.startsWith('/*', end)) {
-          depth++;
-          end += 2;
-        } else if (sql.startsWith('*/', end)) {
-          depth--;
-          end += 2;
-        } else {
-          end++;
-        }
-      }
-      if (depth) return undefined;
-    } else if (char === "'" || char === '"') {
-      const escaped =
-        char === "'" &&
-        (sql[i - 1] === 'e' || sql[i - 1] === 'E') &&
-        (i < 2 || !/[\w$]/.test(sql[i - 2]!));
-      end = i + 1;
-      let closed = false;
-      while (end < sql.length) {
-        if (escaped && sql[end] === '\\') {
-          end += 2;
-        } else if (sql[end] === char) {
-          if (sql[end + 1] === char) {
-            end += 2;
-          } else {
-            end++;
-            closed = true;
-            break;
-          }
-        } else {
-          end++;
-        }
-      }
-      if (!closed) return undefined;
-    } else if (char === '$') {
-      dollarQuoteStart.lastIndex = i;
-      const tag = dollarQuoteStart.exec(sql)?.[0];
-      if (tag) {
-        const closing = sql.indexOf(tag, i + tag.length);
-        if (closing === -1) return undefined;
-        end = closing + tag.length;
-      }
-    }
-    if (end === i) {
-      i++;
-      continue;
-    }
-    (parts ??= []).push(sql.slice(start, i), ' ');
-    i = end;
-    start = end;
-  }
-  if (!parts) return sql;
-  parts.push(sql.slice(start));
-  return parts.join('');
-}
-
 function isPlainNotebookRead(sql: string): boolean {
-  const code = notebookSqlCode(sql);
-  if (code === undefined) return false;
+  const { spans, unterminated } = lexSql(sql);
+  if (unterminated) return false;
+  const code =
+    spans.length === 1 && spans[0]!.kind === 'code'
+      ? sql
+      : spans
+          .map((span) =>
+            span.kind === 'code' ? sql.slice(span.start, span.end) : ' '
+          )
+          .join('');
   let offset = 0;
   while (true) {
     const separator = code.indexOf(';', offset);
@@ -709,7 +646,7 @@ export function getNotebookTools({
             let remainingBytes = MAX_RUN_RESULT_BYTES;
             for (const cell of queryCells) {
               ctx.mcpReq.signal.throwIfAborted();
-              if (remainingBytes === 0) {
+              if (remainingBytes <= 0) {
                 results.push({
                   cell_id: cell.id,
                   ...(cell.title && { title: cell.title }),
@@ -733,7 +670,7 @@ export function getNotebookTools({
               results.push(result);
               executed++;
               if (result.status === 'error') errored++;
-              remainingBytes -= bytes;
+              remainingBytes = Math.max(0, remainingBytes - bytes);
             }
             if (invalidResults) {
               for (const result of invalidResults) results.push(result);

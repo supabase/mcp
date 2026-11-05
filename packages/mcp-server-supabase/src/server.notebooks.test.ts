@@ -1880,6 +1880,112 @@ describe('run_notebook', () => {
     );
 
     test.each([
+      {
+        name: 'an identifier containing a dollar sign followed by a transaction change',
+        sql: 'select 1 as x$y$; commit; begin read write; select f(); commit; -- $y$',
+        notebookPrompts: true,
+        sqlPrompts: false,
+      },
+      {
+        name: 'a Unicode dollar tag containing a semicolon',
+        sql: 'select $é$a;b$é$',
+        notebookPrompts: false,
+        sqlPrompts: false,
+      },
+      {
+        name: 'nested block comments containing SQL separators',
+        sql: 'select 1 /* outer /* inner ; */ ; */; select 2',
+        notebookPrompts: false,
+        sqlPrompts: false,
+      },
+      {
+        name: 'an unterminated string',
+        sql: "select 'unfinished",
+        notebookPrompts: true,
+        sqlPrompts: false,
+      },
+      {
+        name: 'an unterminated dollar body',
+        sql: 'select $t$unfinished',
+        notebookPrompts: true,
+        sqlPrompts: false,
+      },
+      {
+        name: 'an E-string with an escaped quote and a semicolon',
+        sql: String.raw`select E'it\'s; fine'`,
+        notebookPrompts: false,
+        sqlPrompts: false,
+      },
+      {
+        name: 'a quoted identifier containing a semicolon',
+        sql: 'select 1 as "a;b"',
+        notebookPrompts: false,
+        sqlPrompts: false,
+      },
+      {
+        name: 'a positional parameter',
+        sql: 'select $1',
+        notebookPrompts: false,
+        sqlPrompts: false,
+      },
+      {
+        name: 'a dollar pair inside an identifier followed by a transaction change',
+        sql: 'select 1 as x$$; commit;',
+        notebookPrompts: true,
+        sqlPrompts: false,
+      },
+      {
+        name: 'an identifier containing a dollar sign before a destructive statement',
+        sql: 'select 1 as x$y$; drop table films; -- $y$',
+        notebookPrompts: true,
+        sqlPrompts: true,
+      },
+    ])(
+      'SQL quoting: $name has its own notebook and execute_sql confirmation policy',
+      async ({ sql, notebookPrompts, sqlPrompts }) => {
+        const { client, platform } = await setupModern({
+          features: ['notebooks', 'database'],
+          clientCapabilities: FORM_CAPABLE,
+        });
+        const executeSql = vi
+          .spyOn(platform.database!, 'executeSql')
+          .mockResolvedValue([]);
+        const { project, notebook } = await createNotebookFixture([
+          { id: 'query', type: 'database', sql, row_limit: 100 },
+        ]);
+
+        const sqlResult = await callModernTool(client, {
+          name: 'execute_sql',
+          arguments: { project_id: project.id, query: sql },
+        });
+        expect(isInputRequiredResult(sqlResult)).toBe(sqlPrompts);
+        if (sqlPrompts) {
+          expect(executeSql).not.toHaveBeenCalled();
+        } else {
+          expect(sqlResult).not.toHaveProperty('isError', true);
+          expect(executeSql).toHaveBeenCalledOnce();
+        }
+        executeSql.mockClear();
+
+        const notebookResult = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+        expect(isInputRequiredResult(notebookResult)).toBe(notebookPrompts);
+        if (notebookPrompts) {
+          expect(executeSql).not.toHaveBeenCalled();
+        } else {
+          expect(notebookResult).not.toHaveProperty('isError', true);
+          expect(executeSql).toHaveBeenCalledOnce();
+          expect(executeSql).toHaveBeenCalledWith(
+            project.id,
+            expect.objectContaining({ read_only: true })
+          );
+        }
+      }
+    );
+
+    test.each([
       ['simple selection', 'select 1 as value'],
       [
         'read-only common table expression',
