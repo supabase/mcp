@@ -28,7 +28,10 @@ import {
   type ElicitationState,
 } from './confirmation.js';
 import { DEFAULT_LOGS_DIALECT, queryLogsByDialect } from './debugging-tools.js';
-import { isDestructiveSql } from './destructive-sql.js';
+import {
+  isDestructiveSql,
+  isPlannerOnlyExplainStatement,
+} from './destructive-sql.js';
 import {
   applyRowLimit,
   getLogCellRows,
@@ -271,8 +274,8 @@ function isPlainNotebookRead(sql: string): boolean {
     if (keyword === 'with' && dataChangeKeyword.test(statement)) return false;
     if (
       keyword === 'explain' &&
-      /\banalyze\b/i.test(statement) &&
-      dataChangeKeyword.test(statement)
+      dataChangeKeyword.test(statement) &&
+      !isPlannerOnlyExplainStatement(statement)
     ) {
       return false;
     }

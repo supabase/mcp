@@ -1414,6 +1414,38 @@ describe('tools', () => {
       expect(executeSql).not.toHaveBeenCalled();
     });
 
+    test('form-capable client: only EXPLAIN ANALYZE elicits', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitationAction: 'decline',
+      });
+      const project = await createActiveProject();
+      await project.db.exec('create table films (id int)');
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+
+      // A declined elicitation would end the call before execution.
+      const explain = await client.callTool({
+        name: 'execute_sql',
+        arguments: {
+          project_id: project.id,
+          query:
+            "EXPLAIN (ANALYZE FALSE, FORMAT JSON) SELECT '...; DELETE FROM fictional_table_only_in_literal;'::text",
+        },
+      });
+      expect(explain.isError).toBeFalsy();
+      expect(executeSql).toHaveBeenCalledOnce();
+
+      const analyze = await client.callTool({
+        name: 'execute_sql',
+        arguments: {
+          project_id: project.id,
+          query: 'EXPLAIN ANALYZE DELETE FROM films;',
+        },
+      });
+      expectTerminalResult(analyze, 'declined', 'SQL execution was declined.');
+      expect(executeSql).toHaveBeenCalledOnce();
+    });
+
     test('form-capable client: declining bare-column DROP preserves the column and its data', async () => {
       const { client } = await setupModern({
         clientCapabilities: FORM_CAPABLE,
