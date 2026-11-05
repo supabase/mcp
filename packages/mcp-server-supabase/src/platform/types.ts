@@ -471,6 +471,7 @@ export type FeedbackOperations = {
 };
 
 export type SupabasePlatform = {
+  warehouse?: import('./warehouse.js').WarehouseOperations;
   init?(info: InitData): Promise<void>;
   account?: AccountOperations;
   database?: DatabaseOperations;

@@ -99,6 +99,7 @@ describe('tools', () => {
         'functions',
         'branching',
         'storage',
+        'warehouse',
         'notebooks',
         'feedback',
       ],
