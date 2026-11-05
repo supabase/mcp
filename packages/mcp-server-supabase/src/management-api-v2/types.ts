@@ -1354,6 +1354,14 @@ export interface components {
                                 /** @enum {string} */
                                 type: "v4" | "v6";
                             }[];
+                            /** @description Present when a change that was never applied is waiting for review. `allowed_cidrs` is the list the project enforces. Apply or reject the change with `POST /v1/projects/{ref}/network-restrictions/review`; submitting a new config also replaces it. */
+                            pending_allowed_cidrs?: {
+                                address: string;
+                                /** @enum {string} */
+                                type: "v4" | "v6";
+                            }[];
+                            /** @description When the change in `pending_allowed_cidrs` was requested. */
+                            pending_requested_at?: string;
                             updated_at?: string;
                             applied_at?: string;
                         };
@@ -2018,14 +2026,13 @@ export interface components {
                 id: string;
                 attributes: {
                     spec: {
-                        /** @example node */
                         runtime?: string;
-                        /** @example 2gb-1vcpu */
                         size: string;
-                        /** @example public */
                         exposure: string;
-                        /** @example 1 */
                         instances: number;
+                        secrets_scope?: (("all" | "supabase" | "none") | {
+                            secret_name: string;
+                        }[]) | null;
                     };
                     /** @enum {string} */
                     build_state: "building" | "active" | "failed";
@@ -2057,14 +2064,13 @@ export interface components {
                 id: string;
                 attributes: {
                     spec: {
-                        /** @example node */
                         runtime?: string;
-                        /** @example 2gb-1vcpu */
                         size: string;
-                        /** @example public */
                         exposure: string;
-                        /** @example 1 */
                         instances: number;
+                        secrets_scope?: (("all" | "supabase" | "none") | {
+                            secret_name: string;
+                        }[]) | null;
                     };
                     /** @enum {string} */
                     build_state: "building" | "active" | "failed";
@@ -2121,6 +2127,9 @@ export interface components {
                         exposure: string;
                         /** @example 1 */
                         instances: number;
+                        secrets_scope?: (("all" | "supabase" | "none") | {
+                            secret_name: string;
+                        }[]) | null;
                     };
                     /** @description Id of a build context staged through the uploads endpoint. Required unless `runtime` is set. */
                     context_upload_id?: string;
