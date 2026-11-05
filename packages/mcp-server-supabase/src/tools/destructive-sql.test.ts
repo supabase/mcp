@@ -192,6 +192,7 @@ describe('isDestructiveSql', () => {
   });
 
   test.each([
+    // AI-1424 probe. The DELETE is inside the '...'::text literal, so nothing runs after the plan.
     "EXPLAIN (ANALYZE FALSE, FORMAT JSON) SELECT '...; DELETE FROM fictional_table_only_in_literal;'::text",
     'EXPLAIN DELETE FROM films;',
     'EXPLAIN UPDATE films SET title = null;',
@@ -225,6 +226,8 @@ describe('isDestructiveSql', () => {
     'DROP TABLE films; EXPLAIN SELECT 1;',
     'EXPLAIN SELECT 1; UPDATE films SET title = null;',
     "EXPLAIN SELECT 1; EXECUTE 'DROP TABLE films';",
+    // Same probe with the DELETE outside the literal, so it runs after the plan.
+    "EXPLAIN (ANALYZE FALSE, FORMAT JSON) SELECT '...'::text; DELETE FROM films;",
   ])('EXPLAIN that executes, or with other statements, matches: %s', (sql) => {
     expect(isDestructiveSql(sql)).toBe(true);
   });
