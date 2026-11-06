@@ -1,4 +1,6 @@
 import {
+  ACCESS_TOKEN,
+  API_URL,
   contentApiMockSchema,
   createOrganization,
   createProject,
@@ -9,6 +11,7 @@ import {
 } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
 import { isToolCallerError } from './errors.js';
+import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { createSupabaseMcpServer, instructions } from './server.js';
@@ -496,6 +499,32 @@ describe('feature groups', () => {
       'get_notebook',
       'delete_notebook',
     ]);
+  });
+
+  test('notebook tools are enabled by default when the platform supports them', async () => {
+    const listDefaultToolNames = async (platform?: SupabasePlatform) => {
+      const { client } = await setup({ platform });
+      return (await client.listTools()).tools.map((tool) => tool.name);
+    };
+    const { notebooks: _, ...platformWithoutNotebooks } =
+      createSupabaseApiPlatform({ accessToken: ACCESS_TOKEN, apiUrl: API_URL });
+    const notebookTools = [
+      'create_notebook',
+      'list_notebooks',
+      'get_notebook',
+      'run_notebook',
+      'delete_notebook',
+    ];
+
+    expect(await listDefaultToolNames()).toEqual(
+      expect.arrayContaining(notebookTools)
+    );
+    const toolsWithoutAdapter = await listDefaultToolNames(
+      platformWithoutNotebooks
+    );
+    for (const name of notebookTools) {
+      expect(toolsWithoutAdapter).not.toContain(name);
+    }
   });
 
   test('feedback tools', async () => {

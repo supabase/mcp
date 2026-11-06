@@ -950,7 +950,7 @@ describe('startLocalHttpEntry', () => {
     }
   );
 
-  test('a green API URL sends notebook confirmation and create links to the green dashboard', async () => {
+  test('a green API URL sends notebook confirmation and notebook links to the green dashboard', async () => {
     await entry.close();
     entry = await startEntry({ apiUrl: 'https://api.supabase.green' });
     const { project } = await createProjectFixture();
@@ -979,6 +979,18 @@ describe('startLocalHttpEntry', () => {
               attributes: { ...notebook.attributes, content: notebook.content },
             },
           })
+      ),
+      http.get('https://api.supabase.green/v2/projects/:ref/notebooks', () =>
+        HttpResponse.json({
+          data: [
+            {
+              type: 'notebook',
+              id: notebook.id,
+              attributes: notebook.attributes,
+            },
+          ],
+          links: { next: null },
+        })
       ),
       http.post('https://api.supabase.green/v2/projects/:ref/notebooks', () =>
         HttpResponse.json({
@@ -1040,9 +1052,21 @@ describe('startLocalHttpEntry', () => {
         },
       })
     );
-    expect(created.url).toBe(
-      `https://supabase.green/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`
+    const greenUrl = `https://supabase.green/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`;
+    expect(created.url).toBe(greenUrl);
+    const fetched = toolOutput(
+      await client.callTool({
+        name: 'get_notebook',
+        arguments: { notebook_id: notebook.id },
+      })
     );
+    expect(fetched.url).toBe(greenUrl);
+    const listed = toolOutput(
+      await client.callTool({ name: 'list_notebooks', arguments: {} })
+    );
+    expect(listed.notebooks.map((n: { url: string }) => n.url)).toEqual([
+      greenUrl,
+    ]);
   });
 
   test.each(['', ' , '])(

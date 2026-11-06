@@ -92,20 +92,20 @@ const createNotebookInputSchema = z.object({
   ),
 });
 
+const notebookUrlSchema = z
+  .string()
+  .describe('Dashboard link to give the user for this notebook.');
+
 const createNotebookOutputSchema = notebookSchema
   .pick({ id: true, name: true, updated_at: true })
-  .extend({
-    url: z
-      .string()
-      .describe('Dashboard link to give the user for this notebook.'),
-  });
+  .extend({ url: notebookUrlSchema });
 
 const listNotebooksInputSchema = z.object({
   project_id: z.string(),
 });
 
 const listNotebooksOutputSchema = z.object({
-  notebooks: z.array(notebookSchema),
+  notebooks: z.array(notebookSchema.extend({ url: notebookUrlSchema })),
 });
 
 const getNotebookInputSchema = z.object({
@@ -118,6 +118,7 @@ const getNotebookOutputSchema = notebookSchema.extend({
     schema_version: z.number(),
     cells: z.string(),
   }),
+  url: notebookUrlSchema,
 });
 
 const runNotebookInputSchema = z.object({
@@ -442,7 +443,13 @@ export function getNotebookTools({
       ...notebookToolDefs.list_notebooks,
       inject: { project_id },
       execute: async ({ project_id }) => {
-        return { notebooks: await notebooks.listNotebooks(project_id) };
+        const items = await notebooks.listNotebooks(project_id);
+        return {
+          notebooks: items.map((notebook) => ({
+            ...notebook,
+            url: notebookUrl(dashboardUrl, project_id, notebook.id),
+          })),
+        };
       },
     }),
     get_notebook: injectableTool({
@@ -460,6 +467,7 @@ export function getNotebookTools({
               'the notebook cells'
             ),
           },
+          url: notebookUrl(dashboardUrl, project_id, notebook.id),
         };
       },
     }),
