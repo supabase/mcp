@@ -40,7 +40,7 @@ const deleteFeedbackOutputSchema = z.object({
 export const feedbackToolDefs = {
   submit_feedback: {
     description:
-      "Sends feedback about Supabase tools to the Supabase team. Use it when the user asks, or when you hit a bug or missing capability. Ask the user before sending feedback they didn't request. Never include secrets, personal data, or database contents. Keep it to 1000 characters or fewer. Show the user the returned delete token.",
+      'Sends feedback about Supabase tools or docs to the Supabase team. Use it when the user asks, or when a bug, a missing capability, or wrong, outdated, or missing docs caused a meaningful detour or is likely to recur. Do not report routine debugging. Unless the user asked, ask them once, after the task or when you are blocked, and call this only if they agree. Send one report per problem. For docs, put the page URL and a word-for-word quote of the text in the feedback, and say how the problem affected your task. Keep it to 1000 characters or fewer. Never include secrets, personal data, or database contents. Show the user the returned delete token.',
     parameters: submitFeedbackInputSchema,
     outputSchema: submitFeedbackOutputSchema,
     annotations: {
