@@ -1,6 +1,6 @@
 import type { SqlScan } from './sql-lexer.js';
 
-const wordPart = String.raw`[\w$\u0080-￿]`;
+const wordPart = String.raw`[\w$\u0080-\uffff]`;
 const doStart = new RegExp(String.raw`^\s*do(?!${wordPart})`, 'i');
 const executeWord = new RegExp(
   String.raw`(?<!${wordPart})execute(?!${wordPart})`,
@@ -39,7 +39,9 @@ export function maskDataLiterals(sql: string, scan: SqlScan): string {
         started = true;
         afterAs = false;
         break;
-      default:
+      case 'string':
+      case 'e-string':
+      case 'dollar-body':
         cleaned += codeBodies || afterAs || span === open ? text : "''";
         started = true;
         afterAs = false;
