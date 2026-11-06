@@ -1,4 +1,9 @@
-import { isCallToolResult, Server } from '@modelcontextprotocol/server';
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  isCallToolResult,
+  PROTOCOL_VERSION_META_KEY,
+  Server,
+} from '@modelcontextprotocol/server';
 import type {
   CallToolResult,
   ClientCapabilities,
@@ -34,6 +39,8 @@ export type Resource<Uri extends string = string, Result = unknown> = {
   name: string;
   description?: string;
   mimeType?: string;
+  /** Optional `_meta` passed through on `resources/list` entries. */
+  _meta?: Record<string, unknown>;
   read(uri: `${Scheme}://${Uri}`): Promise<Result>;
 };
 
@@ -42,6 +49,8 @@ export type ResourceTemplate<Uri extends string = string, Result = unknown> = {
   name: string;
   description?: string;
   mimeType?: string;
+  /** Optional `_meta` passed through on `resources/templates/list` entries. */
+  _meta?: Record<string, unknown>;
   read(
     uri: `${Scheme}://${Uri}`,
     params: {
@@ -63,6 +72,11 @@ export type Tool<
   outputSchema: OutputSchema;
   /** If true, excludes the tool from `tools/list` while keeping it callable via `tools/call`. */
   hidden?: boolean;
+  /**
+   * Optional `_meta` passed through on the tool's `tools/list` entry (e.g.
+   * extension metadata). Omitted from the listing when not set.
+   */
+  _meta?: Record<string, unknown>;
   /**
    * Executes the tool. `ctx` is the SDK's per-request `ServerContext`
    * (elicitation, multi-round-trip `requestState`, HTTP info, etc.) — most
@@ -195,6 +209,10 @@ export function tool<
   return tool;
 }
 
+export type ExtensionCapabilities = NonNullable<
+  ServerCapabilities['extensions']
+>;
+
 export type InitData = {
   clientInfo: Implementation;
   clientCapabilities: ClientCapabilities;
@@ -296,6 +314,12 @@ export type McpServerOptions<Bucket extends string = never, Fact = never> = {
           >);
 
   /**
+   * Extension capabilities (`capabilities.extensions`) to declare to clients,
+   * keyed by extension ID. When omitted, capabilities are unchanged.
+   */
+  extensions?: ExtensionCapabilities;
+
+  /**
    * Multi-round-trip `requestState` integrity hook (protocol revision
    * 2026-07-28), passed straight through to the underlying SDK `Server`.
    *
@@ -331,6 +355,10 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
     capabilities.tools = {};
   }
 
+  if (options.extensions) {
+    capabilities.extensions = options.extensions;
+  }
+
   const server = new Server(
     {
       name: options.name,
@@ -343,6 +371,12 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
       requestState: options.requestState,
     }
   );
+
+  // ctx doesn't expose the Server, so legacy-era (initialize handshake) client
+  // capabilities are reachable from tool code only via this registry.
+  function track(ctx: ServerContext) {
+    clientCapabilitySources.set(ctx, () => server.getClientCapabilities());
+  }
 
   async function getResources() {
     if (!options.resources) {
@@ -411,12 +445,13 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
           return {
             resources: allResources
               .filter((resource) => 'uri' in resource)
-              .map(({ uri, name, description, mimeType }) => {
+              .map(({ uri, name, description, mimeType, _meta }) => {
                 return {
                   uri,
                   name,
                   description,
                   mimeType,
+                  ...(_meta !== undefined && { _meta }),
                 };
               }),
           };
@@ -431,12 +466,13 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
           return {
             resourceTemplates: allResources
               .filter((resource) => 'uriTemplate' in resource)
-              .map(({ uriTemplate, name, description, mimeType }) => {
+              .map(({ uriTemplate, name, description, mimeType, _meta }) => {
                 return {
                   uriTemplate,
                   name,
                   description,
                   mimeType,
+                  ...(_meta !== undefined && { _meta }),
                 };
               }),
           };
@@ -522,6 +558,7 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
       'tools/list',
       (_request, ctx): Promise<ListToolsResult> =>
         observed('tools/list', async () => {
+          track(ctx);
           const tools = await getTools(ctx);
 
           return {
@@ -529,7 +566,10 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
               Object.entries(tools)
                 .filter(([, tool]) => !tool.hidden)
                 .map(
-                  async ([name, { description, annotations, parameters }]) => {
+                  async ([
+                    name,
+                    { description, annotations, parameters, _meta },
+                  ]) => {
                     const inputSchema = z.toJSONSchema(parameters, {
                       target: 'draft-7',
                     });
@@ -544,6 +584,10 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
                       // Casting the same as the SDK does:
                       // https://github.com/modelcontextprotocol/typescript-sdk/blob/fb07af810b51003c338dc4885a9e42f54519f9af/src/server/mcp.ts#L154
                       inputSchema: inputSchema as McpTool['inputSchema'],
+                      // `outputSchema` is deliberately not listed: the spec
+                      // requires `structuredContent` conforming to it, which
+                      // existing tools don't return.
+                      ...(_meta !== undefined && { _meta }),
                     };
                   }
                 )
@@ -553,6 +597,7 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
     );
 
     server.setRequestHandler('tools/call', async (request, ctx) => {
+      track(ctx);
       const toolName = request.params.name;
       let tool: Bucket | 'other' = 'other';
       if (options.observer) {
@@ -655,6 +700,53 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
   }
 
   return server;
+}
+
+const clientCapabilitySources = new WeakMap<
+  object,
+  () => ClientCapabilities | undefined
+>();
+
+/**
+ * The client capabilities effective for the request behind `ctx`, across both
+ * protocol eras: the per-request envelope on modern (2026-07-28) requests, or
+ * the `initialize` handshake on legacy connections. Returns `{}` when
+ * unknown (e.g. a `ctx` that did not come from a `createMcpServer` handler).
+ */
+export function getClientCapabilities(ctx: ServerContext): ClientCapabilities {
+  const envelope = ctx.mcpReq.envelope as Record<string, unknown> | undefined;
+  if (typeof envelope?.[PROTOCOL_VERSION_META_KEY] === 'string') {
+    return (
+      (envelope[CLIENT_CAPABILITIES_META_KEY] as
+        | ClientCapabilities
+        | undefined) ?? {}
+    );
+  }
+  return clientCapabilitySources.get(ctx)?.() ?? {};
+}
+
+/**
+ * Whether the client advertises the given extension (e.g.
+ * `io.modelcontextprotocol/ui`) for the request behind `ctx`. Returns the
+ * extension's declared settings, or `undefined` if not advertised.
+ */
+export function getClientExtension(
+  ctx: ServerContext,
+  id: string
+): Record<string, unknown> | undefined {
+  const extensions = (
+    getClientCapabilities(ctx) as {
+      extensions?: Record<string, Record<string, unknown>>;
+    }
+  ).extensions;
+  return extensions?.[id];
+}
+
+export function clientSupportsExtension(
+  ctx: ServerContext,
+  id: string
+): boolean {
+  return getClientExtension(ctx, id) !== undefined;
 }
 
 function isInputRequiredResult(value: unknown): value is InputRequiredResult {
