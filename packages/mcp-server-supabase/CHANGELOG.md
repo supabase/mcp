@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.1](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.16.0...mcp-server-supabase-v0.16.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **mcp-server-supabase:** add url to notebook create, get and list outputs ([#526](https://github.com/supabase/mcp/issues/526)) ([5d474fd](https://github.com/supabase/mcp/commit/5d474fd5c0fdf6c45f82dd0af387ac2e7d5e631e))
+* **mcp-server-supabase:** enable notebook tools by default ([#525](https://github.com/supabase/mcp/issues/525)) ([d8bba9e](https://github.com/supabase/mcp/commit/d8bba9ee0b1f4a5647d7eae41a5f411f62385901))
+
 ## [0.16.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.15.0...mcp-server-supabase-v0.16.0) (2026-11-05)
 
 
