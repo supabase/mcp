@@ -16,12 +16,14 @@ export const graphqlRequestSchema = z.object({
 
 export const graphqlErrorSchema = z.object({
   message: z.string(),
-  locations: z.array(
-    z.object({
-      line: z.number(),
-      column: z.number(),
-    })
-  ),
+  locations: z
+    .array(
+      z.object({
+        line: z.number(),
+        column: z.number(),
+      })
+    )
+    .optional(),
 });
 
 export const graphqlResponseSchema = z.object({
@@ -189,10 +191,13 @@ export class GraphQLClient {
     if (data.errors?.length) {
       throw new Error(
         `Supabase Content API GraphQL error: ${data.errors
-          .map(
-            (err) =>
-              `${err.message} (line ${err.locations[0]?.line ?? 'unknown'}, column ${err.locations[0]?.column ?? 'unknown'})`
-          )
+          .map((err) => {
+            const location = err.locations?.[0];
+
+            return location
+              ? `${err.message} (line ${location.line}, column ${location.column})`
+              : err.message;
+          })
           .join(', ')}`
       );
     }

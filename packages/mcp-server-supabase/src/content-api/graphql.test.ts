@@ -128,4 +128,64 @@ describe('graphql client', () => {
     });
     expect(isToolCallerError(error)).toBe(false);
   });
+
+  it('surfaces Content API errors without locations', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          errors: [
+            {
+              message:
+                'Must provide operation name if query contains multiple operations.',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
+    );
+    const graphqlClient = new GraphQLClient({
+      url: 'https://content.example.com/graphql',
+    });
+
+    const error = await graphqlClient
+      .query({ query: '{ getHelloWorld }' })
+      .catch((error: unknown) => error);
+
+    expect(error).toMatchObject({
+      name: 'Error',
+      message:
+        'Supabase Content API GraphQL error: Must provide operation name if query contains multiple operations.',
+    });
+    expect(isToolCallerError(error)).toBe(false);
+  });
+
+  it('includes the location when the Content API provides one', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          errors: [
+            {
+              message: 'Cannot query field "foo".',
+              locations: [{ line: 2, column: 3 }],
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
+    );
+    const graphqlClient = new GraphQLClient({
+      url: 'https://content.example.com/graphql',
+    });
+
+    const error = await graphqlClient
+      .query({ query: '{ getHelloWorld }' })
+      .catch((error: unknown) => error);
+
+    expect(error).toMatchObject({
+      name: 'Error',
+      message:
+        'Supabase Content API GraphQL error: Cannot query field "foo". (line 2, column 3)',
+    });
+    expect(isToolCallerError(error)).toBe(false);
+  });
 });
