@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.2](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.16.1...mcp-server-supabase-v0.16.2) (2026-11-06)
+
+
+### Bug Fixes
+
+* **content api:** report GraphQL errors that have no locations ([#528](https://github.com/supabase/mcp/issues/528)) ([6b2fca9](https://github.com/supabase/mcp/commit/6b2fca972b5264474949fd738f02537082f5c898))
+
 ## [0.16.1](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.16.0...mcp-server-supabase-v0.16.1) (2026-11-06)
 
 
