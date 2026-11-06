@@ -156,6 +156,7 @@ const DEFAULT_FEATURES: FeatureGroup[] = [
   'functions',
   'branching',
   'feedback',
+  'notebooks',
 ];
 
 export const PLATFORM_INDEPENDENT_FEATURES: FeatureGroup[] = ['docs'];
