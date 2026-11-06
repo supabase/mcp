@@ -234,3 +234,22 @@ jobs:
         if: ${{ steps.mcp-registry-check.outputs.already_published == 'false' }}
         working-directory: packages/mcp-server-supabase
         run: pnpm registry:publish
+
+      - name: Generate evals dispatch token
+        if: ${{ steps.release.outputs['packages/mcp-server-supabase--release_created'] || inputs.force_publish == true }}
+        id: evals-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          client-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: supabase
+          repositories: evals
+          permission-actions: write
+
+      - name: Dispatch evals MCP update
+        if: ${{ steps.release.outputs['packages/mcp-server-supabase--release_created'] || inputs.force_publish == true }}
+        env:
+          GH_TOKEN: ${{ steps.evals-token.outputs.token }}
+        run: |
+          VERSION=$(node -p "require('./packages/mcp-server-supabase/package.json').version")
+          gh workflow run update-mcp-version.yml --repo supabase/evals --ref main -f "version=$VERSION"
