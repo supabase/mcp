@@ -1,11 +1,19 @@
-import { Client } from '@modelcontextprotocol/client';
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
 import type { CallToolRequestParams } from '@modelcontextprotocol/client';
-import type { Server } from '@modelcontextprotocol/server';
+import {
+  createMcpHandler,
+  type JSONRPCMessage,
+  type Server,
+} from '@modelcontextprotocol/server';
 import { describe, expect, test, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import {
   createMcpServer,
+  type McpServerOptions,
   resource,
   resources,
   resourceTemplate,
@@ -331,6 +339,150 @@ describe('tools', () => {
       title: 'Report',
       content: [{ label: 'first' }, { label: 'second' }],
     });
+  });
+});
+
+describe('tools/list cache hints', () => {
+  const ttlMs = 123_000;
+
+  function createServerOptions(options: { toolsListTtlMs?: number } = {}) {
+    return {
+      name: 'test-server',
+      version: '0.0.0',
+      ...options,
+      tools: {
+        noop: tool({
+          description: 'Does nothing',
+          parameters: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => ({}),
+        }),
+      },
+    };
+  }
+
+  /** The raw `tools/list` result the server put on the wire. */
+  function findToolsListResult(sent: JSONRPCMessage[]) {
+    const response = sent.find(
+      (message) => 'result' in message && 'tools' in (message.result ?? {})
+    );
+    if (!response || !('result' in response)) {
+      throw new Error('tools/list response not found');
+    }
+    return response.result as Record<string, unknown>;
+  }
+
+  /**
+   * Serves `options` the way the hosted deployment does (a fresh server per
+   * request via `createMcpHandler`) to a client pinned to 2026-07-28,
+   * recording every raw JSON-RPC message in the HTTP response bodies.
+   */
+  async function setupModern(options: McpServerOptions) {
+    const handler = createMcpHandler(() => createMcpServer(options));
+    const sent: JSONRPCMessage[] = [];
+
+    const transport = new StreamableHTTPClientTransport(
+      new URL('https://mcp.test'),
+      {
+        fetch: async (url, init) => {
+          const response = await handler.fetch(new Request(url, init));
+          sent.push(...(await parseBody(response.clone())));
+          return response;
+        },
+      }
+    );
+    const client = new Client(
+      { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      {
+        capabilities: {},
+        versionNegotiation: { mode: { pin: '2026-07-28' } },
+      }
+    );
+
+    await client.connect(transport);
+
+    return { client, sent };
+  }
+
+  /** Extracts the JSON-RPC messages from a JSON or SSE response body. */
+  async function parseBody(response: Response): Promise<JSONRPCMessage[]> {
+    const text = await response.text();
+    if (!text) {
+      return [];
+    }
+    if (response.headers.get('content-type')?.includes('text/event-stream')) {
+      return text
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => JSON.parse(line.slice('data:'.length)));
+    }
+    const body = JSON.parse(text);
+    return Array.isArray(body) ? body : [body];
+  }
+
+  /** Connects a legacy (2025-11-25) client in-memory, recording the wire. */
+  async function setupLegacy(options: McpServerOptions) {
+    const clientTransport = new StreamTransport();
+    const serverTransport = new StreamTransport();
+    const sent: JSONRPCMessage[] = [];
+
+    clientTransport.readable.pipeTo(serverTransport.writable);
+    serverTransport.readable
+      .pipeThrough(
+        new TransformStream<JSONRPCMessage, JSONRPCMessage>({
+          transform(message, controller) {
+            sent.push(message);
+            controller.enqueue(message);
+          },
+        })
+      )
+      .pipeTo(clientTransport.writable);
+
+    const client = new Client(
+      { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      { capabilities: {}, versionNegotiation: { mode: 'legacy' } }
+    );
+
+    await createMcpServer(options).connect(serverTransport);
+    await client.connect(clientTransport);
+
+    return { client, sent };
+  }
+
+  test('2026-07-28 responses carry ttlMs and a private cacheScope', async () => {
+    const { client, sent } = await setupModern(
+      createServerOptions({ toolsListTtlMs: ttlMs })
+    );
+
+    const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name)).toEqual(['noop']);
+
+    const result = findToolsListResult(sent);
+    expect(result.ttlMs).toBe(ttlMs);
+    expect(result.cacheScope).toBe('private');
+  });
+
+  test('2025-11-25 responses carry neither field', async () => {
+    const { client, sent } = await setupLegacy(
+      createServerOptions({ toolsListTtlMs: ttlMs })
+    );
+
+    const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name)).toEqual(['noop']);
+
+    const result = findToolsListResult(sent);
+    expect(result).not.toHaveProperty('ttlMs');
+    expect(result).not.toHaveProperty('cacheScope');
+  });
+
+  test('without toolsListTtlMs the SDK default applies on 2026-07-28', async () => {
+    const { client, sent } = await setupModern(createServerOptions());
+
+    await client.listTools();
+
+    const result = findToolsListResult(sent);
+    expect(result.ttlMs).toBe(0);
+    expect(result.cacheScope).toBe('private');
   });
 });
 
