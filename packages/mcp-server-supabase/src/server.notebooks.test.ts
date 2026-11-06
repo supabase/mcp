@@ -88,8 +88,11 @@ describe('tools', () => {
     });
     project.status = 'ACTIVE_HEALTHY';
 
-    project.createNotebook({ name: 'Notebook 1', favorite: true });
-    project.createNotebook({
+    const first = project.createNotebook({
+      name: 'Notebook 1',
+      favorite: true,
+    });
+    const second = project.createNotebook({
       name: 'Notebook 2',
       description: 'Second notebook',
     });
@@ -110,6 +113,7 @@ describe('tools', () => {
         favorite: true,
         inserted_at: expect.any(String),
         updated_at: expect.any(String),
+        url: `https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${first.id}`,
       })
     );
     expect(result.notebooks[1]).toEqual(
@@ -117,6 +121,7 @@ describe('tools', () => {
         name: 'Notebook 2',
         description: 'Second notebook',
         favorite: false,
+        url: `https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${second.id}`,
       })
     );
     // list_notebooks omits cell content
@@ -203,6 +208,7 @@ describe('tools', () => {
           schema_version: 1,
           cells: expect.any(String),
         },
+        url: `https://supabase.com/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`,
       })
     );
     expect(result.content.cells).toContain('untrusted user data');
