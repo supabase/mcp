@@ -1,3 +1,4 @@
+import { maskDataLiterals } from './sql-data-literals.js';
 import { lexSql, type SqlScan } from './sql-lexer.js';
 
 /** Adapted from supabase/supabase apps/studio (SQLEditor.constants.ts, SQLEditor.utils.ts, lib/helpers.ts), Apache-2.0. */
@@ -55,7 +56,7 @@ export function removeCommentsFromSql(sql: string): string {
 }
 
 function checkDestructiveQueryFromScan(sql: string, scan: SqlScan): boolean {
-  const cleanedSql = removeComments(sql, scan);
+  const cleanedSql = maskDataLiterals(sql, scan);
   // Retain the broad explicit-column warning, but search its suffix only once.
   const alter = /(?:^|;)\s*alter\s+table\s+/i.exec(cleanedSql);
   if (

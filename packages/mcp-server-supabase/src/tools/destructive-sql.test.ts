@@ -242,6 +242,40 @@ describe('isDestructiveSql', () => {
     expect(isDestructiveSql(sql)).toBe(true);
   });
 
+  test.each([
+    "insert into notes (body) values ('Moved the list to 11/3; drop the two duplicates');",
+    'insert into notes (body) values ($b$Kept the deck; delete the old one$b$);',
+    "update notes set body = 'x; drop y' where id = 1;",
+    "select 'a; truncate b';",
+    String.raw`select E'it\'s; delete later';`,
+    "select f('ok; alter table t drop column c');",
+    `insert into asks (proposal, options) values ('Execute the outreach plan', '[{"proposed": "drop"}]');`,
+    "insert into execute_log (note) values ('a; drop b');",
+    "do 'select 1'; insert into notes (body) values ('a; drop b');",
+    "execute 'select 1'; insert into notes (body) values ('a; drop b');",
+  ])('data literal does not match: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(false);
+  });
+
+  test.each([
+    "do 'begin perform 1; drop table t; end'",
+    "DO E'begin perform 1; truncate t; end'",
+    "do $$ begin execute 'drop table t'; end $$",
+    'do language plpgsql $f$ begin perform 1; delete from t; end $f$',
+    "/* note */ do 'begin perform 1; drop table t; end'",
+    "insert into t values ('a'); do 'begin perform 1; drop table t; end'",
+    "create function f() returns void as 'begin perform 1; delete from t; end' language plpgsql",
+    "create function f() returns void as E'begin perform 1; delete from t; end' language plpgsql",
+    'create procedure p() as /* body */ $$ begin perform 1; drop table t; end $$ language plpgsql',
+    'drop table t',
+    'select 1; delete from t',
+    "select 'a'; truncate t",
+    'delete/**/from t',
+    "select 'unterminated; drop table t",
+  ])('code body or real statement still matches: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+
   test('EXPLAIN ANALYZE of a read keeps its existing classification', () => {
     expect(isDestructiveSql('EXPLAIN ANALYZE SELECT * FROM films;')).toBe(
       false
