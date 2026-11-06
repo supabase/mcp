@@ -23,6 +23,10 @@ import type { components as ManagementApiV2Components } from '../management-api-
 import { generatePassword } from '../password.js';
 import { createFeedbackOperations } from './feedback.js';
 import {
+  warehouseContextSchema,
+  type WarehouseOperations,
+} from './warehouse.js';
+import {
   applyMigrationOptionsSchema,
   createNotebookOptionsSchema,
   createBranchOptionsSchema,
@@ -972,7 +976,21 @@ export function createSupabaseApiPlatform(
     },
   };
 
+  const warehouse: WarehouseOperations = {
+    async getContext(projectId) {
+      const response = await managementApiClient.GET(
+        '/platform/warehouse/{ref}/context',
+        {
+          params: { path: { ref: projectId } },
+        }
+      );
+      assertSuccess(response, 'Failed to fetch Warehouse context');
+      return warehouseContextSchema.parse(response.data);
+    },
+  };
+
   const platform: SupabasePlatform = {
+    warehouse,
     async init(info: InitData) {
       const { clientInfo } = info;
       if (!clientInfo) {
