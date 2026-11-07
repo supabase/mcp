@@ -406,6 +406,8 @@ export function createSupabaseApiPlatform(
   const development: DevelopmentOperations = {
     async getProjectUrl(projectId: string): Promise<string> {
       const apiUrl = new URL(managementApiUrl);
+      // A local stack serves the Management API and the project API on one gateway.
+      if (isLocalHost(apiUrl.hostname)) return apiUrl.origin;
       return `https://${projectId}.${getProjectDomain(apiUrl.hostname)}`;
     },
     async getPublishableKeys(projectId: string): Promise<ApiKey[]> {
@@ -1036,6 +1038,12 @@ function getNextNotebooksCursor(next: string | null | undefined) {
 
   const url = new URL(next, 'https://supabase.com');
   return url.searchParams.get('page[after]') ?? undefined;
+}
+
+function isLocalHost(hostname: string) {
+  return (
+    hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+  );
 }
 
 function getProjectDomain(apiHostname: string) {
