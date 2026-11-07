@@ -112,7 +112,7 @@ For more information, see [Schema Definition](https://ai-sdk.dev/docs/ai-sdk-cor
 
 ## Self-hosting the MCP endpoint
 
-The `@supabase/mcp-server-supabase` package exports `createSupabaseMcpHandler()` to serve the tools over HTTP from your own endpoint. It accepts the same `SupabaseMcpServerOptions` as `createSupabaseMcpServer()`, most importantly `platform`.
+The `@supabase/mcp-server-supabase` package exports `createSupabaseMcpHandler()` to serve the tools over HTTP from your own endpoint. It accepts the same `SupabaseMcpServerOptions` as `createSupabaseMcpServer()`, most importantly `platform`, and an optional second argument for HTTP handler options such as `onerror`.
 
 The handler speaks the current protocol revision only. It is created with `legacy: 'reject'`, so a client that only speaks the 2025-era protocol receives an HTTP 400 instead of being served.
 
@@ -129,9 +129,14 @@ import { createSupabaseApiPlatform } from '@supabase/mcp-server-supabase/platfor
 const server = createServer((req, res) => {
   const accessToken = getAccessTokenFromRequest(req); // your own auth
 
-  const handler = createSupabaseMcpHandler({
-    platform: createSupabaseApiPlatform({ accessToken }),
-  });
+  const handler = createSupabaseMcpHandler(
+    {
+      platform: createSupabaseApiPlatform({ accessToken }),
+    },
+    {
+      onerror: (error) => console.error(error),
+    }
+  );
 
   // `close()` aborts in-flight exchanges, so close on `res` finishing rather
   // than when the handler resolves, which would cut streaming responses short.
@@ -144,6 +149,8 @@ const server = createServer((req, res) => {
 ```
 
 `toNodeHandler` comes from `@modelcontextprotocol/node`. Your code imports it directly, so install it alongside.
+
+The optional `onerror` callback receives errors reported by the MCP HTTP handler, including rejected requests such as invalid or expired `requestState`. It is diagnostic only: the SDK's response and request-state verification are unchanged. Avoid logging request contents or opaque state tokens when recording diagnostics.
 
 ## Observability
 

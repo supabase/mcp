@@ -21,7 +21,10 @@ export {
   createSupabaseMcpServer,
   type SupabaseMcpServerOptions,
 } from './server.js';
-export { createSupabaseMcpHandler } from './transports/http.js';
+export {
+  createSupabaseMcpHandler,
+  type SupabaseMcpHandlerOptions,
+} from './transports/http.js';
 export {
   CURRENT_ELICITATION_TOOLS,
   CURRENT_FEATURE_GROUPS,
