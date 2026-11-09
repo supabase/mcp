@@ -37,7 +37,6 @@ import {
   startLocalHttpEntry,
   type LocalHttpEntryOptions,
 } from './local-http-entry.js';
-import { expectTerminalResult } from '../../test/confirmation-results.js';
 
 // https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/
 const MODERN_PROTOCOL_VERSION = '2026-07-28';
@@ -508,7 +507,7 @@ describe('startLocalHttpEntry', () => {
     expect(denied).toMatchObject({ isError: true });
   });
 
-  test('expires shared HTTP cost and secret state after two minutes', async () => {
+  test('keeps HTTP confirmations valid past the secret TTL and expires each flow at its own TTL', async () => {
     const now = Date.now();
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
     const client = await connect(
@@ -568,41 +567,71 @@ describe('startLocalHttpEntry', () => {
     if (!isInputRequiredResult(secret)) {
       throw new Error('expected an input_required result');
     }
-    // AI-1372. Regression: shared HTTP state stops expiring after two minutes
-    // (the platform TTL is 120 s with URL-mode secret collection on), an
-    // expired continuation goes back to a JSON-RPC -32602, or the message
-    // states the SDK default lifetime instead of the configured one. Both
-    // continuations accept, so an expiry-blind path would create the branch.
+    // AI-1438. A URL secret link expires at 120 s, while the confirmation
+    // remains usable at 161 s and expires after its own 600 s lifetime.
+    // The earlier shared-TTL test expected both to expire after 120 s.
     clock.mockReturnValue(now + 121_000);
-    for (const { continuation, message } of [
+    const secretExpired = (await client.request(
       {
-        continuation: {
-          name: 'create_branch',
-          arguments: { project_id: project.id, name: 'feature' },
-          requestState: result.requestState,
-          inputResponses: { confirm_cost: { action: 'accept', content: {} } },
-        },
-        message:
-          'This confirmation expired after 2 minutes. Call `create_branch` again to get a new confirmation.',
-      },
-      {
-        continuation: {
+        method: 'tools/call',
+        params: {
           name: 'create_edge_function_secret',
           arguments: { project_id: project.id, name: 'HTTP_SECRET' },
           requestState: secret.requestState,
           inputResponses: { store_secret: { action: 'accept', content: {} } },
         },
-        message:
-          'This confirmation expired after 2 minutes. Call `create_edge_function_secret` again to get a new confirmation.',
       },
-    ]) {
-      const expired = (await client.request(
-        { method: 'tools/call', params: continuation },
-        { allowInputRequired: true }
-      )) as CallToolResult | InputRequiredResult;
-      expect(isInputRequiredResult(expired)).toBe(false);
-      expectTerminalResult(expired as CallToolResult, 'expired', message);
-    }
+      { allowInputRequired: true }
+    )) as CallToolResult | InputRequiredResult;
+    expect(isInputRequiredResult(secretExpired)).toBe(false);
+    expect(secretExpired).toMatchObject({
+      isError: true,
+      structuredContent: {
+        status: 'expired',
+        message: expect.stringContaining('expired after 2 minutes'),
+      },
+    });
+
+    clock.mockReturnValue(now + 161_000);
+    const confirmed = (await client.request(
+      {
+        method: 'tools/call',
+        params: {
+          name: 'create_branch',
+          arguments: { project_id: project.id, name: 'feature' },
+          requestState: result.requestState,
+          inputResponses: { confirm_cost: { action: 'decline' } },
+        },
+      },
+      { allowInputRequired: true }
+    )) as CallToolResult | InputRequiredResult;
+    expect(isInputRequiredResult(confirmed)).toBe(false);
+    expect(confirmed).toMatchObject({
+      structuredContent: { status: 'declined' },
+    });
+    expect(mockBranches.size).toBe(0);
+
+    clock.mockReturnValue(now + 601_000);
+    const confirmationExpired = (await client.request(
+      {
+        method: 'tools/call',
+        params: {
+          name: 'create_branch',
+          arguments: { project_id: project.id, name: 'feature' },
+          requestState: result.requestState,
+          inputResponses: { confirm_cost: { action: 'accept', content: {} } },
+        },
+      },
+      { allowInputRequired: true }
+    )) as CallToolResult | InputRequiredResult;
+    expect(isInputRequiredResult(confirmationExpired)).toBe(false);
+    expect(confirmationExpired).toMatchObject({
+      isError: true,
+      structuredContent: {
+        status: 'expired',
+        message: expect.stringContaining('expired after 10 minutes'),
+      },
+    });
     expect(mockBranches.size).toBe(0);
   });
 

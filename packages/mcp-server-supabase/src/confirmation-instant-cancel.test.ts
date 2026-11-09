@@ -164,7 +164,10 @@ type CallExtra = {
 };
 
 async function setup(
-  options: { ttlSeconds?: number; resumeCapabilities?: ClientCapabilities } = {}
+  options: {
+    confirmationTtlSeconds?: number;
+    resumeCapabilities?: ClientCapabilities;
+  } = {}
 ): Promise<Harness> {
   const fake = fakePlatform();
   let now = T0;
@@ -201,11 +204,13 @@ async function setup(
     requestState: {
       key: KEY,
       principal: PRINCIPAL,
-      ...(options.ttlSeconds === undefined
-        ? {}
-        : { ttlSeconds: options.ttlSeconds }),
     },
-    confirmation: { enabledTools: [...tools] },
+    confirmation: {
+      enabledTools: [...tools],
+      ...(options.confirmationTtlSeconds === undefined
+        ? {}
+        : { ttlSeconds: options.confirmationTtlSeconds }),
+    },
   };
   const serverOptions = { platform, features, elicitation };
   const main = await setupObservation(serverOptions);
@@ -549,9 +554,9 @@ test.each([
   { ttlSeconds: 90, gap: 91_000, lifetime: '90 seconds' },
   { ttlSeconds: 1, gap: 2_000, lifetime: '1 second' },
 ])(
-  'an expired resume with ttlSeconds $ttlSeconds states $lifetime',
+  'an expired resume with confirmation ttlSeconds $ttlSeconds states $lifetime',
   async ({ ttlSeconds, gap, lifetime }) => {
-    const h = await setup({ ttlSeconds });
+    const h = await setup({ confirmationTtlSeconds: ttlSeconds });
     const result = await resume(h, 'execute_sql', 'accept', gap);
     expectTerminalResult(
       result,
