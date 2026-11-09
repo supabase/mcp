@@ -164,7 +164,10 @@ type CallExtra = {
 };
 
 async function setup(
-  options: { ttlSeconds?: number; resumeCapabilities?: ClientCapabilities } = {}
+  options: {
+    confirmationTtlSeconds?: number;
+    resumeCapabilities?: ClientCapabilities;
+  } = {}
 ): Promise<Harness> {
   const fake = fakePlatform();
   let now = T0;
@@ -201,11 +204,13 @@ async function setup(
     requestState: {
       key: KEY,
       principal: PRINCIPAL,
-      ...(options.ttlSeconds === undefined
-        ? {}
-        : { ttlSeconds: options.ttlSeconds }),
     },
-    confirmation: { enabledTools: [...tools] },
+    confirmation: {
+      enabledTools: [...tools],
+      ...(options.confirmationTtlSeconds === undefined
+        ? {}
+        : { ttlSeconds: options.confirmationTtlSeconds }),
+    },
   };
   const serverOptions = { platform, features, elicitation };
   const main = await setupObservation(serverOptions);
@@ -539,19 +544,19 @@ test('a changed-quote reprompt mints a fresh issued_at', async () => {
 });
 
 // AI-1372. Regression: the lifetime in the expired message is hard-coded to
-// the default, drifts from the TTL the codec was built with (platform passes
-// 120 when URL-mode secret collection is on), always prints seconds, always
-// prints minutes, or gets the singular wrong. One tool covers the shared
-// formatter. Each gap is one whole second past exp = floor(T0 / 1000) + ttl.
+// the default, drifts from the configured confirmation TTL the codec was built
+// with, always prints seconds, always prints minutes, or gets the singular
+// wrong. One tool covers the shared formatter. Each gap is one whole second
+// past exp = floor(T0 / 1000) + ttl.
 test.each([
   { ttlSeconds: 120, gap: 121_000, lifetime: '2 minutes' },
   { ttlSeconds: 60, gap: 61_000, lifetime: '1 minute' },
   { ttlSeconds: 90, gap: 91_000, lifetime: '90 seconds' },
   { ttlSeconds: 1, gap: 2_000, lifetime: '1 second' },
 ])(
-  'an expired resume with ttlSeconds $ttlSeconds states $lifetime',
+  'an expired resume with confirmation ttlSeconds $ttlSeconds states $lifetime',
   async ({ ttlSeconds, gap, lifetime }) => {
-    const h = await setup({ ttlSeconds });
+    const h = await setup({ confirmationTtlSeconds: ttlSeconds });
     const result = await resume(h, 'execute_sql', 'accept', gap);
     expectTerminalResult(
       result,
