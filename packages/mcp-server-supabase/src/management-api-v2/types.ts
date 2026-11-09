@@ -1523,6 +1523,11 @@ export interface components {
                         id: number;
                         username: string;
                     } | null;
+                    /**
+                     * Format: uri
+                     * @description Dashboard link for this notebook.
+                     */
+                    url: string;
                 };
             }[];
             links: {
@@ -1572,6 +1577,11 @@ export interface components {
                         id: number;
                         username: string;
                     } | null;
+                    /**
+                     * Format: uri
+                     * @description Dashboard link for this notebook.
+                     */
+                    url: string;
                     content: {
                         schema_version: number;
                         cells: ({
