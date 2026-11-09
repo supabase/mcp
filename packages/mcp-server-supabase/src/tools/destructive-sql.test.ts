@@ -121,6 +121,27 @@ describe('isUpdateWithoutWhere', () => {
   ])('UPDATE without WHERE still matches: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(true);
   });
+
+  test.each([
+    '-- reset ids\nUPDATE films SET id = 2;',
+    '/* reset ids */ UPDATE films SET id = 2;',
+    'SELECT 1; -- reset ids\nUPDATE films SET id = 2;',
+    'UPDATE ONLY films SET id = 2;',
+    'UPDATE films AS f SET id = 2;',
+    'UPDATE films f SET id = 2;',
+    'UPDATE ONLY public.films AS f SET id = 2;',
+  ])('UPDATE without WHERE matches: %s', (sql) => {
+    expect(isUpdateWithoutWhere(sql)).toBe(true);
+  });
+
+  test.each([
+    '-- reset ids\nUPDATE films SET id = 2 WHERE id = 1;',
+    '/* reset ids */ UPDATE films SET id = 2 WHERE id = 1;',
+    'UPDATE ONLY films SET id = 2 WHERE id = 1;',
+    'UPDATE films AS f SET id = 2 WHERE f.id = 1;',
+  ])('UPDATE with WHERE does not match: %s', (sql) => {
+    expect(isUpdateWithoutWhere(sql)).toBe(false);
+  });
 });
 
 describe('isDestructiveSql', () => {
@@ -132,6 +153,12 @@ describe('isDestructiveSql', () => {
     expect(
       isDestructiveSql('select * from films; UPDATE films SET title = null;')
     ).toBe(true);
+  });
+
+  test('UPDATE without WHERE after a leading comment matches', () => {
+    expect(isDestructiveSql('-- reset ids\nUPDATE films SET id = 2;')).toBe(
+      true
+    );
   });
 
   test.each([
