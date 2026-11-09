@@ -810,6 +810,71 @@ describe('tools', () => {
       }
     });
 
+    test('secret collection defaults to 600 seconds when confirmation expires sooner', async () => {
+      const { client } = await setupModern({
+        clientCapabilities: URL_CAPABLE,
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: { ...COST_CONFIRMATION, ttlSeconds: 120 },
+        },
+        secretCollection: SECRET_COLLECTION,
+      });
+      const clock = vi
+        .spyOn(Date, 'now')
+        .mockReturnValue(Date.parse('2030-01-01T00:00:00Z'));
+      try {
+        const project = await createActiveProject();
+        const args = { project_id: project.id, name: 'MY_SECRET' };
+        const first = await callModernTool(client, {
+          name: 'create_edge_function_secret',
+          arguments: args,
+        });
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected InputRequiredResult');
+        }
+
+        for (const time of ['00:02:01', '00:09:59']) {
+          clock.mockReturnValue(Date.parse(`2030-01-01T${time}Z`));
+          const pending = await callModernTool(client, {
+            name: 'create_edge_function_secret',
+            arguments: args,
+            requestState: first.requestState,
+            inputResponses: {
+              store_secret: { action: 'accept', content: {} },
+            },
+          });
+          expect(isInputRequiredResult(pending)).toBe(true);
+          if (isInputRequiredResult(pending)) {
+            expect(pending.inputRequests?.store_secret).toMatchObject({
+              method: 'elicitation/create',
+              params: { mode: 'url' },
+            });
+          }
+        }
+
+        clock.mockReturnValue(Date.parse('2030-01-01T00:10:01Z'));
+        const expired = await callModernTool(client, {
+          name: 'create_edge_function_secret',
+          arguments: args,
+          requestState: first.requestState,
+          inputResponses: {
+            store_secret: { action: 'accept', content: {} },
+          },
+        });
+        expect(isInputRequiredResult(expired)).toBe(false);
+        expect(expired).toMatchObject({
+          isError: true,
+          structuredContent: {
+            status: 'expired',
+            message: expect.stringContaining('expired after 10 minutes'),
+          },
+        });
+      } finally {
+        clock.mockRestore();
+        await client.close();
+      }
+    });
+
     test('form-only and empty-capability clients receive isError with no URL', async () => {
       const clientCapabilities: ClientCapabilities[] = [
         { elicitation: { form: {} } },
