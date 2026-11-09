@@ -244,8 +244,8 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
           ttlSeconds: secretCollectionTtlSeconds,
         })
       : undefined;
-  // The SDK signs the expiry into each state. Either codec verifies the same
-  // HMAC and binding; its configured TTL is only used when minting.
+  // Both codecs share the HMAC key and binding. The SDK verifies each token's
+  // signed expiry; a codec's configured TTL only affects tokens it mints.
   const verificationCodec = confirmationCodec ?? secretCollectionCodec;
 
   let handshakeClientInfo: Implementation | undefined;
@@ -280,31 +280,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       // authentic token. Every other failure still becomes the SDK's -32602.
       verify: async (state, ctx) => {
         try {
-          const payload = await verificationCodec.verify(state, ctx);
-          if (
-            payload.tool === 'create_edge_function_secret'
-              ? !secretCollectionCodec
-              : !confirmationCodec
-          ) {
-            throw new Error('bind');
-          }
-          return payload;
+          return await verificationCodec.verify(state, ctx);
         } catch (error) {
           if (error instanceof Error && error.message === 'expired') {
-            // The SDK has verified the MAC and decoded the JSON before it
-            // checks expiry. Read the authenticated tool to select the TTL
-            // that minted the token, without changing the signed wire format.
-            const body = state.slice(3, state.lastIndexOf('.'));
-            const { p } = JSON.parse(
-              Buffer.from(body, 'base64url').toString('utf8')
-            ) as { p: ElicitationState };
-            const secret = p.tool === 'create_edge_function_secret';
-            if (secret ? !secretCollectionCodec : !confirmationCodec) {
-              throw new Error('bind');
-            }
-            return new ExpiredRequestState(
-              secret ? secretCollectionTtlSeconds : confirmationTtlSeconds
-            );
+            return new ExpiredRequestState();
           }
           throw error;
         }
@@ -469,7 +448,13 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       ]) {
         const tool = tools[name];
         if (tool) {
-          tools[name] = stopExpiredState(name, tool);
+          tools[name] = stopExpiredState(
+            name,
+            tool,
+            name === 'create_edge_function_secret'
+              ? secretCollectionTtlSeconds
+              : confirmationTtlSeconds
+          );
         }
       }
 

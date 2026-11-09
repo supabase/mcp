@@ -267,9 +267,7 @@ function terminalResult(
  * authentic but expired token, so tools can answer with a tool error rather
  * than the SDK's -32602. Carries no payload: the bind check never ran on it.
  */
-export class ExpiredRequestState {
-  constructor(readonly ttlSeconds: number) {}
-}
+export class ExpiredRequestState {}
 
 /**
  * Wraps a tool that resumes signed state so an expired `requestState` gets a
@@ -278,7 +276,8 @@ export class ExpiredRequestState {
  */
 export function stopExpiredState<T extends Tool<any, any, ObservationFact>>(
   name: string,
-  tool: T
+  tool: T,
+  ttlSeconds: number
 ): T {
   return {
     ...tool,
@@ -294,7 +293,6 @@ export function stopExpiredState<T extends Tool<any, any, ObservationFact>>(
           result: 'expired',
         });
       }
-      const { ttlSeconds } = state;
       const [count, unit] =
         ttlSeconds % 60 === 0
           ? [ttlSeconds / 60, 'minute']
