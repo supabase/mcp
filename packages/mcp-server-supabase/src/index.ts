@@ -14,7 +14,7 @@ export {
   isToolCallerError,
   ToolCallerError,
   type ToolCallerErrorKind,
-} from './errors.js';
+} from '@supabase/mcp-utils';
 export type { ToolCallCallback } from '@supabase/mcp-utils';
 export {
   createFeedbackOperations,

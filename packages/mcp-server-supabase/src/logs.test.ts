@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { isToolCallerError } from './errors.js';
+import { isToolCallerError } from '@supabase/mcp-utils';
 import { DAY_MS, getClickHouseLogQuery, resolveLogWindow } from './logs.js';
 import type { LogsService } from './platform/types.js';
 

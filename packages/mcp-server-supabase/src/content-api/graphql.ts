@@ -7,7 +7,7 @@ import {
   type DocumentNode,
 } from 'graphql';
 import { z } from 'zod/v4';
-import { ToolCallerError } from '../errors.js';
+import { ToolCallerError } from '@supabase/mcp-utils';
 
 export const graphqlRequestSchema = z.object({
   query: z.string(),

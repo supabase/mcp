@@ -3,9 +3,12 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { type ToolObservation, tool } from '@supabase/mcp-utils';
+import {
+  type ToolObservation,
+  tool,
+  ToolCallerError,
+} from '@supabase/mcp-utils';
 import type { ObservationFact } from '../observation.js';
-import { ToolCallerError } from '../errors.js';
 import { z } from 'zod/v4';
 import type { BranchingOperations } from '../platform/types.js';
 import { branchSchema } from '../platform/types.js';

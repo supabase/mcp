@@ -10,7 +10,7 @@ import {
   mockContentApiSchemaLoadCount,
 } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
-import { isToolCallerError } from './errors.js';
+import { isToolCallerError } from '@supabase/mcp-utils';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { createMcpHandler } from '@modelcontextprotocol/server';

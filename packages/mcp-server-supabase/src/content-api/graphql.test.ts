@@ -1,6 +1,6 @@
 import { stripIndent } from 'common-tags';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isToolCallerError } from '../errors.js';
+import { isToolCallerError } from '@supabase/mcp-utils';
 import { GraphQLClient } from './graphql.js';
 
 afterEach(() => {

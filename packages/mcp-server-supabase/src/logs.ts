@@ -1,5 +1,5 @@
 import { stripIndent } from 'common-tags';
-import { ToolCallerError } from './errors.js';
+import { ToolCallerError } from '@supabase/mcp-utils';
 import type { LogsService } from './platform/types.js';
 
 export function getClickHouseLogQuery(
