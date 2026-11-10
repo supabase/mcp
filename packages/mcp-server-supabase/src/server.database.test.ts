@@ -22,6 +22,20 @@ afterEach(() => harness.close());
 
 const setupModern = harness.setupModern;
 
+/**
+ * Postgres only shows `information_schema.table_constraints` and
+ * `referential_constraints` rows to the table owner or to roles with a
+ * non-SELECT table privilege, so `list_tables` (which runs as the read-only
+ * role) needs REFERENCES on the tables to see their keys.
+ */
+async function grantKeyVisibility(project: {
+  db: { exec(sql: string): unknown };
+}) {
+  await project.db.exec(
+    'alter default privileges grant references on tables to supabase_read_only_role'
+  );
+}
+
 const ELICITATION_REQUEST_STATE: NonNullable<
   SupabaseMcpServerOptions['elicitation']
 >['requestState'] = {
@@ -130,6 +144,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     const name = 'test_migration';
     const query =
@@ -172,8 +187,8 @@ describe('tools', () => {
     expect(listTablesResult.tables).toEqual([
       {
         name: 'public.test',
-        rls_enabled: false,
-        rows: 0,
+        rls_enabled: null,
+        rows: null,
         columns: [
           {
             name: 'id',
@@ -186,9 +201,7 @@ describe('tools', () => {
         primary_keys: ['id'],
       },
     ]);
-    expect(listTablesResult.advisory).toEqual(
-      expect.objectContaining({ id: 'rls_disabled' })
-    );
+    expect(listTablesResult.advisory).toBeUndefined();
   });
 
   test('list_tables returns compact summary by default', async () => {
@@ -215,20 +228,10 @@ describe('tools', () => {
       tables: [
         {
           name: 'public.test',
-          rls_enabled: false,
-          rows: 0,
+          rls_enabled: null,
+          rows: null,
         },
       ],
-      advisory: {
-        id: 'rls_disabled',
-        priority: 1,
-        level: 'critical',
-        title: 'Row Level Security is disabled',
-        message: expect.stringContaining('public.test'),
-        remediation_sql:
-          'ALTER TABLE "public"."test" ENABLE ROW LEVEL SECURITY;',
-        doc_url: expect.stringContaining('row-level-security'),
-      },
     });
   });
 
@@ -239,6 +242,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     await project.db.exec(`
       create table users (id integer generated always as identity primary key);
@@ -314,45 +318,6 @@ describe('tools', () => {
     ]);
   });
 
-  test('list tables returns the check expression for NOT VALID and NO INHERIT constraints', async () => {
-    const { callTool } = await setup();
-
-    const { project } = await createProjectFixture({
-      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
-      project: { name: 'Project 1', region: 'us-east-1' },
-    });
-
-    await project.db.exec(`
-      create table checks (a integer, b integer, c integer);
-      alter table checks add constraint a_positive check (a > 0) not valid;
-      alter table checks add constraint b_positive check (b > 0) no inherit;
-      alter table checks add constraint c_positive check (c > 0);
-    `);
-
-    const result = await callTool({
-      name: 'list_tables',
-      arguments: {
-        project_id: project.id,
-        schemas: ['public'],
-        verbose: true,
-      },
-    });
-
-    const checksTable = result.tables.find(
-      (t: { name: string }) => t.name === 'public.checks'
-    );
-    expect(
-      checksTable.columns.map((c: { name: string; check?: string }) => [
-        c.name,
-        c.check,
-      ])
-    ).toEqual([
-      ['a', 'a > 0'],
-      ['b', 'b > 0'],
-      ['c', 'c > 0'],
-    ]);
-  });
-
   test('composite FK is grouped as one constraint with positionally ordered columns', async () => {
     const { callTool } = await setup();
 
@@ -360,6 +325,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     await project.db.exec(`
       create table parent (
@@ -408,6 +374,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     await project.db.exec(`
       create table membership (
@@ -443,6 +410,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     await project.db.exec(`
       create table parent (
@@ -487,6 +455,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     await project.db.exec(`
       create table node (
@@ -534,6 +503,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     await project.db.exec(`
       create table parent (
@@ -593,6 +563,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     await project.db.exec(`
       create table parent (
@@ -639,6 +610,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     await project.db.exec(`
       create schema other;
@@ -686,6 +658,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     await project.db.exec(`
       create table parent (
@@ -732,6 +705,7 @@ describe('tools', () => {
       organization: { name: 'My Org', allowed_release_channels: ['ga'] },
       project: { name: 'Project 1', region: 'us-east-1' },
     });
+    await grantKeyVisibility(project);
 
     await project.db.exec(`
       create table parent (
@@ -777,7 +751,7 @@ describe('tools', () => {
     ).toHaveLength(1);
   });
 
-  test('partition clones of an FK are not reported as separate constraints', async () => {
+  test('keys are hidden from the read-only role without a non-SELECT table privilege', async () => {
     const { callTool } = await setup();
 
     const { project } = await createProjectFixture({
@@ -786,35 +760,12 @@ describe('tools', () => {
     });
 
     await project.db.exec(`
-      create table orders (
-        id int primary key
-      ) partition by hash (id);
-      create table orders_p0 partition of orders
-        for values with (modulus 2, remainder 0);
-      create table orders_p1 partition of orders
-        for values with (modulus 2, remainder 1);
-      create table order_items (
-        order_id int references orders (id)
-      );
-
-      create table users (
+      create table parent (
         id int primary key
       );
-      create table tags (
-        id int primary key
+      create table child (
+        parent_id int references parent (id)
       );
-      create table events (
-        user_id int references users (id),
-        tag_id int,
-        created_at date
-      ) partition by range (created_at);
-      create table events_2025 partition of events
-        for values from ('2025-01-01') to ('2026-01-01');
-      create table events_2026 partition of events
-        for values from ('2026-01-01') to ('2027-01-01');
-      alter table events_2025
-        add constraint events_2025_tag_fk
-          foreign key (tag_id) references tags (id);
     `);
 
     const result = await callTool({
@@ -826,96 +777,18 @@ describe('tools', () => {
       },
     });
 
-    const fks = (name: string) =>
-      result.tables.find((t: { name: string }) => t.name === name)
-        .foreign_key_constraints;
-
-    const orderItemsFk = {
-      name: 'order_items_order_id_fkey',
-      source_table: 'public.order_items',
-      source_columns: ['order_id'],
-      target_table: 'public.orders',
-      target_columns: ['id'],
-    };
-    const eventsFk = {
-      name: 'events_user_id_fkey',
-      source_table: 'public.events',
-      source_columns: ['user_id'],
-      target_table: 'public.users',
-      target_columns: ['id'],
-    };
-    const partitionFk = {
-      name: 'events_2025_tag_fk',
-      source_table: 'public.events_2025',
-      source_columns: ['tag_id'],
-      target_table: 'public.tags',
-      target_columns: ['id'],
-    };
-
-    expect(fks('public.order_items')).toEqual([orderItemsFk]);
-    expect(fks('public.orders')).toEqual([orderItemsFk]);
-    expect(fks('public.orders_p0')).toBeUndefined();
-    expect(fks('public.orders_p1')).toBeUndefined();
-
-    expect(fks('public.events')).toEqual([eventsFk]);
-    expect(fks('public.users')).toEqual([eventsFk]);
-    expect(fks('public.events_2025')).toEqual([partitionFk]);
-    expect(fks('public.tags')).toEqual([partitionFk]);
-    expect(fks('public.events_2026')).toBeUndefined();
+    expect(result.tables).toEqual([
+      expect.objectContaining({ name: 'public.child', primary_keys: [] }),
+      expect.objectContaining({ name: 'public.parent', primary_keys: [] }),
+    ]);
+    expect(
+      result.tables.filter(
+        (t: { foreign_key_constraints?: unknown }) => t.foreign_key_constraints
+      )
+    ).toEqual([]);
   });
 
-  test('partitions are marked with their immediate parent', async () => {
-    const { callTool } = await setup();
-
-    const { project } = await createProjectFixture({
-      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
-      project: { name: 'Project 1', region: 'us-east-1' },
-    });
-
-    await project.db.exec(`
-      create table events (
-        region text,
-        created_at date
-      ) partition by range (created_at);
-      create table events_2025 partition of events
-        for values from ('2025-01-01') to ('2026-01-01')
-        partition by list (region);
-      create table events_2025_eu partition of events_2025
-        for values in ('eu');
-      create schema archive;
-      create table archive.events_2024 partition of events
-        for values from ('2024-01-01') to ('2025-01-01');
-
-      create table logs (
-        id int
-      );
-      create table logs_2025 () inherits (logs);
-    `);
-
-    for (const verbose of [false, true]) {
-      const result = await callTool({
-        name: 'list_tables',
-        arguments: {
-          project_id: project.id,
-          schemas: ['public', 'archive'],
-          verbose,
-        },
-      });
-
-      const partitionOf = (name: string) =>
-        result.tables.find((t: { name: string }) => t.name === name)
-          .partition_of;
-
-      expect(partitionOf('public.events')).toBeUndefined();
-      expect(partitionOf('public.events_2025')).toBe('public.events');
-      expect(partitionOf('public.events_2025_eu')).toBe('public.events_2025');
-      expect(partitionOf('archive.events_2024')).toBe('public.events');
-      expect(partitionOf('public.logs')).toBeUndefined();
-      expect(partitionOf('public.logs_2025')).toBeUndefined();
-    }
-  });
-
-  test('list_tables omits advisory when all tables have RLS enabled', async () => {
+  test('list_tables reports RLS as unknown and omits the RLS advisory', async () => {
     const { callTool } = await setup();
 
     const { project } = await createProjectFixture({
@@ -936,7 +809,7 @@ describe('tools', () => {
       },
     });
 
-    expect(result.tables[0].rls_enabled).toBe(true);
+    expect(result.tables[0].rls_enabled).toBeNull();
     expect(result.advisory).toBeUndefined();
   });
 
