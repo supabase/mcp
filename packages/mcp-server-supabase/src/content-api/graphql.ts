@@ -201,10 +201,9 @@ export class GraphQLClient {
 
       // An error with a `path` happened while executing a field, so it is a
       // Content API fault. Only errors with no `path` reflect the query itself.
-      if (data.errors.some((err) => err.path)) {
-        throw new Error(message);
-      }
-      throw new ToolCallerError(message);
+      throw data.errors.some((err) => err.path)
+        ? new Error(message)
+        : new ToolCallerError(message);
     }
 
     if (!data.data) {

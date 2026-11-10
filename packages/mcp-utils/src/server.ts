@@ -579,18 +579,17 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
       try {
         const tools = await getTools(ctx);
         const rawArgs = request.params.arguments ?? {};
-        const tool = toolName in tools ? tools[toolName] : undefined;
+        const tool = tools[toolName];
 
         // The client still sees the original error; the hook gets a caller error.
         if (!tool) {
-          const error = new Error('tool not found');
           reportToolCall({
             name: toolName,
             arguments: rawArgs,
             success: false,
-            error: new ToolCallerError(error.message),
+            error: new ToolCallerError('tool not found'),
           });
-          throw error;
+          throw new Error('tool not found');
         }
 
         const parsed = tool.parameters.strict().safeParse(rawArgs);
