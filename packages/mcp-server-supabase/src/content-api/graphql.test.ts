@@ -129,89 +129,69 @@ describe('graphql client', () => {
     expect(isToolCallerError(error)).toBe(false);
   });
 
-  it('reports GraphQL errors the Content API returns for a query as caller errors', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      Response.json({
-        data: null,
-        errors: [
-          {
-            message: 'Cannot query field "nope" on type "Query".',
-            locations: [{ line: 1, column: 3 }],
-          },
-        ],
-      })
-    );
-    const graphqlClient = new GraphQLClient({
-      url: 'https://content.example.com/graphql',
-    });
-
-    const error = await graphqlClient
-      .query({ query: '{ nope }' })
-      .catch((error: unknown) => error);
-
-    expect(error).toMatchObject({
-      message:
-        'Supabase Content API GraphQL error: Cannot query field "nope" on type "Query". (line 1, column 3)',
-    });
-    expect(isToolCallerError(error)).toBe(true);
-  });
-
-  it('keeps located GraphQL execution errors from the Content API as server faults', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      Response.json({
-        data: null,
-        errors: [
-          {
-            message: 'Internal Server Error',
-            locations: [{ line: 1, column: 3 }],
-            path: ['searchDocs'],
-          },
-        ],
-      })
-    );
-    const graphqlClient = new GraphQLClient({
-      url: 'https://content.example.com/graphql',
-    });
-
-    const error = await graphqlClient
-      .query({ query: '{ searchDocs(query: "auth") { nodes { title } } }' })
-      .catch((error: unknown) => error);
-
-    expect(error).toMatchObject({
-      message:
-        'Supabase Content API GraphQL error: Internal Server Error (line 1, column 3)',
-    });
-    expect(isToolCallerError(error)).toBe(false);
-  });
-
   it.each([
     [
-      {
-        message: 'Cannot query field "nope" on type "RootQueryType".',
-        locations: [{ line: 1, column: 3 }],
-      },
+      [
+        {
+          message: 'Cannot query field "nope" on type "RootQueryType".',
+          locations: [{ line: 1, column: 3 }],
+        },
+      ],
       'Supabase Content API GraphQL error: Cannot query field "nope" on type "RootQueryType". (line 1, column 3)',
+      true,
     ],
     [
-      {
-        message:
-          'GET requests must specify an operation name or send only a single operation',
-      },
+      [
+        {
+          message:
+            'GET requests must specify an operation name or send only a single operation',
+        },
+      ],
       'Supabase Content API GraphQL error: GET requests must specify an operation name or send only a single operation',
+      true,
+    ],
+    [
+      [
+        {
+          message: 'Internal Server Error',
+          locations: [{ line: 1, column: 3 }],
+          path: ['searchDocs'],
+        },
+      ],
+      'Supabase Content API GraphQL error: Internal Server Error (line 1, column 3)',
+      false,
+    ],
+    [
+      [
+        {
+          message: 'Cannot query field "nope" on type "RootQueryType".',
+          locations: [{ line: 1, column: 3 }],
+        },
+        {
+          message: 'Internal Server Error',
+          locations: [{ line: 2, column: 3 }],
+          path: ['searchDocs'],
+        },
+      ],
+      'Supabase Content API GraphQL error: Cannot query field "nope" on type "RootQueryType". (line 1, column 3), Internal Server Error (line 2, column 3)',
+      false,
     ],
   ])(
-    'reports the Content API GraphQL error message: %j',
-    async (graphqlError, message) => {
+    'reports the Content API GraphQL errors %j',
+    async (graphqlErrors, message, callerError) => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        Response.json({ errors: [graphqlError] })
+        Response.json({ errors: graphqlErrors })
       );
       const graphqlClient = new GraphQLClient({
         url: 'https://content.example.com/graphql',
       });
 
-      await expect(
-        graphqlClient.query({ query: '{ getHelloWorld }' })
-      ).rejects.toMatchObject({ message });
+      const error = await graphqlClient
+        .query({ query: '{ getHelloWorld }' })
+        .catch((error: unknown) => error);
+
+      expect(error).toMatchObject({ message });
+      expect(isToolCallerError(error)).toBe(callerError);
     }
   );
 });
