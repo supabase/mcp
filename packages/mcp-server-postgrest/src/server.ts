@@ -56,8 +56,12 @@ export function createPostgrestMcpServer(options: PostgrestMcpServerOptions) {
             headers: getHeaders(),
           });
 
-          const result = await response.json();
-          return jsonResourceResponse(uri, result);
+          const text = await response.text();
+          if (!response.ok) {
+            throw new Error(`PostgREST ${response.status}: ${text}`);
+          }
+
+          return jsonResourceResponse(uri, JSON.parse(text));
         },
       }),
     ]),
@@ -93,7 +97,12 @@ export function createPostgrestMcpServer(options: PostgrestMcpServerOptions) {
             body: body ? JSON.stringify(body) : undefined,
           });
 
-          return { result: await response.json() };
+          const text = await response.text();
+          if (!response.ok) {
+            throw new Error(`PostgREST ${response.status}: ${text}`);
+          }
+
+          return { result: text ? JSON.parse(text) : null };
         },
       }),
       sqlToRest: tool({
