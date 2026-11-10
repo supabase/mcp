@@ -213,6 +213,36 @@ export type ExtensionCapabilities = NonNullable<
   ServerCapabilities['extensions']
 >;
 
+/**
+ * A bundle of tools, resources and capability declarations that a package can
+ * contribute to a server without depending on that server's implementation.
+ * The host server decides how (and whether) to merge it. Tools take the same
+ * shape as `McpServerOptions.tools`.
+ */
+export type ServerExtension<Fact = never> = {
+  tools?:
+    | Record<string, Tool<z.ZodObject<any>, z.ZodObject<any>, Fact>>
+    | ((
+        ctx?: ServerContext
+      ) =>
+        | Record<string, Tool<z.ZodObject<any>, z.ZodObject<any>, Fact>>
+        | Promise<
+            Record<string, Tool<z.ZodObject<any>, z.ZodObject<any>, Fact>>
+          >);
+  resources?: (Resource<string, unknown> | ResourceTemplate<string, unknown>)[];
+  /** `capabilities.extensions` entries to declare, keyed by extension ID. */
+  extensions?: ExtensionCapabilities;
+};
+
+/**
+ * Helper function to define a server extension while preserving type information.
+ */
+export function serverExtension<Fact = never>(
+  extension: ServerExtension<Fact>
+): ServerExtension<Fact> {
+  return extension;
+}
+
 export type InitData = {
   clientInfo: Implementation;
   clientCapabilities: ClientCapabilities;

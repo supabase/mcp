@@ -41,7 +41,7 @@ Example client config:
 }
 ```
 
-The dev server supports the same [query params as the hosted endpoint](https://supabase.com/docs/guides/ai-tools/mcp#configuration-options). Set `project_ref`, `read_only`, and `features` in the HTTP URL, not through stdio CLI flags. The access token comes from the client's `Authorization` header on each request.
+The dev server supports the same [query params as the hosted endpoint](https://supabase.com/docs/guides/ai-tools/mcp#configuration-options). Set `project_ref`, `read_only`, and `features` in the HTTP URL, not through stdio CLI flags. Experimental MCP Apps support is enabled with `experimental_apps=true` (or `--experimental-apps` over stdio). It doesn't add any tools yet. The access token comes from the client's `Authorization` header on each request.
 
 Secret creation is configured by default over HTTP, subject to the `functions` feature, read-only mode, and client and platform support. The production API remains the default and uses `https://supabase.com/dashboard/mcp/secrets?ref={ref}&name={name}`. Selecting `--api-url https://api.supabase.green` uses `https://supabase.green/dashboard/mcp/secrets?ref={ref}&name={name}` without an override.
 

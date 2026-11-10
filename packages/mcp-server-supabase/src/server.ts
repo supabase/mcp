@@ -7,6 +7,10 @@ import {
 } from '@modelcontextprotocol/server';
 import {
   createMcpServer,
+  type ExtensionCapabilities,
+  type Resource,
+  type ResourceTemplate,
+  type ServerExtension,
   type Tool,
   type ToolCallCallback,
 } from '@supabase/mcp-utils';
@@ -40,7 +44,7 @@ import {
   getSecretTools,
 } from './tools/secret-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
-import { writeToolSet } from './tools/tool-schemas.js';
+import { supabaseMcpToolSchemas, writeToolSet } from './tools/tool-schemas.js';
 import {
   CURRENT_ELICITATION_TOOLS,
   type ElicitationToolName,
@@ -56,6 +60,61 @@ function getRequestClientInfo(ctx: ServerContext | undefined) {
   if (!envelope || !(CLIENT_INFO_META_KEY in envelope)) return undefined;
   const client = envelope[CLIENT_INFO_META_KEY];
   return isSpecType.Implementation(client) ? client : undefined;
+}
+
+/** Environment passed to each extension factory when a server is created. */
+export type SupabaseExtensionEnv = {
+  platform: SupabasePlatform;
+  projectId?: string;
+  readOnly: boolean;
+};
+
+/**
+ * Builds a `ServerExtension` for a server. Invoked once per server creation
+ * (per request on stateless transports).
+ */
+export type SupabaseExtensionFactory = (
+  env: SupabaseExtensionEnv
+) => ServerExtension<ObservationFact>;
+
+type ToolMap = Record<
+  string,
+  Tool<z.ZodObject<any>, z.ZodObject<any>, ObservationFact>
+>;
+
+/**
+ * Adds extension tools to the core tool map, which must already be fully
+ * assembled. Extension tools bypass feature gating, but follow read-only mode.
+ */
+function mergeExtensionTools(
+  tools: ToolMap,
+  extensionTools: ToolMap,
+  readOnly: boolean
+) {
+  for (const [name, tool] of Object.entries(extensionTools)) {
+    if (name in tools || name in supabaseMcpToolSchemas) {
+      throw new Error(
+        `Extension tool "${name}" conflicts with a core tool of the same name`
+      );
+    }
+    tools[name] =
+      readOnly && tool.annotations?.readOnlyHint === false
+        ? { ...tool, hidden: true }
+        : tool;
+  }
+}
+
+function resolveExtensionCapabilities(extensions: ServerExtension<any>[]) {
+  const merged: ExtensionCapabilities = {};
+  for (const extension of extensions) {
+    for (const [id, value] of Object.entries(extension.extensions ?? {})) {
+      if (id in merged) {
+        throw new Error(`Multiple extensions declare the capability "${id}"`);
+      }
+      merged[id] = value;
+    }
+  }
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
 export type SupabaseMcpServerOptions = {
@@ -104,6 +163,16 @@ export type SupabaseMcpServerOptions = {
 
   /** Optional per-request observer; see ObservedMethod for covered handlers. */
   observer?: RequestObserver;
+
+  /**
+   * Experimental extension factories (e.g. MCP Apps). Their tools are merged
+   * after the core tools, are not gated by `features`, and are hidden in
+   * read-only mode when annotated `readOnlyHint: false`. Hidden tools stay
+   * callable (as with core tools), so write tools must also enforce
+   * `env.readOnly` themselves. With none, the server's tools and capabilities
+   * are unchanged.
+   */
+  extensions?: SupabaseExtensionFactory[];
 
   /**
    * Signed multi-round-trip elicitation config. `requestState` is the shared
@@ -232,6 +301,22 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       : undefined;
   const expiredRequestState = new ExpiredRequestState(ttlSeconds);
 
+  const extensions = (options.extensions ?? []).map((factory) =>
+    factory({ platform, projectId, readOnly: readOnly ?? false })
+  );
+  const extensionCapabilities = resolveExtensionCapabilities(extensions);
+  const extensionResources: (
+    | Resource<string, unknown>
+    | ResourceTemplate<string, unknown>
+  )[] = extensions.flatMap((extension) => extension.resources ?? []);
+  // Fail at creation for static tools; function-form tools are checked per request.
+  const staticExtensionTools: ToolMap = {};
+  for (const extension of extensions) {
+    if (extension.tools && typeof extension.tools !== 'function') {
+      mergeExtensionTools(staticExtensionTools, extension.tools, false);
+    }
+  }
+
   let handshakeClientInfo: Implementation | undefined;
 
   const server = createMcpServer<ObservedTool, ObservationFact>({
@@ -255,6 +340,9 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     },
     onToolCall,
     observer,
+    // Only advertise resources/extensions when an extension provides them.
+    ...(extensionResources.length > 0 && { resources: extensionResources }),
+    ...(extensionCapabilities && { extensions: extensionCapabilities }),
     classifyTool: (name) =>
       (CURRENT_ELICITATION_TOOLS as readonly string[]).includes(name)
         ? (name as ElicitationToolName)
@@ -483,6 +571,16 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             : { ...tool, hidden: true };
         }
       }
+
+      const extensionTools: ToolMap = {};
+      for (const extension of extensions) {
+        const resolved =
+          typeof extension.tools === 'function'
+            ? await extension.tools(ctx)
+            : extension.tools;
+        if (resolved) mergeExtensionTools(extensionTools, resolved, false);
+      }
+      mergeExtensionTools(tools, extensionTools, readOnly ?? false);
 
       return tools;
     },

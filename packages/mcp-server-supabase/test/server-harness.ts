@@ -37,6 +37,7 @@ type SetupOptions = {
   observer?: SupabaseMcpServerOptions['observer'];
   onToolCall?: SupabaseMcpServerOptions['onToolCall'];
   clientCapabilities?: ClientCapabilities;
+  extensions?: SupabaseMcpServerOptions['extensions'];
 };
 
 type ModernSetupOptions = {
@@ -48,6 +49,7 @@ type ModernSetupOptions = {
   clientCapabilities?: ClientCapabilities;
   readOnly?: boolean;
   projectId?: string;
+  extensions?: SupabaseMcpServerOptions['extensions'];
   secretCollection?: NonNullable<
     NonNullable<SupabaseMcpServerOptions['elicitation']>['secretCollection']
   >;
@@ -151,6 +153,7 @@ export function createServerHarness() {
       clientInfo: options.clientInfo,
       observer: options.observer,
       onToolCall: options.onToolCall,
+      extensions: options.extensions,
     }));
 
     await server.connect(serverTransport);
@@ -222,6 +225,7 @@ export function createServerHarness() {
       features,
       observer: options.observer,
       onToolCall: options.onToolCall,
+      extensions: options.extensions,
       elicitation: secretCollection
         ? { ...elicitation, secretCollection }
         : elicitation,

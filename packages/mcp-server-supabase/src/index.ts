@@ -19,8 +19,14 @@ export {
 export type { FeedbackOperations, SupabasePlatform } from './platform/index.js';
 export {
   createSupabaseMcpServer,
+  type SupabaseExtensionEnv,
+  type SupabaseExtensionFactory,
   type SupabaseMcpServerOptions,
 } from './server.js';
+export {
+  loadExperimentalExtensions,
+  type ExperimentalExtensionOptions,
+} from './experimental.js';
 export { createSupabaseMcpHandler } from './transports/http.js';
 export {
   CURRENT_ELICITATION_TOOLS,

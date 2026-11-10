@@ -4,6 +4,7 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio';
 
 import packageJson from '../package.json' with { type: 'json' };
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
+import { loadExperimentalExtensions } from './experimental.js';
 import { createSupabaseMcpServer } from './server.js';
 import { startLocalHttpEntry } from './transports/local-http-entry.js';
 import { parseList } from './transports/util.js';
@@ -24,6 +25,7 @@ async function main() {
       ['features']: cliFeatures,
       ['http']: http,
       ['port']: cliPort,
+      ['experimental-apps']: experimentalApps,
     },
   } = parseArgs({
     options: {
@@ -60,6 +62,10 @@ async function main() {
         type: 'string',
         default: '3111',
       },
+      ['experimental-apps']: {
+        type: 'boolean',
+        default: false,
+      },
     },
   });
 
@@ -72,6 +78,12 @@ async function main() {
     console.error('--secret-url-template requires --http.');
     process.exitCode = 1;
     return;
+  }
+
+  if (http && experimentalApps) {
+    console.error(
+      'Warning: --experimental-apps is ignored with --http. Use the ?experimental_apps=true query parameter instead.'
+    );
   }
 
   const features = cliFeatures ? parseList(cliFeatures) : undefined;
@@ -113,6 +125,10 @@ async function main() {
     parseFeatureGroups(platform, features);
   }
 
+  const extensions = await loadExperimentalExtensions({
+    apps: experimentalApps,
+  });
+
   // `serveStdio` reports transport startup and out-of-band wire errors only
   // through `onerror`, and swallows them otherwise, so this keeps the stderr
   // output the previous awaited `server.connect()` got from `main().catch`.
@@ -125,6 +141,7 @@ async function main() {
         features,
         contentApiUrl,
         dashboardUrl: dashboardUrlForApiUrl(apiUrl),
+        extensions,
       }),
     { onerror: console.error }
   );

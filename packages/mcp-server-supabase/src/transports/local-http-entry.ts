@@ -16,6 +16,7 @@ import {
 } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 
+import { loadExperimentalExtensions } from '../experimental.js';
 import { createSupabaseApiPlatform } from '../platform/api-platform.js';
 import { createSupabaseMcpServer } from '../server.js';
 import { assertValidConnectUrlTemplate } from '../tools/secret-tools.js';
@@ -35,6 +36,8 @@ export type LocalHttpEntryOptions = {
 const querySchema = z.object({
   project_ref: z.string().optional(),
   read_only: z.stringbool().default(false),
+  // Experimental: enables MCP Apps extensions.
+  experimental_apps: z.stringbool().default(false),
   features: z
     .string()
     .transform((value) => parseList(value))
@@ -165,6 +168,7 @@ export async function startLocalHttpEntry({
           const {
             project_ref: projectId,
             read_only: readOnly,
+            experimental_apps: experimentalApps,
             features,
             skip_elicitations: skipElicitations,
           } = query.data;
@@ -180,6 +184,9 @@ export async function startLocalHttpEntry({
 
           const platform = createSupabaseApiPlatform({ accessToken, apiUrl });
           if (features) parseFeatureGroups(platform, features);
+          const extensions = await loadExperimentalExtensions({
+            apps: experimentalApps,
+          });
           const handler = createMcpHandler(
             () =>
               createSupabaseMcpServer({
@@ -189,6 +196,7 @@ export async function startLocalHttpEntry({
                 features,
                 contentApiUrl,
                 dashboardUrl,
+                extensions,
                 elicitation: {
                   requestState: {
                     key: requestStateKey,
