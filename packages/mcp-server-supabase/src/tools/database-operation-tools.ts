@@ -119,7 +119,7 @@ const listTablesInputSchema = z.object({
   schemas: z
     .array(z.string())
     .describe(
-      'List of schemas to include. Defaults to ["public"]. Pass [] to include all non-system schemas.'
+      'List of schemas to include. Defaults to ["public"]. Pass [] to include every schema except the Postgres system schemas.'
     )
     .default(['public']),
   verbose: z
