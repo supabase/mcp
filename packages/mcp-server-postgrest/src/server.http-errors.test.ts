@@ -6,7 +6,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createPostgrestMcpServer } from './server.js';
 
-type StubResponse = { status: number; contentType?: string; body: string };
+type StubResponse = {
+  status: number;
+  statusMessage?: string;
+  contentType?: string;
+  body: string;
+};
 
 let stub: Server;
 let stubUrl: string;
@@ -18,7 +23,7 @@ beforeAll(async () => {
       status: 404,
       body: '',
     };
-    res.writeHead(stubResponse.status, {
+    res.writeHead(stubResponse.status, stubResponse.statusMessage ?? '', {
       'content-type': stubResponse.contentType ?? 'application/json',
     });
     res.end(stubResponse.body);
@@ -36,7 +41,19 @@ async function setup() {
   const serverTransport = new StreamTransport();
 
   clientTransport.readable.pipeTo(serverTransport.writable);
-  serverTransport.readable.pipeTo(clientTransport.writable);
+  // Record what the server sends, since the client discards resource error
+  // payloads while validating the result.
+  const serverMessages: unknown[] = [];
+  serverTransport.readable
+    .pipeThrough(
+      new TransformStream({
+        transform(message, controller) {
+          serverMessages.push(message);
+          controller.enqueue(message);
+        },
+      })
+    )
+    .pipeTo(clientTransport.writable);
 
   const client = new Client(
     { name: 'TestClient', version: '0.1.0' },
@@ -51,7 +68,16 @@ async function setup() {
   await server.connect(serverTransport);
   await client.connect(clientTransport);
 
-  return { client };
+  return { client, serverMessages };
+}
+
+async function readSpecError(client: Client, serverMessages: unknown[]) {
+  const { resources } = await client.listResources();
+  const spec = resources.find((resource) => resource.name === 'OpenAPI spec');
+  expect(spec).toBeDefined();
+  // The client rejects the server's error payload as an invalid result, so the
+  // PostgREST message is only visible in the raw server response.
+  await expect(client.readResource({ uri: spec!.uri })).rejects.toThrow();
 }
 
 describe('postgrestRequest HTTP errors', () => {
@@ -122,5 +148,64 @@ describe('postgrestRequest HTTP errors', () => {
     expect(result.content).toEqual([
       { type: 'text', text: JSON.stringify({ result: null }) },
     ]);
+  });
+
+  test('200 response that is not JSON reports status and content type', async () => {
+    responses.set('/todos', {
+      status: 200,
+      contentType: 'text/html',
+      body: '<html>Not the API</html>',
+    });
+    const { client } = await setup();
+
+    const result = await client.callTool({
+      name: 'postgrestRequest',
+      arguments: { method: 'GET', path: '/todos' },
+    });
+
+    expect(result.isError).toBe(true);
+    const message = JSON.stringify(result.content);
+    expect(message).toContain('200');
+    expect(message).toContain('text/html');
+  });
+
+  test('error response with an empty body still names the status', async () => {
+    responses.set('/todos', { status: 404, body: '' });
+    const { client } = await setup();
+
+    const result = await client.callTool({
+      name: 'postgrestRequest',
+      arguments: { method: 'GET', path: '/todos' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain('PostgREST 404');
+    expect(JSON.stringify(result.content)).not.toContain('PostgREST 404:');
+  });
+});
+
+describe('/spec resource HTTP errors', () => {
+  test('error response rejects with its status', async () => {
+    responses.set('/', { status: 404, body: '' });
+    const { client, serverMessages } = await setup();
+
+    await readSpecError(client, serverMessages);
+
+    expect(JSON.stringify(serverMessages.at(-1))).toContain('PostgREST 404');
+  });
+
+  test('200 response that is not JSON rejects with status and content type', async () => {
+    responses.set('/', {
+      status: 200,
+      contentType: 'text/html',
+      body: '<html>Not the API</html>',
+    });
+    const { client, serverMessages } = await setup();
+
+    await readSpecError(client, serverMessages);
+
+    const message = JSON.stringify(serverMessages.at(-1));
+    expect(message).toContain('200');
+    expect(message).toContain('text/html');
   });
 });

@@ -17,6 +17,37 @@ export type PostgrestMcpServerOptions = {
 };
 
 /**
+ * Reads a PostgREST response body as JSON (`null` when a 2xx body is empty),
+ * throwing an error that names the status for failures and non-JSON bodies.
+ */
+async function readJsonBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+
+  if (!response.ok) {
+    const detail = text || response.statusText;
+    throw new Error(
+      detail
+        ? `PostgREST ${response.status}: ${detail}`
+        : `PostgREST ${response.status}`
+    );
+  }
+
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    const contentType =
+      response.headers.get('content-type') ?? 'unknown content-type';
+    throw new Error(
+      `PostgREST ${response.status}: expected JSON, got ${contentType}: ${text.slice(0, 200)}`
+    );
+  }
+}
+
+/**
  * Creates an MCP server for interacting with a PostgREST API.
  */
 export function createPostgrestMcpServer(options: PostgrestMcpServerOptions) {
@@ -56,12 +87,7 @@ export function createPostgrestMcpServer(options: PostgrestMcpServerOptions) {
             headers: getHeaders(),
           });
 
-          const text = await response.text();
-          if (!response.ok) {
-            throw new Error(`PostgREST ${response.status}: ${text}`);
-          }
-
-          return jsonResourceResponse(uri, JSON.parse(text));
+          return jsonResourceResponse(uri, await readJsonBody(response));
         },
       }),
     ]),
@@ -97,12 +123,7 @@ export function createPostgrestMcpServer(options: PostgrestMcpServerOptions) {
             body: body ? JSON.stringify(body) : undefined,
           });
 
-          const text = await response.text();
-          if (!response.ok) {
-            throw new Error(`PostgREST ${response.status}: ${text}`);
-          }
-
-          return { result: text ? JSON.parse(text) : null };
+          return { result: await readJsonBody(response) };
         },
       }),
       sqlToRest: tool({
