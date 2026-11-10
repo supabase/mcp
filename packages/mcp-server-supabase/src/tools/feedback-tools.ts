@@ -11,9 +11,17 @@ type FeedbackToolsOptions = {
   readOnly?: boolean;
 };
 
+// OpenAI strict mode sends null for omitted fields:
+// https://platform.openai.com/docs/guides/structured-outputs#all-fields-must-be-required
+const feedbackProjectIdSchema = z.string().min(1).nullish();
+
 const submitFeedbackInputSchema = z.object({
-  feedback: z.string().min(1).max(1000),
-  project_id: z.string().optional(),
+  feedback: z
+    .string()
+    .min(1)
+    .max(1000)
+    .describe('The feedback text, up to 1000 characters.'),
+  project_id: feedbackProjectIdSchema,
 });
 
 const submitFeedbackOutputSchema = z.object({
@@ -22,7 +30,7 @@ const submitFeedbackOutputSchema = z.object({
 
 const deleteFeedbackInputSchema = z.object({
   delete_token: z.uuid(),
-  project_id: z.string().optional(),
+  project_id: feedbackProjectIdSchema,
 });
 
 const deleteFeedbackOutputSchema = z.object({
@@ -32,7 +40,7 @@ const deleteFeedbackOutputSchema = z.object({
 export const feedbackToolDefs = {
   submit_feedback: {
     description:
-      "Sends feedback about Supabase tools to the Supabase team. Use it when the user asks, or when you hit a bug or missing capability. Ask the user before sending feedback they didn't request. Never include secrets, personal data, or database contents. Show the user the returned delete token.",
+      "Sends feedback about Supabase tools or documentation to the Supabase team. Use it when the user asks, or when you hit a bug, a missing capability, or a wrong docs page. Ask the user before sending feedback they didn't request. Never include secrets, personal data, or database contents. Keep it to 1000 characters or fewer. Show the user the returned delete token.",
     parameters: submitFeedbackInputSchema,
     outputSchema: submitFeedbackOutputSchema,
     annotations: {
@@ -79,7 +87,7 @@ export function getFeedbackTools({
 
         const { deleteToken } = await feedback.submit({
           feedback: message,
-          projectId: project_id,
+          projectId: project_id ?? undefined,
           clientInfo,
         });
         return { delete_token: deleteToken };
@@ -97,7 +105,7 @@ export function getFeedbackTools({
 
         return feedback.delete({
           deleteToken: delete_token,
-          projectId: project_id,
+          projectId: project_id ?? undefined,
         });
       },
     }),

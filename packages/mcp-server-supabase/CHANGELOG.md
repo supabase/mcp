@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.16.1](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.16.0...mcp-server-supabase-v0.16.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **mcp-server-supabase:** add url to notebook create, get and list outputs ([#526](https://github.com/supabase/mcp/issues/526)) ([5d474fd](https://github.com/supabase/mcp/commit/5d474fd5c0fdf6c45f82dd0af387ac2e7d5e631e))
+* **mcp-server-supabase:** enable notebook tools by default ([#525](https://github.com/supabase/mcp/issues/525)) ([d8bba9e](https://github.com/supabase/mcp/commit/d8bba9ee0b1f4a5647d7eae41a5f411f62385901))
+
+## [0.16.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.15.0...mcp-server-supabase-v0.16.0) (2026-11-05)
+
+
+### Features
+
+* bound run_notebook cost ([#511](https://github.com/supabase/mcp/issues/511)) ([e90d110](https://github.com/supabase/mcp/commit/e90d110b1d5379955c7490d292ed017064aab704))
+* **mcp-server-supabase:** run selected notebook cells ([#514](https://github.com/supabase/mcp/issues/514)) ([8d04248](https://github.com/supabase/mcp/commit/8d04248c9f8264561befe4f867de1219d801b209))
+* **notebooks:** add delete_notebook tool with elicitation confirmation ([#510](https://github.com/supabase/mcp/issues/510)) ([f36f74a](https://github.com/supabase/mcp/commit/f36f74a034ac8507558f14c1b51b4dbfa59354cb))
+* **notebooks:** enable create_notebook and run_notebook tools ([#509](https://github.com/supabase/mcp/issues/509)) ([addc4e5](https://github.com/supabase/mcp/commit/addc4e562c70ba21c4c1a33d2668724ca22f911c))
+
+
+### Bug Fixes
+
+* **feedback:** accept null project_id and surface the feedback length limit ([#521](https://github.com/supabase/mcp/issues/521)) ([994f56c](https://github.com/supabase/mcp/commit/994f56cf149e4982b5f6021bc53d97f4d83c45d5))
+* hint agents to re-copy malformed project refs ([#522](https://github.com/supabase/mcp/issues/522)) ([0c650bf](https://github.com/supabase/mcp/commit/0c650bf2fe5694e69143c45bd906dedd648e97f0))
+* **notebooks:** return caller errors for client-caused notebook refusals ([#512](https://github.com/supabase/mcp/issues/512)) ([5f0d393](https://github.com/supabase/mcp/commit/5f0d393073cbbefbc4ea7122cd1fd058aeb60e5c))
+* **pg-meta:** report partition FKs once and add partition_of to list_tables ([#508](https://github.com/supabase/mcp/issues/508)) ([2c7fa82](https://github.com/supabase/mcp/commit/2c7fa824fc1164dae8dd6c9c2c59828cd8b1cbcd))
+* **pg-meta:** return complete check expressions for NOT VALID and NO INHERIT constraints ([#517](https://github.com/supabase/mcp/issues/517)) ([c54bb40](https://github.com/supabase/mcp/commit/c54bb40014fbdbba8ccbc277aeda57eed08d718b))
+* **sql:** skip destructive confirmation for planner-only EXPLAIN ([#519](https://github.com/supabase/mcp/issues/519)) ([95745e5](https://github.com/supabase/mcp/commit/95745e5324171d1f8b051ad9ab9af3a6a39f7482))
+* tolerate non-URL edge function paths in api platform ([#438](https://github.com/supabase/mcp/issues/438)) ([00d07a4](https://github.com/supabase/mcp/commit/00d07a4e4a4b1a431f424b7be8459972f5802186))
+
 ## [0.15.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.14.0...mcp-server-supabase-v0.15.0) (2026-10-29)
 
 

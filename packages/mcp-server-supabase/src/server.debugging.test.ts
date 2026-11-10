@@ -514,6 +514,29 @@ describe('tools', () => {
     });
   });
 
+  test.each([
+    [404, 'ToolCallerError', 'Project not found'],
+    [429, 'Error', 'Too many requests'],
+    [500, 'Error', 'Internal error'],
+  ])(
+    'get health advisors surfaces a %s as %s',
+    async (status, name, message) => {
+      const { callTool } = await setup();
+      harness.mockServer!.use(
+        http.post(`${API_URL}/v2/projects/:projectId/advisors/run`, () =>
+          HttpResponse.json({ error: { code: 'error', message } }, { status })
+        )
+      );
+
+      await expect(
+        callTool({
+          name: 'get_advisors',
+          arguments: { project_id: 'test-project', type: 'health' },
+        })
+      ).rejects.toMatchObject({ name, message });
+    }
+  );
+
   test('get logs for invalid service type', async () => {
     const { callTool } = await setup();
 

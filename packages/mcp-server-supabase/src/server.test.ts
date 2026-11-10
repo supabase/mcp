@@ -1,4 +1,6 @@
 import {
+  ACCESS_TOKEN,
+  API_URL,
   contentApiMockSchema,
   createOrganization,
   createProject,
@@ -9,6 +11,7 @@ import {
 } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
 import { isToolCallerError } from './errors.js';
+import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { createSupabaseMcpServer, instructions } from './server.js';
@@ -102,7 +105,6 @@ describe('tools', () => {
         'notebooks',
         'feedback',
       ],
-      unreleasedNotebookTools: true,
     });
 
     const { tools } = await client.listTools();
@@ -464,27 +466,9 @@ describe('feature groups', () => {
     ]);
   });
 
-  test('notebooks tools omit unreleased create_notebook and run_notebook', async () => {
-    const { client } = await setup({
-      features: ['notebooks', 'database', 'debugging'],
-    });
-
-    const { tools } = await client.listTools();
-    expect(
-      tools.map((tool) => tool.name).filter((name) => name.includes('notebook'))
-    ).toEqual(['list_notebooks', 'get_notebook']);
-
-    for (const name of ['create_notebook', 'run_notebook']) {
-      const result = await client.callTool({ name, arguments: {} });
-      expect(result).toMatchObject({ isError: true });
-      expect(JSON.stringify(result.content)).toContain('tool not found');
-    }
-  });
-
-  test('notebooks tools include create_notebook and run_notebook when unreleased tools are enabled', async () => {
+  test('notebooks tools', async () => {
     const { client } = await setup({
       features: ['notebooks'],
-      unreleasedNotebookTools: true,
     });
 
     const { tools } = await client.listTools();
@@ -495,19 +479,52 @@ describe('feature groups', () => {
       'list_notebooks',
       'get_notebook',
       'run_notebook',
+      'delete_notebook',
     ]);
   });
 
   test('platforms without notebook creation keep their existing notebook tools', async () => {
     const { client } = await setup({
       features: ['notebooks'],
-      unreleasedNotebookTools: true,
-      platform: { notebooks: { listNotebooks: vi.fn(), getNotebook: vi.fn() } },
+      platform: {
+        notebooks: {
+          listNotebooks: vi.fn(),
+          getNotebook: vi.fn(),
+          deleteNotebook: vi.fn(),
+        },
+      },
     });
     expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
       'list_notebooks',
       'get_notebook',
+      'delete_notebook',
     ]);
+  });
+
+  test('notebook tools are enabled by default when the platform supports them', async () => {
+    const listDefaultToolNames = async (platform?: SupabasePlatform) => {
+      const { client } = await setup({ platform });
+      return (await client.listTools()).tools.map((tool) => tool.name);
+    };
+    const { notebooks: _, ...platformWithoutNotebooks } =
+      createSupabaseApiPlatform({ accessToken: ACCESS_TOKEN, apiUrl: API_URL });
+    const notebookTools = [
+      'create_notebook',
+      'list_notebooks',
+      'get_notebook',
+      'run_notebook',
+      'delete_notebook',
+    ];
+
+    expect(await listDefaultToolNames()).toEqual(
+      expect.arrayContaining(notebookTools)
+    );
+    const toolsWithoutAdapter = await listDefaultToolNames(
+      platformWithoutNotebooks
+    );
+    for (const name of notebookTools) {
+      expect(toolsWithoutAdapter).not.toContain(name);
+    }
   });
 
   test('feedback tools', async () => {
@@ -519,6 +536,78 @@ describe('feature groups', () => {
     const toolNames = tools.map((tool) => tool.name);
 
     expect(toolNames).toEqual(['submit_feedback', 'delete_feedback']);
+  });
+
+  test('submit_feedback advertises the feedback length limit', async () => {
+    const { client } = await setup({ features: ['feedback'] });
+
+    const { tools } = await client.listTools();
+    const submitFeedback = tools.find(({ name }) => name === 'submit_feedback');
+
+    expect(submitFeedback?.description).toContain('1000 characters');
+    expect(submitFeedback?.inputSchema.properties?.feedback).toMatchObject({
+      maxLength: 1000,
+      description: expect.stringContaining('1000 characters'),
+    });
+  });
+
+  test('feedback tools treat a null project_id as omitted', async () => {
+    const feedback = {
+      submit: vi.fn().mockResolvedValue({ deleteToken: 'tok' }),
+      delete: vi.fn().mockResolvedValue({ deleted: true }),
+    };
+    const { callTool } = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+    });
+
+    await expect(
+      callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi', project_id: null },
+      })
+    ).resolves.toEqual({ delete_token: 'tok' });
+    await expect(
+      callTool({
+        name: 'delete_feedback',
+        arguments: {
+          delete_token: '5d6d3b3e-4b2f-4a52-9b77-0f0e6a4f6a11',
+          project_id: null,
+        },
+      })
+    ).resolves.toEqual({ deleted: true });
+    expect(feedback.submit.mock.calls[0]![0].projectId).toBeUndefined();
+    expect(feedback.delete.mock.calls[0]![0].projectId).toBeUndefined();
+  });
+
+  // An empty project_ref is stored but never matches a delete header.
+  test('feedback tools reject an empty project_id', async () => {
+    const feedback = {
+      submit: vi.fn().mockResolvedValue({ deleteToken: 'tok' }),
+      delete: vi.fn().mockResolvedValue({ deleted: true }),
+    };
+    const { callTool } = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+    });
+
+    await expect(
+      callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi', project_id: '' },
+      })
+    ).rejects.toThrow('project_id');
+    await expect(
+      callTool({
+        name: 'delete_feedback',
+        arguments: {
+          delete_token: '5d6d3b3e-4b2f-4a52-9b77-0f0e6a4f6a11',
+          project_id: '',
+        },
+      })
+    ).rejects.toThrow('project_id');
+    expect(feedback.submit).not.toHaveBeenCalled();
+    expect(feedback.delete).not.toHaveBeenCalled();
   });
 
   test('submit_feedback passes the request client info', async () => {

@@ -183,4 +183,35 @@ describe('graphql client', () => {
     });
     expect(isToolCallerError(error)).toBe(false);
   });
+
+  it.each([
+    [
+      {
+        message: 'Cannot query field "nope" on type "RootQueryType".',
+        locations: [{ line: 1, column: 3 }],
+      },
+      'Supabase Content API GraphQL error: Cannot query field "nope" on type "RootQueryType". (line 1, column 3)',
+    ],
+    [
+      {
+        message:
+          'GET requests must specify an operation name or send only a single operation',
+      },
+      'Supabase Content API GraphQL error: GET requests must specify an operation name or send only a single operation',
+    ],
+  ])(
+    'reports the Content API GraphQL error message: %j',
+    async (graphqlError, message) => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        Response.json({ errors: [graphqlError] })
+      );
+      const graphqlClient = new GraphQLClient({
+        url: 'https://content.example.com/graphql',
+      });
+
+      await expect(
+        graphqlClient.query({ query: '{ getHelloWorld }' })
+      ).rejects.toMatchObject({ message });
+    }
+  );
 });

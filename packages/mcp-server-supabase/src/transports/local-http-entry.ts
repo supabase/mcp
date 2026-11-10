@@ -28,8 +28,6 @@ export type LocalHttpEntryOptions = {
   apiUrl?: string;
   contentApiUrl?: string;
   secretUrlTemplate?: string;
-  /** See `SupabaseMcpServerOptions.unreleasedNotebookTools`. */
-  unreleasedNotebookTools?: boolean;
   log?: (line: string) => void;
 };
 
@@ -101,7 +99,6 @@ export async function startLocalHttpEntry({
   apiUrl,
   contentApiUrl,
   secretUrlTemplate,
-  unreleasedNotebookTools,
   log = (line) =>
     console.error(`[${new Date().toLocaleTimeString('en-GB')}] ${line}`),
 }: LocalHttpEntryOptions) {
@@ -191,12 +188,10 @@ export async function startLocalHttpEntry({
                 readOnly,
                 features,
                 contentApiUrl,
-                unreleasedNotebookTools,
                 dashboardUrl,
                 elicitation: {
                   requestState: {
                     key: requestStateKey,
-                    ttlSeconds: 120,
                     // One process can serve several PATs, so the principal is the token's hash.
                     principal: createHash('sha256')
                       .update(accessToken)
@@ -206,8 +201,12 @@ export async function startLocalHttpEntry({
                     enabledTools: CURRENT_ELICITATION_TOOLS.filter(
                       (tool) => !skipElicitations?.includes(tool)
                     ),
+                    ttlSeconds: 600,
                   },
-                  secretCollection,
+                  secretCollection: secretCollection && {
+                    ...secretCollection,
+                    ttlSeconds: 120,
+                  },
                 },
               }),
             { legacy: 'stateless', onerror: console.error }
