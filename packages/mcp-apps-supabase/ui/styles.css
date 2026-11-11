@@ -1,0 +1,231 @@
+/*
+ * Chart palette adapted from Studio (Charts.constants.ts, charts.css). Host
+ * style variables (--color-*) win when the host provides them.
+ */
+:root {
+  color-scheme: light;
+  --fg: var(--color-text-primary, #171717);
+  --fg-muted: var(--color-text-secondary, #6f6f6f);
+  --bg: var(--color-background-primary, transparent);
+  --surface: var(--color-background-secondary, #f6f6f6);
+  --border: var(--color-border-primary, #e2e2e2);
+  --grid: var(--color-border-secondary, #ececec);
+  --chart-requests: #3ecf8e;
+  --chart-4xx: #da760b;
+  --chart-5xx: #e5484d;
+  --chart-avg: #3ecf8e;
+  --chart-p95: #0063e8;
+  --font: var(
+    --font-sans,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif
+  );
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --fg: var(--color-text-primary, #ededed);
+  --fg-muted: var(--color-text-secondary, #a0a0a0);
+  --surface: var(--color-background-secondary, #1c1c1c);
+  --border: var(--color-border-primary, #2e2e2e);
+  --grid: var(--color-border-secondary, #2a2a2a);
+  --chart-requests: #3ecf8e;
+  --chart-4xx: #edc35e;
+  --chart-5xx: #ff6369;
+  --chart-avg: #3ecf8e;
+  --chart-p95: #65bcd9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.stat-label {
+  color: var(--fg-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.range {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.range button {
+  padding: 4px 10px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.range button:last-child {
+  border-right: 0;
+}
+
+.range button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.range button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.chart {
+  height: 160px;
+}
+
+.legend {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 4px;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-radius: 2px;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 48px;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+.error {
+  color: var(--chart-5xx);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-variant-numeric: tabular-nums;
+}
+
+th {
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: left;
+}
+
+th,
+td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--grid);
+}
+
+td.num,
+th.num {
+  width: 72px;
+  text-align: right;
+}
+
+td.route {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.method {
+  margin-right: 6px;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.tooltip {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--color-background-primary, var(--surface));
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.banner {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}

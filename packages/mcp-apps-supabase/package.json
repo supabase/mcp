@@ -1,0 +1,62 @@
+{
+  "name": "@supabase/mcp-apps-supabase",
+  "version": "0.1.0",
+  "description": "Experimental MCP Apps (interactive UIs) for the Supabase MCP server",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supabase/mcp.git"
+  },
+  "type": "module",
+  "main": "dist/index.cjs",
+  "types": "dist/index.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "build": "pnpm build:ui && pnpm check:size && tsup --clean",
+    "build:ui": "vite build",
+    "check:size": "node scripts/check-size.mjs",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p ui/tsconfig.json",
+    "prebuild": "pnpm typecheck",
+    "test": "vitest",
+    "test:unit": "vitest",
+    "test:coverage": "vitest --coverage",
+    "prepublishOnly": "pnpm build"
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.cjs"
+    }
+  },
+  "dependencies": {
+    "@supabase/mcp-utils": "workspace:^"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/server": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "catalog:",
+    "@modelcontextprotocol/ext-apps": "2.0.4",
+    "@modelcontextprotocol/server": "catalog:",
+    "@total-typescript/tsconfig": "^1.0.4",
+    "@types/node": "^22.8.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "recharts": "^3.10.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3",
+    "vite": "^8.3.5",
+    "vite-plugin-singlefile": "^2.3.4",
+    "vitest": "^2.1.9",
+    "zod": "catalog:"
+  }
+}

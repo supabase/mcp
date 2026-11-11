@@ -9,6 +9,7 @@
     "ignoreUnknown": false,
     "ignore": [
       "**/dist",
+      "**/dist-ui",
       ".release-please-manifest.json",
       "**/package.json",
       "**/server.json",

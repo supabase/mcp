@@ -15,8 +15,29 @@ export async function loadExperimentalExtensions(
   const extensions: SupabaseExtensionFactory[] = [];
 
   if (opts.apps) {
-    // Step 4 will dynamically `import('@supabase/mcp-apps-supabase')` here and
-    // push its factory. Until then the flag is accepted but adds nothing.
+    // Dynamic import so default runs never load the apps package (or its
+    // embedded UI bundle).
+    const { apiGatewayReportExtension } = await import(
+      '@supabase/mcp-apps-supabase'
+    );
+
+    extensions.push(({ platform, projectId }) => {
+      const debugging = platform.debugging;
+      // The report's queries are ClickHouse SQL; `logsDialect` defaults to
+      // ClickHouse when unset. Otherwise contribute nothing.
+      if (
+        !debugging?.queryLogs ||
+        (debugging.logsDialect !== undefined &&
+          debugging.logsDialect !== 'clickhouse')
+      ) {
+        return {};
+      }
+      const queryLogs = debugging.queryLogs.bind(debugging);
+      return apiGatewayReportExtension({
+        dataSource: { queryLogs },
+        projectId,
+      });
+    });
   }
 
   return extensions;

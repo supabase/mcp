@@ -54,6 +54,7 @@
   "dependencies": {
     "@mjackson/multipart-parser": "^0.10.1",
     "@modelcontextprotocol/node": "catalog:",
+    "@supabase/mcp-apps-supabase": "workspace:^",
     "@supabase/mcp-utils": "workspace:^",
     "common-tags": "^1.8.2",
     "gqlmin": "^0.3.1",

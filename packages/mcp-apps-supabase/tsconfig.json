@@ -1,0 +1,4 @@
+{
+  "extends": "@total-typescript/tsconfig/bundler/no-dom/library",
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+}
