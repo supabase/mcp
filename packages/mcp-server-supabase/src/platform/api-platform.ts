@@ -370,7 +370,7 @@ export function createSupabaseApiPlatform(
 
       return response.data;
     },
-    async getHealthAdvisors(projectId: string) {
+    async getHealthAdvisors(projectId: string, options) {
       const response = await managementApiV2Client.POST(
         '/v2/projects/{ref}/advisors/run',
         {
@@ -396,9 +396,11 @@ export function createSupabaseApiPlatform(
 
       return {
         ...attributes,
-        lints: attributes.lints.filter(
-          ({ name }) => !hiddenHealthAdvisorResultNames.has(name)
-        ),
+        lints: options?.includeUnavailable
+          ? attributes.lints
+          : attributes.lints.filter(
+              ({ name }) => !hiddenHealthAdvisorResultNames.has(name)
+            ),
       };
     },
   };
