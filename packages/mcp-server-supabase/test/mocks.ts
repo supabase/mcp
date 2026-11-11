@@ -274,6 +274,29 @@ export const mockManagementApi = [
     return HttpResponse.json(organization);
   }),
 
+  http.get(
+    `${API_URL}/v1/organizations/:slug/projects`,
+    ({ params, request }) => {
+      const all = Array.from(mockProjects.values()).filter(
+        (project) =>
+          project.organization_id === params.slug ||
+          project.organization_slug === params.slug
+      );
+      const url = new URL(request.url);
+      const offset = Number(url.searchParams.get('offset') ?? 0);
+      const limit = Number(url.searchParams.get('limit') ?? 100);
+      return HttpResponse.json({
+        projects: all.slice(offset, offset + limit).map((project) => ({
+          ...project,
+          ref: project.id,
+          inserted_at: project.created_at,
+          databases: [],
+        })),
+        pagination: { count: all.length, limit, offset },
+      });
+    }
+  ),
+
   /**
    * Get the API keys for a project
    */

@@ -6,7 +6,8 @@
     "test:packed-platform-consumer": "node scripts/test-packed-platform-consumer.mjs",
     "format": "biome check --write .",
     "format:check": "biome check .",
-    "dev:http": "node scripts/dev-http.mjs"
+    "dev:http": "node scripts/dev-http.mjs",
+    "dev:mock": "pnpm --filter @supabase/mcp-server-supabase dev:mock"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

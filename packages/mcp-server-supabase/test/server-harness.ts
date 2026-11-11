@@ -27,6 +27,7 @@ import {
 } from './mocks.js';
 
 type SetupOptions = {
+  apps?: SupabaseMcpServerOptions['apps'];
   accessToken?: string;
   projectId?: string;
   platform?: SupabasePlatform;
@@ -40,6 +41,7 @@ type SetupOptions = {
 };
 
 type ModernSetupOptions = {
+  apps?: SupabaseMcpServerOptions['apps'];
   platform?: SupabasePlatform;
   features?: string[];
   observer?: SupabaseMcpServerOptions['observer'];
@@ -143,6 +145,7 @@ export function createServerHarness() {
       options.platform ??
       createSupabaseApiPlatform({ accessToken, apiUrl: API_URL });
     const server = (connection.server = createSupabaseMcpServer({
+      apps: options.apps,
       platform,
       projectId,
       readOnly,
@@ -216,6 +219,7 @@ export function createServerHarness() {
     });
 
     const handler = createSupabaseMcpHandler({
+      apps: options.apps,
       platform,
       projectId,
       readOnly,

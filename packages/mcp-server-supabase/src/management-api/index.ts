@@ -44,6 +44,16 @@ const errorSchema = z.object({
 // The API prefixes validation errors with the field name, e.g. `ref: ref must be exactly 20 characters long`.
 const malformedRefMessagePattern = /^ref: /;
 
+/** A Management API failure that keeps its HTTP status, e.g. so callers can tell permission errors apart. */
+export class ManagementApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+  }
+}
+
 export function assertSuccess<
   T extends Record<string | number, any>,
   Options,
@@ -54,8 +64,9 @@ export function assertSuccess<
 ): asserts response is SuccessResponseType<T, Options, Media> {
   if ('error' in response) {
     if (response.response.status === 401) {
-      throw new Error(
-        'Unauthorized. Please provide a valid access token to the MCP server via the --access-token flag or SUPABASE_ACCESS_TOKEN.'
+      throw new ManagementApiError(
+        'Unauthorized. Please provide a valid access token to the MCP server via the --access-token flag or SUPABASE_ACCESS_TOKEN.',
+        401
       );
     }
 
@@ -66,15 +77,19 @@ export function assertSuccess<
         response.response.status === 400 &&
         malformedRefMessagePattern.test(errorContent.message)
       ) {
-        throw new Error(
-          `${errorContent.message.replace(/\.$/, '')}. Copy the ref exactly as returned by list_projects (id) or list_branches (project_ref), depending on whether you're working with the main project or a branch; do not retype or shorten it.`
+        throw new ManagementApiError(
+          `${errorContent.message.replace(/\.$/, '')}. Copy the ref exactly as returned by list_projects (id) or list_branches (project_ref), depending on whether you're working with the main project or a branch; do not retype or shorten it.`,
+          400
         );
       }
 
-      throw new Error(errorContent.message);
+      throw new ManagementApiError(
+        errorContent.message,
+        response.response.status
+      );
     }
 
-    throw new Error(fallbackMessage);
+    throw new ManagementApiError(fallbackMessage, response.response.status);
   }
 }
 
@@ -104,8 +119,9 @@ export function assertProjectScopedSuccess<
       ''
     );
 
-    throw new Error(
-      `${apiMessage}. Access to project '${projectId}' was denied. If this project exists, your access token may be scoped to a different organization: re-authenticate with the MCP server and select the organization that owns this project.`
+    throw new ManagementApiError(
+      `${apiMessage}. Access to project '${projectId}' was denied. If this project exists, your access token may be scoped to a different organization: re-authenticate with the MCP server and select the organization that owns this project.`,
+      403
     );
   }
 

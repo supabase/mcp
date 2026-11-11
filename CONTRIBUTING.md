@@ -55,7 +55,7 @@ pnpm dev:http --api-url 'http://127.0.0.1:<port>' --secret-url-template '<absolu
 
 In this package's local HTTP server, signed `requestState` used by cost confirmation, destructive SQL confirmation, mutating notebook run confirmation, and notebook deletion confirmation expires after 600 seconds; URL secret-collection state expires after 120 seconds. The secret tool retains a separate 600-second timestamp-based recovery window for fresh calls; this does not extend URL or token validity. Watch restarts invalidate pending state. Restart the server in your MCP client after each change.
 
-Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--secret-url-template`, `--version`.
+Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--secret-url-template`, `--apps-url`, `--apps-inline`, `--apps-dir`, `--apps-all-clients`, `--app-link`, `--version`.
 
 For this package's local HTTP server, the optional `skip_elicitations` query parameter accepts comma-separated values (`create_project`, `create_branch`, `execute_sql`, `apply_migration`, `run_notebook`, `delete_notebook`). Skipping `create_project` or `create_branch` uses legacy cost confirmation instead of elicitation; it does not bypass cost confirmation. Skipping `execute_sql` or `apply_migration` disables destructive SQL elicitation, so SQL may execute without a prompt or legacy confirmation fallback. Skipping `run_notebook` runs notebook cells without a prompt. Skipping `delete_notebook` deletes notebooks without a prompt. Notebook creation never prompts. By default, read-only notebook runs and runs without mutating database cells do not prompt; mutating runs require form elicitation and are rejected before any cell runs if the client lacks form support. Notebook deletion always requires form elicitation and is rejected if the client lacks form support. Omitting the parameter or leaving it blank preserves the configured or default eligible tools.
 
@@ -64,6 +64,35 @@ To try the HTTP entry from a PR without cloning, run the preview build published
 ```bash
 npx https://pkg.pr.new/@supabase/mcp-server-supabase@<sha> --http
 ```
+
+### MCP Apps
+
+The server can serve interactive views as [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) for hosts such as Claude, ChatGPT and Codex: a project browser (`open_projects`, `open_workspace`), SQL, logs and row panels (`open_sql_panel`, `open_logs_panel`, `open_row_panel`) and inline query blocks (`show_query_block`), plus app-only data tools (`app_*`) the views call. They are off unless the server is given surface assets, and are left out for clients whose capabilities lack the `io.modelcontextprotocol/ui` extension.
+
+- `src/apps/contracts.ts` is the wire contract between the server and the views: tool names and schemas (`dataOperations`), panel launches, workspace tool inputs, resource URIs and the document shell. It is published as `@supabase/mcp-server-supabase/apps` and must stay free of Node APIs, because it is bundled into the views.
+- `src/tools/apps/` registers the tools and resources. Every app tool enforces project scope, feature selection and read-only mode itself; `_meta.ui.visibility` is not authorization.
+- The views are built in the [Supabase monorepo](https://github.com/supabase/supabase) by `apps/mcp-apps`, against that contract.
+
+Where the server finds the views:
+
+```sh
+# Production: link a deployed build. The resource CSP allows its origin.
+pnpm dev:http --apps-url https://supabase.com/mcp-apps/v1
+# Fetch that build on the server and inline it, for hosts that block external assets.
+pnpm dev:http --apps-url https://supabase.com/mcp-apps/v1 --apps-inline
+# Development: inline a local build, re-read on every resource read.
+pnpm dev:http --apps-dir /absolute/path/to/supabase/apps/mcp-apps/dist/v1
+```
+
+`SUPABASE_MCP_APPS_URL` and `SUPABASE_MCP_APPS_DIR` work too, also with stdio. `--app-link` sets the deep link base for composer mention links. `--apps-all-clients` registers the app tools for every client, for hosts that render MCP Apps without advertising it. Embedders pass `apps: { assets: { url } }` to `createSupabaseMcpServer`. A server that serves legacy clients statelessly should pass `clientCapabilities` from the restored session, as it does `clientInfo`, so clients without MCP Apps support do not get the app tools.
+
+For a local loop without a Supabase account, `pnpm dev:mock` runs the local HTTP server on the test mocks (mocked Management API, PGlite databases, synthetic logs) with two sample projects:
+
+```sh
+pnpm dev:mock --apps-dir /absolute/path/to/supabase/apps/mcp-apps/dist/v1
+```
+
+The monorepo's `pnpm --filter mcp-apps dev:e2e` starts this (or the real server), the surface build and a local MCP Apps host together; see `apps/mcp-apps/README.md` there.
 
 ### Alternative: stdio
 

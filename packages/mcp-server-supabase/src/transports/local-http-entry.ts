@@ -17,13 +17,18 @@ import {
 import { z } from 'zod/v4';
 
 import { createSupabaseApiPlatform } from '../platform/api-platform.js';
-import { createSupabaseMcpServer } from '../server.js';
+import {
+  createSupabaseMcpServer,
+  type SupabaseMcpServerOptions,
+} from '../server.js';
 import { assertValidConnectUrlTemplate } from '../tools/secret-tools.js';
 import { CURRENT_ELICITATION_TOOLS } from '../types.js';
 import { dashboardUrlForApiUrl, parseFeatureGroups } from '../util.js';
 import { parseList } from './util.js';
 
 export type LocalHttpEntryOptions = {
+  /** Opt-in MCP Apps surfaces; see `SupabaseMcpServerOptions['apps']`. */
+  apps?: SupabaseMcpServerOptions['apps'];
   port: number;
   apiUrl?: string;
   contentApiUrl?: string;
@@ -99,6 +104,7 @@ export async function startLocalHttpEntry({
   apiUrl,
   contentApiUrl,
   secretUrlTemplate,
+  apps,
   log = (line) =>
     console.error(`[${new Date().toLocaleTimeString('en-GB')}] ${line}`),
 }: LocalHttpEntryOptions) {
@@ -189,6 +195,7 @@ export async function startLocalHttpEntry({
                 features,
                 contentApiUrl,
                 dashboardUrl,
+                apps,
                 elicitation: {
                   requestState: {
                     key: requestStateKey,

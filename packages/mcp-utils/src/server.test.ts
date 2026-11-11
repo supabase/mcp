@@ -334,6 +334,34 @@ describe('tools', () => {
   });
 });
 
+describe('tool metadata', () => {
+  test('lists title, icons and _meta so hosts can render app tools', async () => {
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      tools: {
+        open_panel: tool({
+          title: 'Panel',
+          icons: [{ src: 'data:image/svg+xml,x', mimeType: 'image/svg+xml' }],
+          _meta: { ui: { resourceUri: 'ui://test/panel.html' } },
+          description: 'Opens a panel',
+          parameters: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => ({}),
+        }),
+      },
+    });
+    const { client } = await setup({ server });
+    const { tools } = await client.listTools();
+    expect(tools[0]).toMatchObject({
+      name: 'open_panel',
+      title: 'Panel',
+      icons: [{ src: 'data:image/svg+xml,x' }],
+      _meta: { ui: { resourceUri: 'ui://test/panel.html' } },
+    });
+  });
+});
+
 describe('resources helper', () => {
   test('should add scheme to resource URIs', () => {
     const output = resources('my-scheme', [

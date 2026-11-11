@@ -370,6 +370,8 @@ export type AccountOperations = {
   listOrganizations(): Promise<{ id: string; slug: string; name: string }[]>;
   getOrganization(organizationId: string): Promise<Organization>;
   listProjects(): Promise<Project[]>;
+  /** Organization-level discovery, without account-wide list permissions. */
+  listOrganizationProjects?(slug: string): Promise<Project[]>;
   getProject(projectId: string): Promise<Project>;
   createProject(options: CreateProjectOptions): Promise<Project>;
   pauseProject(projectId: string): Promise<void>;

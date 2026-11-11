@@ -1,10 +1,18 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 
 import packageJson from '../package.json' with { type: 'json' };
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import { createSupabaseMcpServer } from './server.js';
+import {
+  type AppAssets,
+  type AppsOptions,
+  APPS_BUILD_COMMAND,
+  assertValidAssetsUrl,
+} from './tools/apps/resources.js';
 import { startLocalHttpEntry } from './transports/local-http-entry.js';
 import { parseList } from './transports/util.js';
 import { dashboardUrlForApiUrl, parseFeatureGroups } from './util.js';
@@ -24,9 +32,31 @@ async function main() {
       ['features']: cliFeatures,
       ['http']: http,
       ['port']: cliPort,
+      ['apps-dir']: cliAppsDir,
+      ['apps-url']: cliAppsUrl,
+      ['apps-inline']: appsInline,
+      ['apps-all-clients']: appsAllClients,
+      ['app-link']: appLink,
     },
   } = parseArgs({
     options: {
+      ['apps-dir']: {
+        type: 'string',
+      },
+      ['apps-url']: {
+        type: 'string',
+      },
+      ['apps-inline']: {
+        type: 'boolean',
+        default: false,
+      },
+      ['apps-all-clients']: {
+        type: 'boolean',
+        default: false,
+      },
+      ['app-link']: {
+        type: 'string',
+      },
       ['access-token']: {
         type: 'string',
       },
@@ -75,6 +105,42 @@ async function main() {
   }
 
   const features = cliFeatures ? parseList(cliFeatures) : undefined;
+  const appsDir = cliAppsDir ?? process.env.SUPABASE_MCP_APPS_DIR;
+  const appsUrl = cliAppsUrl ?? process.env.SUPABASE_MCP_APPS_URL;
+  if (appsDir && appsUrl) {
+    console.error('Pass either --apps-dir or --apps-url, not both.');
+    process.exitCode = 1;
+    return;
+  }
+  if (appsUrl) {
+    try {
+      assertValidAssetsUrl(appsUrl);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : error);
+      process.exitCode = 1;
+      return;
+    }
+  }
+  const appsAssets: AppAssets | undefined = appsDir
+    ? { dir: resolve(appsDir) }
+    : appsUrl
+      ? { url: appsUrl, inline: appsInline }
+      : undefined;
+  const apps: AppsOptions | undefined = appsAssets && {
+    assets: appsAssets,
+    clients: appsAllClients ? 'all' : 'capable',
+    appLinkBase: appLink,
+  };
+  // Surfaces are read on every request, so a missing build is not fatal here.
+  if (
+    appsAssets &&
+    'dir' in appsAssets &&
+    !existsSync(join(appsAssets.dir, 'projects.js'))
+  ) {
+    console.error(
+      `No MCP Apps build in ${appsAssets.dir} yet. Run \`${APPS_BUILD_COMMAND}\` in the Supabase monorepo.`
+    );
+  }
 
   const contentApiUrl =
     cliContentApiUrl ?? process.env.SUPABASE_CONTENT_API_URL;
@@ -86,6 +152,7 @@ async function main() {
         apiUrl,
         contentApiUrl,
         secretUrlTemplate,
+        apps,
       });
       console.error(`Supabase MCP server listening on ${entry.url}`);
     } catch (error) {
@@ -125,6 +192,7 @@ async function main() {
         features,
         contentApiUrl,
         dashboardUrl: dashboardUrlForApiUrl(apiUrl),
+        apps,
       }),
     { onerror: console.error }
   );

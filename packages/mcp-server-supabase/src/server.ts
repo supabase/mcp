@@ -1,5 +1,7 @@
 import {
+  CLIENT_CAPABILITIES_META_KEY,
   CLIENT_INFO_META_KEY,
+  type ClientCapabilities,
   createRequestStateCodec,
   type Implementation,
   isSpecType,
@@ -20,6 +22,12 @@ import type {
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
+import {
+  type AppsOptions,
+  clientSupportsApps,
+  getAppResources,
+  getAppTools,
+} from './tools/apps/index.js';
 import { getBranchingTools } from './tools/branching-tools.js';
 import {
   type ElicitationState,
@@ -58,7 +66,24 @@ function getRequestClientInfo(ctx: ServerContext | undefined) {
   return isSpecType.Implementation(client) ? client : undefined;
 }
 
+function getRequestClientCapabilities(ctx: ServerContext | undefined) {
+  const envelope = ctx?.mcpReq.envelope;
+  if (!envelope || !(CLIENT_CAPABILITIES_META_KEY in envelope))
+    return undefined;
+  const capabilities = envelope[CLIENT_CAPABILITIES_META_KEY];
+  return capabilities && typeof capabilities === 'object'
+    ? (capabilities as ClientCapabilities)
+    : undefined;
+}
+
 export type SupabaseMcpServerOptions = {
+  /**
+   * Opt-in MCP Apps: interactive surfaces (project browser, SQL, logs and row
+   * panels, inline query blocks) for hosts such as ChatGPT and Claude. The
+   * surfaces are built by `apps/mcp-apps` in the Supabase monorepo; `assets`
+   * says where the server finds them.
+   */
+  apps?: AppsOptions;
   /**
    * Platform implementation for Supabase.
    */
@@ -101,6 +126,13 @@ export type SupabaseMcpServerOptions = {
    * sees `initialize`. Requests and handshakes the server sees take precedence.
    */
   clientInfo?: Implementation;
+
+  /**
+   * The connected client's capabilities, restored the same way as
+   * `clientInfo`. Lets `apps` leave out its tools for clients without MCP Apps
+   * support on stateless legacy requests.
+   */
+  clientCapabilities?: ClientCapabilities;
 
   /** Optional per-request observer; see ObservedMethod for covered handlers. */
   observer?: RequestObserver;
@@ -249,6 +281,9 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
   const verificationCodec = confirmationCodec ?? secretCollectionCodec;
 
   let handshakeClientInfo: Implementation | undefined;
+  let handshakeClientCapabilities: ClientCapabilities | undefined;
+
+  const appResources = options.apps ? getAppResources(options.apps) : undefined;
 
   const server = createMcpServer<ObservedTool, ObservationFact>({
     name: 'supabase',
@@ -257,6 +292,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     instructions,
     async onInitialize(info) {
       handshakeClientInfo = info.clientInfo;
+      handshakeClientCapabilities = info.clientCapabilities;
       // Note: in stateless HTTP mode, `onInitialize` will not always be called
       // so we cannot rely on it for initialization. It's still useful for telemetry.
       const { clientInfo } = info;
@@ -289,6 +325,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         }
       },
     },
+    resources: appResources,
     tools: async (ctx) => {
       const clientInfo =
         getRequestClientInfo(ctx) ?? handshakeClientInfo ?? options.clientInfo;
@@ -504,6 +541,37 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
               }
             : { ...tool, hidden: true };
         }
+      }
+
+      const clientCapabilities =
+        getRequestClientCapabilities(ctx) ??
+        handshakeClientCapabilities ??
+        options.clientCapabilities;
+      if (
+        options.apps &&
+        (options.apps.clients === 'all' ||
+          clientSupportsApps(clientCapabilities) !== false)
+      ) {
+        Object.assign(
+          tools,
+          getAppTools({
+            platform,
+            projectId,
+            readOnly,
+            accountEnabled: enabledFeatures.has('account'),
+            databaseEnabled: enabledFeatures.has('database'),
+            debuggingEnabled: enabledFeatures.has('debugging'),
+            appLinkBase: options.apps.appLinkBase,
+            serverVersion: version,
+            creationMode:
+              confirmationCodec &&
+              enabledConfirmationTools.includes('create_project') &&
+              ctx &&
+              isFormCapable(ctx)
+                ? 'elicitation'
+                : 'legacy',
+          })
+        );
       }
 
       return tools;

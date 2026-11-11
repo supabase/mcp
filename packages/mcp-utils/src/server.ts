@@ -57,6 +57,9 @@ export type Tool<
   OutputSchema extends z.ZodObject<any> = z.ZodObject<any>,
   Fact = never,
 > = {
+  title?: McpTool['title'];
+  icons?: McpTool['icons'];
+  _meta?: McpTool['_meta'];
   description: Prop<string>;
   annotations?: Annotations;
   parameters: Params;
@@ -529,13 +532,26 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
               Object.entries(tools)
                 .filter(([, tool]) => !tool.hidden)
                 .map(
-                  async ([name, { description, annotations, parameters }]) => {
+                  async ([
+                    name,
+                    {
+                      description,
+                      annotations,
+                      parameters,
+                      title,
+                      icons,
+                      _meta,
+                    },
+                  ]) => {
                     const inputSchema = z.toJSONSchema(parameters, {
                       target: 'draft-7',
                     });
 
                     return {
                       name,
+                      ...(title && { title }),
+                      ...(icons && { icons }),
+                      ...(_meta && { _meta }),
                       description:
                         typeof description === 'function'
                           ? await description()

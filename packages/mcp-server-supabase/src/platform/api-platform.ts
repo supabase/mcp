@@ -142,6 +142,41 @@ export function createSupabaseApiPlatform(
 
       return response.data;
     },
+    async listOrganizationProjects(slug: string) {
+      const projects = [];
+      let offset = 0;
+      while (offset < 10000) {
+        const response = await managementApiClient.GET(
+          '/v1/organizations/{slug}/projects',
+          {
+            params: {
+              path: { slug },
+              query: { offset, limit: 100, sort: 'created_asc' },
+            },
+          }
+        );
+        assertSuccess(response, 'Failed to fetch organization projects');
+        const page = response.data;
+        projects.push(
+          ...page.projects.map((project) => ({
+            id: project.ref,
+            ref: project.ref,
+            name: project.name,
+            region: project.region,
+            status: project.status,
+            created_at: project.inserted_at,
+            organization_id: '',
+            organization_slug: slug,
+          }))
+        );
+        offset += page.projects.length;
+        if (!page.projects.length || offset >= page.pagination.count)
+          return projects;
+      }
+      throw new Error(
+        'Organization has too many projects to list. Open a project by its reference instead.'
+      );
+    },
     async getProject(projectId: string) {
       const response = await managementApiClient.GET('/v1/projects/{ref}', {
         params: {

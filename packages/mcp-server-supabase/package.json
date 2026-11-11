@@ -26,7 +26,8 @@
     "test:e2e": "vitest --project e2e",
     "test:integration": "vitest --project integration",
     "test:coverage": "vitest --coverage",
-    "generate:management-api-types": "node scripts/generate-management-api-types.mjs"
+    "generate:management-api-types": "node scripts/generate-management-api-types.mjs",
+    "dev:mock": "node --import tsx --import ./scripts/dev-loader.mjs scripts/dev-mock-server.ts"
   },
   "files": [
     "dist/**/*"
@@ -44,6 +45,11 @@
       "types": "./dist/platform/index.d.ts",
       "import": "./dist/platform/index.js",
       "default": "./dist/platform/index.cjs"
+    },
+    "./apps": {
+      "types": "./dist/apps/index.d.ts",
+      "import": "./dist/apps/index.js",
+      "default": "./dist/apps/index.cjs"
     },
     "./platform/api": {
       "types": "./dist/platform/api-platform.d.ts",

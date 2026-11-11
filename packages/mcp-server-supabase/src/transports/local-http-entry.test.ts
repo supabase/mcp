@@ -19,6 +19,7 @@ import { http, HttpResponse, passthrough } from 'msw';
 import type { SetupServer } from 'msw/node';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+import { createAppsDir, surfaceScript } from '../../test/apps.js';
 import {
   ACCESS_TOKEN,
   API_URL,
@@ -62,7 +63,10 @@ let logLines!: string[];
 const cleanups: Array<() => Promise<void>> = [];
 
 async function startEntry(
-  options: Pick<LocalHttpEntryOptions, 'apiUrl' | 'secretUrlTemplate'> = {}
+  options: Pick<
+    LocalHttpEntryOptions,
+    'apiUrl' | 'secretUrlTemplate' | 'apps'
+  > = {}
 ) {
   const started = await startLocalHttpEntry({
     port: 0,
@@ -128,6 +132,43 @@ function toolOutput(result: CallToolResult) {
 }
 
 describe('startLocalHttpEntry', () => {
+  test('serves the opt-in Projects app through authenticated HTTP', async () => {
+    await entry.close();
+    const build = await createAppsDir();
+    cleanups.push(build.cleanup);
+    entry = await startEntry({ apps: { assets: { dir: build.dir } } });
+    const client = await connect({ pin: MODERN_PROTOCOL_VERSION }, undefined, {
+      capabilities: {
+        extensions: {
+          'io.modelcontextprotocol/ui': {
+            mimeTypes: ['text/html;profile=mcp-app'],
+          },
+        },
+      } as ClientOptions['capabilities'],
+    });
+    expect(
+      (await client.listTools()).tools.find(
+        (tool) => tool.name === 'open_projects'
+      )
+    ).toMatchObject({
+      title: 'Supabase',
+      _meta: { 'openai/ui': { entrypoints: [{ type: 'global' }] } },
+    });
+    const resource = await client.readResource({
+      uri: 'ui://supabase/projects',
+    });
+    expect(resource.contents[0]).toMatchObject({
+      text: expect.stringContaining(surfaceScript('projects')),
+    });
+    const initial = await client.callTool({
+      name: 'open_projects',
+      arguments: {},
+    });
+    expect(initial.structuredContent).toMatchObject({
+      capabilities: { readOnly: true, createProject: false },
+    });
+  });
+
   test('serves a modern client', async () => {
     const client = await connect({ pin: MODERN_PROTOCOL_VERSION });
 
