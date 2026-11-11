@@ -1056,6 +1056,9 @@ describe('zod registry', () => {
   // inside functions (rather than at module level), new instances register on every call,
   // causing unbounded memory growth.
   test('creating multiple servers does not cause unbounded registry growth', async () => {
+    const { client } = await setup();
+    await client.listTools();
+
     const addSpy = vi.spyOn(globalRegistry, 'add');
 
     try {
