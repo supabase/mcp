@@ -760,6 +760,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{ref}/network-restrictions/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Applies or rejects the change in review in a project's network restrictions
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        post: operations["v1-review-network-restrictions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{ref}/pgsodium": {
         parameters: {
             query?: never;
@@ -2087,7 +2109,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Partially updates project's Postgres config */
+        patch: operations["v1-patch-postgres-config"];
         trace?: never;
     };
     "/v1/projects/{ref}/config/realtime": {
@@ -2373,7 +2396,7 @@ export interface components {
             postgres_engine: string;
             release_channel: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
             db_host: string;
             db_port: number;
             db_user?: string;
@@ -2439,7 +2462,7 @@ export interface components {
             /** Format: date-time */
             deletion_scheduled_at?: string;
             /** @enum {string} */
-            preview_project_status?: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+            preview_project_status?: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
         };
         BranchDeleteResponse_Output: {
             /** @enum {string} */
@@ -2488,7 +2511,7 @@ export interface components {
             /** @description Creation timestamp */
             created_at: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
             database: {
                 /** @description Database host */
                 host: string;
@@ -2601,7 +2624,7 @@ export interface components {
             /** @description Creation timestamp */
             created_at: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
         };
         RegionsInfoV1_Output: {
             recommendations: {
@@ -2699,6 +2722,13 @@ export interface components {
             expires_in: number;
             /** @enum {string} */
             token_type: "Bearer";
+            /**
+             * @description Space-delimited scopes granted to the token. Omitted when no scopes were granted.
+             * @example projects:read projects:write
+             */
+            scope?: string;
+            /** @description Project refs the token is limited to. `null` means all projects. */
+            project_refs: string[] | null;
         };
         /** @example {
          *       "client_id": "66666666-6666-4666-8666-666666666666",
@@ -3022,6 +3052,26 @@ export interface components {
                 dbAllowedCidrs?: string[];
                 dbAllowedCidrsV6?: string[];
             };
+            /**
+             * @description Present when a change that was never applied is waiting for review. `config` is the list the project enforces. Apply or reject the change with `POST /v1/projects/{ref}/network-restrictions/review`; submitting a new config also replaces it.
+             * @example {
+             *       "dbAllowedCidrs": [
+             *         "203.0.113.0/24"
+             *       ],
+             *       "dbAllowedCidrsV6": [
+             *         "2001:db8::/32"
+             *       ]
+             *     }
+             */
+            pending_config?: {
+                dbAllowedCidrs?: string[];
+                dbAllowedCidrsV6?: string[];
+            };
+            /**
+             * Format: date-time
+             * @description When the change in `pending_config` was requested. Send it as `requested_at` to the review endpoint.
+             */
+            pending_requested_at?: string;
             /** @enum {string} */
             status: "stored" | "applied";
             /** Format: date-time */
@@ -3090,6 +3140,22 @@ export interface components {
             status: "stored" | "applied";
         };
         /** @example {
+         *       "action": "apply",
+         *       "requested_at": "2026-10-21T20:31:51.116+00:00"
+         *     } */
+        NetworkRestrictionsReviewRequest: {
+            /**
+             * @description `apply` replaces the enforced list with the pending one and applies it. `reject` discards the pending one and keeps the enforced list.
+             * @enum {string}
+             */
+            action: "apply" | "reject";
+            /**
+             * Format: date-time
+             * @description The `pending_requested_at` of the change being reviewed. Only that change is resolved: if another one has replaced it, the request gets a 409.
+             */
+            requested_at: string;
+        };
+        /** @example {
          *       "root_key": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
          *     } */
         PgsodiumConfigResponse_Output: {
@@ -3111,6 +3177,10 @@ export interface components {
             db_pool: number | null;
             /** @description If `null`, the value is automatically configured to 10. */
             db_pool_acquisition_timeout: number | null;
+            /** @description If `null`, the value is automatically configured to 1800. */
+            db_pool_max_lifetime: number | null;
+            /** @description If `null`, the value is automatically configured to 30. */
+            db_pool_max_idletime: number | null;
             jwt_secret?: string;
         };
         /** @example {
@@ -3124,6 +3194,8 @@ export interface components {
             max_rows?: number;
             db_pool?: number;
             db_pool_acquisition_timeout?: number;
+            db_pool_max_lifetime?: number;
+            db_pool_max_idletime?: number;
         };
         V1PostgrestConfigResponse_Output: {
             db_schema: string;
@@ -3133,6 +3205,10 @@ export interface components {
             db_pool: number | null;
             /** @description If `null`, the value is automatically configured to 10. */
             db_pool_acquisition_timeout: number | null;
+            /** @description If `null`, the value is automatically configured to 1800. */
+            db_pool_max_lifetime: number | null;
+            /** @description If `null`, the value is automatically configured to 30. */
+            db_pool_max_idletime: number | null;
         };
         V1ProjectRefResponse_Output: {
             id: number;
@@ -3306,6 +3382,13 @@ export interface components {
                 slot_name: string;
             } | {
                 /** @enum {string} */
+                type: "table_using_reg_type";
+                schema_name: string;
+                table_name: string;
+                column_name: string;
+                type_name: string;
+            } | {
+                /** @enum {string} */
                 type: "x86_architecture";
             } | {
                 /** @enum {string} */
@@ -3323,6 +3406,9 @@ export interface components {
             } | {
                 /** @enum {string} */
                 type: "btree_gist_nan_reindex";
+            } | {
+                /** @enum {string} */
+                type: "collation_reindex_required";
             })[];
         };
         DatabaseUpgradeStatusResponse_Output: {
@@ -4092,7 +4178,7 @@ export interface components {
         V1ProjectAdvisorsResponse_Output: {
             lints: {
                 /** @enum {string} */
-                name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "realtime_authorization_timeouts" | "realtime_postgres_changes_spike" | "project_not_active" | "advisor_check_unavailable";
+                name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "realtime_authorization_timeouts" | "realtime_postgres_changes_spike" | "realtime_concurrent_users_near_limit" | "project_not_active" | "advisor_check_unavailable";
                 title: string;
                 /** @enum {string} */
                 level: "ERROR" | "WARN" | "INFO";
@@ -5329,7 +5415,7 @@ export interface components {
                 region: string;
                 is_branch: boolean;
                 /** @enum {string} */
-                status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+                status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
                 inserted_at: string;
                 databases: {
                     /** @enum {string} */
@@ -5981,6 +6067,13 @@ export interface operations {
             };
             /** @description Forbidden action */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7829,6 +7922,60 @@ export interface operations {
                 content?: never;
             };
             /** @description Failed to update project network restrictions */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "v1-review-network-restrictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetworkRestrictionsReviewRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkRestrictionsResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Failed to resolve the network restrictions review */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -12771,6 +12918,60 @@ export interface operations {
         };
     };
     "v1-update-postgres-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePostgresConfigBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostgresConfigResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Failed to update project's Postgres config */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "v1-patch-postgres-config": {
         parameters: {
             query?: never;
             header?: never;

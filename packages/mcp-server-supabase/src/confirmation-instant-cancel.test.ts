@@ -42,6 +42,7 @@ const tools = [
   'execute_sql',
   'apply_migration',
   'run_notebook',
+  'delete_notebook',
   'create_project',
   'create_branch',
 ] as const;
@@ -51,6 +52,7 @@ const requestKey = {
   execute_sql: 'confirm_destructive',
   apply_migration: 'confirm_destructive',
   run_notebook: 'confirm_run',
+  delete_notebook: 'confirm_delete',
   create_project: 'confirm_cost',
   create_branch: 'confirm_cost',
 } as const satisfies Record<Tool, string>;
@@ -59,9 +61,13 @@ const feature = {
   execute_sql: 'destructive_sql',
   apply_migration: 'destructive_sql',
   run_notebook: 'notebook',
+  delete_notebook: 'notebook',
   create_project: 'cost',
   create_branch: 'cost',
-} as const satisfies Record<Tool, ObservationFact['feature']>;
+} as const satisfies Record<
+  Tool,
+  Extract<ObservationFact, { kind: 'confirmation_decision' }>['feature']
+>;
 
 // AI-1372: hand-written from the spec. The tool name is the one being
 // called; the lifetime is the default 600 s TTL.
@@ -72,6 +78,8 @@ const expiredMessage = {
     'This confirmation expired after 10 minutes. Call `apply_migration` again to get a new confirmation.',
   run_notebook:
     'This confirmation expired after 10 minutes. Call `run_notebook` again to get a new confirmation.',
+  delete_notebook:
+    'This confirmation expired after 10 minutes. Call `delete_notebook` again to get a new confirmation.',
   create_project:
     'This confirmation expired after 10 minutes. Call `create_project` again to get a new confirmation.',
   create_branch:
@@ -93,6 +101,7 @@ const args = {
     notebook_id: 'PRIVATE_NOTEBOOK',
     expected_updated_at: updatedAt,
   },
+  delete_notebook: { project_id: projectId, notebook_id: 'PRIVATE_NOTEBOOK' },
   create_project: {
     name: 'PRIVATE_NAME',
     region: 'us-east-1',
@@ -155,7 +164,10 @@ type CallExtra = {
 };
 
 async function setup(
-  options: { ttlSeconds?: number; resumeCapabilities?: ClientCapabilities } = {}
+  options: {
+    confirmationTtlSeconds?: number;
+    resumeCapabilities?: ClientCapabilities;
+  } = {}
 ): Promise<Harness> {
   const fake = fakePlatform();
   let now = T0;
@@ -184,6 +196,7 @@ async function setup(
     notebooks: {
       getNotebook: slowRead(async () => currentNotebook),
       listNotebooks: vi.fn(async () => []),
+      deleteNotebook: vi.fn(async () => {}),
     },
   } satisfies SupabasePlatform;
   const features = ['account', 'branching', 'database', 'notebooks'];
@@ -191,22 +204,23 @@ async function setup(
     requestState: {
       key: KEY,
       principal: PRINCIPAL,
-      ...(options.ttlSeconds === undefined
-        ? {}
-        : { ttlSeconds: options.ttlSeconds }),
     },
-    confirmation: { enabledTools: [...tools] },
+    confirmation: {
+      enabledTools: [...tools],
+      ...(options.confirmationTtlSeconds === undefined
+        ? {}
+        : { ttlSeconds: options.confirmationTtlSeconds }),
+    },
   };
-  const main = await setupObservation({ platform, features, elicitation });
+  const serverOptions = { platform, features, elicitation };
+  const main = await setupObservation(serverOptions);
   // A second server with the same key and principal, so state minted on the
   // form client verifies here too; only the client capabilities differ.
   const resumer =
     options.resumeCapabilities === undefined
       ? main
       : await setupObservation({
-          platform,
-          features,
-          elicitation,
+          ...serverOptions,
           capabilities: options.resumeCapabilities,
         });
   vi.spyOn(Date, 'now').mockImplementation(() => now);
@@ -217,12 +231,14 @@ async function setup(
       platform.database.applyMigration,
       fake.createProject,
       fake.createBranch,
+      platform.notebooks.deleteNotebook,
     ],
     operation: {
       execute_sql: platform.database.executeSql,
       apply_migration: platform.database.applyMigration,
       run_notebook: platform.database.executeSql,
       create_project: fake.createProject,
+      delete_notebook: platform.notebooks.deleteNotebook,
       create_branch: fake.createBranch,
     },
     createBranch: fake.createBranch,
@@ -528,19 +544,19 @@ test('a changed-quote reprompt mints a fresh issued_at', async () => {
 });
 
 // AI-1372. Regression: the lifetime in the expired message is hard-coded to
-// the default, drifts from the TTL the codec was built with (platform passes
-// 120 when URL-mode secret collection is on), always prints seconds, always
-// prints minutes, or gets the singular wrong. One tool covers the shared
-// formatter. Each gap is one whole second past exp = floor(T0 / 1000) + ttl.
+// the default, drifts from the configured confirmation TTL the codec was built
+// with, always prints seconds, always prints minutes, or gets the singular
+// wrong. One tool covers the shared formatter. Each gap is one whole second
+// past exp = floor(T0 / 1000) + ttl.
 test.each([
   { ttlSeconds: 120, gap: 121_000, lifetime: '2 minutes' },
   { ttlSeconds: 60, gap: 61_000, lifetime: '1 minute' },
   { ttlSeconds: 90, gap: 91_000, lifetime: '90 seconds' },
   { ttlSeconds: 1, gap: 2_000, lifetime: '1 second' },
 ])(
-  'an expired resume with ttlSeconds $ttlSeconds states $lifetime',
+  'an expired resume with confirmation ttlSeconds $ttlSeconds states $lifetime',
   async ({ ttlSeconds, gap, lifetime }) => {
-    const h = await setup({ ttlSeconds });
+    const h = await setup({ confirmationTtlSeconds: ttlSeconds });
     const result = await resume(h, 'execute_sql', 'accept', gap);
     expectTerminalResult(
       result,

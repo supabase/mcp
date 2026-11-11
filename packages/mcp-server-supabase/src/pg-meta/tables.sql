@@ -17,6 +17,17 @@ SELECT
   pg_stat_get_live_tuples(c.oid) AS live_rows_estimate,
   pg_stat_get_dead_tuples(c.oid) AS dead_rows_estimate,
   obj_description(c.oid) AS comment,
+  (
+    select
+      pn.nspname || '.' || pc.relname
+    from
+      pg_inherits i
+      join pg_class pc on pc.oid = i.inhparent
+      join pg_namespace pn on pn.oid = pc.relnamespace
+    where
+      i.inhrelid = c.oid
+      and pc.relkind = 'p'
+  ) as partition_of,
   coalesce(pk.primary_keys, '[]') as primary_keys,
   coalesce(
     jsonb_agg(relationships) filter (where relationships is not null),
@@ -75,6 +86,7 @@ FROM
         on ta.attrelid = c.confrelid and ta.attnum = cols.confkey
     where
       c.contype = 'f'
+      and c.conparentid = 0
     group by
       c.oid, c.conname, nsa.nspname, csa.relname, nta.nspname, cta.relname
   ) as relationships

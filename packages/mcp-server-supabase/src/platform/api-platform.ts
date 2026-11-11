@@ -3,9 +3,12 @@ import {
   parseMultipartStream,
 } from '@mjackson/multipart-parser';
 import type { InitData } from '@supabase/mcp-utils';
-import { fileURLToPath } from 'node:url';
 import packageJson from '../../package.json' with { type: 'json' };
-import { getDeploymentId, normalizeFilename } from '../edge-function.js';
+import {
+  getDeploymentId,
+  getFilenameFromUrlOrPath,
+  normalizeFilename,
+} from '../edge-function.js';
 import { getClickHouseLogQuery } from '../logs.js';
 import {
   assertProjectScopedSuccess,
@@ -514,18 +517,14 @@ export function createSupabaseApiPlatform(
         const entrypoint_path = edgeFunction.entrypoint_path
           ? normalizeFilename({
               deploymentId,
-              filename: fileURLToPath(edgeFunction.entrypoint_path, {
-                windows: false,
-              }),
+              filename: getFilenameFromUrlOrPath(edgeFunction.entrypoint_path),
             })
           : undefined;
 
         const import_map_path = edgeFunction.import_map_path
           ? normalizeFilename({
               deploymentId,
-              filename: fileURLToPath(edgeFunction.import_map_path, {
-                windows: false,
-              }),
+              filename: getFilenameFromUrlOrPath(edgeFunction.import_map_path),
             })
           : undefined;
 
@@ -566,18 +565,14 @@ export function createSupabaseApiPlatform(
       const entrypoint_path = edgeFunction.entrypoint_path
         ? normalizeFilename({
             deploymentId,
-            filename: fileURLToPath(edgeFunction.entrypoint_path, {
-              windows: false,
-            }),
+            filename: getFilenameFromUrlOrPath(edgeFunction.entrypoint_path),
           })
         : undefined;
 
       const import_map_path = edgeFunction.import_map_path
         ? normalizeFilename({
             deploymentId,
-            filename: fileURLToPath(edgeFunction.import_map_path, {
-              windows: false,
-            }),
+            filename: getFilenameFromUrlOrPath(edgeFunction.import_map_path),
           })
         : undefined;
 
@@ -966,6 +961,14 @@ export function createSupabaseApiPlatform(
       const { id, attributes } = response.data.data;
 
       return { id, ...attributes };
+    },
+    async deleteNotebook(projectId: string, notebookId: string) {
+      const response = await managementApiV2Client.DELETE(
+        '/v2/projects/{ref}/notebooks/{id}',
+        { params: { path: { ref: projectId, id: notebookId } } }
+      );
+
+      assertSuccessV2(response, 'Failed to delete notebook');
     },
   };
 

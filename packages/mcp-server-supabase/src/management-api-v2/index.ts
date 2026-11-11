@@ -9,6 +9,7 @@ import type {
   SuccessResponse as OpenApiSuccessResponse,
 } from 'openapi-typescript-helpers';
 import { z } from 'zod/v4';
+import { ToolCallerError } from '../errors.js';
 import type { paths } from './types.js';
 
 export function createManagementApiV2Client(
@@ -69,7 +70,12 @@ export function assertSuccessV2<
     const { data: errorContent } = errorSchema.safeParse(response.error);
 
     if (errorContent) {
-      throw new Error(errorContent.error.message);
+      const { message } = errorContent.error;
+      const { status } = response.response;
+      // A 4xx is the caller's request; a 429 can come from our own call volume, like pagination.
+      throw status < 500 && status !== 429
+        ? new ToolCallerError(message)
+        : new Error(message);
     }
 
     throw new Error(fallbackMessage);

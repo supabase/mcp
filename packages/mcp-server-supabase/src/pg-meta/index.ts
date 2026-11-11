@@ -20,7 +20,11 @@ export function listTablesSql(schemas: string[] = []) {
       columns as (${columnsSql})
     select
       *,
-      ${coalesceRowsToArray('columns', 'columns.table_id = tables.id')}
+      ${coalesceRowsToArray(
+        'columns',
+        'columns.table_id = tables.id',
+        'columns.ordinal_position'
+      )}
     from tables
   `;
 
@@ -50,12 +54,17 @@ export function listExtensionsSql() {
 /**
  * Generates a SQL segment that coalesces rows into an array of JSON objects.
  */
-export const coalesceRowsToArray = (source: string, filter: string) => {
+export const coalesceRowsToArray = (
+  source: string,
+  filter: string,
+  orderBy?: string
+) => {
+  const order = orderBy ? ` ORDER BY ${orderBy}` : '';
   return stripIndent`
     COALESCE(
       (
         SELECT
-          array_agg(row_to_json(${source})) FILTER (WHERE ${filter})
+          array_agg(row_to_json(${source})${order}) FILTER (WHERE ${filter})
         FROM
           ${source}
       ),

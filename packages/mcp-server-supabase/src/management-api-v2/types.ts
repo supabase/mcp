@@ -351,6 +351,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/organizations/{slug}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List roles of an organization
+         * @description Returns a list of org-level roles for the organization.
+         */
+        get: operations["v2-list-organization-roles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/organizations/{slug}/members/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Creates organization invitations
+         * @description Creates member invitations for an organization. Each invitation can have different role and project scope settings.
+         */
+        post: operations["v2-create-organization-invitations"];
+        /**
+         * Deletes organization invitations by email
+         * @description Bulk delete member invitations for an organization by email address.
+         */
+        delete: operations["v2-delete-organization-invitations"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/organizations/{slug}/members": {
         parameters: {
             query?: never;
@@ -391,27 +435,7 @@ export interface paths {
         patch: operations["v2-assign-organization-member-role"];
         trace?: never;
     };
-    "/v2/organizations/{slug}/roles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List roles of an organization
-         * @description Returns a list of org-level roles for the organization.
-         */
-        get: operations["v2-list-organization-roles"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v2/organizations/{slug}/members/invitations": {
+    "/v2/organizations/{slug}/members/{user_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -420,16 +444,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        post?: never;
         /**
-         * Creates organization invitations
-         * @description Creates member invitations for an organization. Each invitation can have different role and project scope settings.
+         * Removes organization members
+         * @description Removes one or more organization members including their roles and project-scoped permissions.
          */
-        post: operations["v2-create-organization-invitations"];
-        /**
-         * Deletes organization invitations by email
-         * @description Bulk delete member invitations for an organization by email address.
-         */
-        delete: operations["v2-delete-organization-invitations"];
+        delete: operations["v2-remove-organization-members"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1155,7 +1175,7 @@ export interface components {
                 attributes: {
                     lints: {
                         /** @enum {string} */
-                        name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "realtime_authorization_timeouts" | "realtime_postgres_changes_spike";
+                        name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "realtime_authorization_timeouts" | "realtime_postgres_changes_spike" | "realtime_concurrent_users_near_limit";
                     }[];
                 };
             } & {
@@ -1172,7 +1192,7 @@ export interface components {
                 attributes: {
                     lints: {
                         /** @enum {string} */
-                        name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "realtime_authorization_timeouts" | "realtime_postgres_changes_spike" | "project_not_active" | "advisor_check_unavailable";
+                        name: "unindexed_foreign_keys" | "auth_users_exposed" | "auth_rls_initplan" | "no_primary_key" | "unused_index" | "multiple_permissive_policies" | "policy_exists_rls_disabled" | "rls_enabled_no_policy" | "duplicate_index" | "security_definer_view" | "function_search_path_mutable" | "rls_disabled_in_public" | "extension_in_public" | "rls_references_user_metadata" | "materialized_view_in_api" | "foreign_table_in_api" | "unsupported_reg_types" | "auth_otp_long_expiry" | "auth_otp_short_length" | "ssl_not_enforced" | "log_connections_not_enabled" | "network_restrictions_not_set" | "password_requirements_min_length" | "pitr_not_enabled" | "auth_leaked_password_protection" | "auth_insufficient_mfa_options" | "auth_password_policy_missing" | "leaked_service_key" | "no_backup_admin" | "vulnerable_postgres_version" | "db_not_reachable" | "db_connection_failing" | "db_connection_limit_reached" | "instance_telemetry_lost" | "instance_db_down" | "instance_alert_firing" | "log_data_api_error_rate_high" | "log_auth_error_rate_high" | "log_storage_error_rate_high" | "log_edge_function_error_rate_high" | "realtime_authorization_timeouts" | "realtime_postgres_changes_spike" | "realtime_concurrent_users_near_limit" | "project_not_active" | "advisor_check_unavailable";
                         title: string;
                         /** @enum {string} */
                         level: "ERROR" | "WARN" | "INFO";
@@ -1334,6 +1354,14 @@ export interface components {
                                 /** @enum {string} */
                                 type: "v4" | "v6";
                             }[];
+                            /** @description Present when a change that was never applied is waiting for review. `allowed_cidrs` is the list the project enforces. Apply or reject the change with `POST /v1/projects/{ref}/network-restrictions/review`; submitting a new config also replaces it. */
+                            pending_allowed_cidrs?: {
+                                address: string;
+                                /** @enum {string} */
+                                type: "v4" | "v6";
+                            }[];
+                            /** @description When the change in `pending_allowed_cidrs` was requested. */
+                            pending_requested_at?: string;
                             updated_at?: string;
                             applied_at?: string;
                         };
@@ -1412,6 +1440,8 @@ export interface components {
                         db_extra_search_path: string;
                         max_rows: number;
                         db_pool_acquisition_timeout: number;
+                        db_pool_max_lifetime: number;
+                        db_pool_max_idletime: number;
                         /** @description If `null`, no pool size is written to the project's PostgREST config and PostgREST's own default applies. The platform does not pick a value here. */
                         db_pool: number | null;
                     };
@@ -1493,6 +1523,11 @@ export interface components {
                         id: number;
                         username: string;
                     } | null;
+                    /**
+                     * Format: uri
+                     * @description Dashboard link for this notebook.
+                     */
+                    url: string;
                 };
             }[];
             links: {
@@ -1542,6 +1577,11 @@ export interface components {
                         id: number;
                         username: string;
                     } | null;
+                    /**
+                     * Format: uri
+                     * @description Dashboard link for this notebook.
+                     */
+                    url: string;
                     content: {
                         schema_version: number;
                         cells: ({
@@ -1996,14 +2036,13 @@ export interface components {
                 id: string;
                 attributes: {
                     spec: {
-                        /** @example node */
                         runtime?: string;
-                        /** @example 2gb-1vcpu */
                         size: string;
-                        /** @example public */
                         exposure: string;
-                        /** @example 1 */
                         instances: number;
+                        secrets_scope?: (("all" | "supabase" | "none") | {
+                            secret_name: string;
+                        }[]) | null;
                     };
                     /** @enum {string} */
                     build_state: "building" | "active" | "failed";
@@ -2035,14 +2074,13 @@ export interface components {
                 id: string;
                 attributes: {
                     spec: {
-                        /** @example node */
                         runtime?: string;
-                        /** @example 2gb-1vcpu */
                         size: string;
-                        /** @example public */
                         exposure: string;
-                        /** @example 1 */
                         instances: number;
+                        secrets_scope?: (("all" | "supabase" | "none") | {
+                            secret_name: string;
+                        }[]) | null;
                     };
                     /** @enum {string} */
                     build_state: "building" | "active" | "failed";
@@ -2099,123 +2137,12 @@ export interface components {
                         exposure: string;
                         /** @example 1 */
                         instances: number;
+                        secrets_scope?: (("all" | "supabase" | "none") | {
+                            secret_name: string;
+                        }[]) | null;
                     };
                     /** @description Id of a build context staged through the uploads endpoint. Required unless `runtime` is set. */
                     context_upload_id?: string;
-                };
-            };
-        };
-        V2ListMembersResponse_Output: {
-            data: {
-                /**
-                 * @description Resource type.
-                 * @enum {string}
-                 */
-                type: "organization_member";
-                /** Format: uuid */
-                id: string;
-                attributes: {
-                    /** @description Member's username */
-                    username: string | null;
-                    /** @description Member's primary email */
-                    primary_email: string | null;
-                    /** @description Whether Multi-Factor Authentication is enabled for this member */
-                    mfa_enabled: boolean;
-                    /** @description Whether this member is a Single Sign-On user */
-                    is_sso_user: boolean;
-                    /** @description Member's avatar URL */
-                    avatar_url: string | null;
-                    /** @description Roles assigned to this member. Includes both org-level and project-scoped roles. */
-                    roles: {
-                        /**
-                         * @description Role name. For project-scoped roles this is the base role name.
-                         * @example developer
-                         */
-                        name: string;
-                        /**
-                         * @description Whether this role applies org-wide or is scoped to specific projects for the user.
-                         * @enum {string}
-                         */
-                        scope: "organization" | "project";
-                        /** @description Project refs this role is scoped to. Empty array for org-level roles. */
-                        projects: {
-                            ref: string;
-                            name: string;
-                        }[];
-                    }[];
-                };
-            }[];
-            links: {
-                /**
-                 * @description URL path to the first page if available.
-                 * @example /v2/organizations/my-org/members?page[size]=10
-                 */
-                first?: string | null;
-                /**
-                 * @description URL path to the previous page.
-                 * @example /v2/organizations/my-org/members?page[size]=10&page[before]=019adf7d-4513-74c5-bb9a-f1bc0f7a95d7
-                 */
-                prev: string | null;
-                /**
-                 * @description URL path to the next page.
-                 * @example /v2/organizations/my-org/members?page[size]=10&page[after]=019adf7d-4513-7062-b292-78b86cc470a4
-                 */
-                next: string | null;
-                /**
-                 * @description URL path to the last page if available.
-                 * @example /v2/organizations/my-org/members?page[size]=10&page[after]=019adf7d-4513-71ba-b264-21900edb4295
-                 */
-                last?: string | null;
-            };
-        };
-        V2AssignOrganizationMemberRoleRequest: {
-            data: {
-                /**
-                 * @description Resource type.
-                 * @enum {string}
-                 */
-                type: "organization_member_role";
-                attributes: {
-                    /**
-                     * @description Role name to assign. Must be one of: owner, administrator, developer, read-only. Must be on a Team or Enterprise plan to use the read-only role.
-                     * @example developer
-                     * @enum {string}
-                     */
-                    role: "owner" | "administrator" | "developer" | "read-only" | "no-access";
-                    /** @description The projects to assign a project-scoped role for. If omitted, assigns an org-wide role. */
-                    projects?: {
-                        /**
-                         * @description Project ref
-                         * @example abcjuqabhgwjjutfvtpa
-                         */
-                        ref: string;
-                    }[];
-                };
-            };
-        };
-        OrganizationMemberRoleResponse_Output: {
-            data: {
-                /**
-                 * @description Resource type.
-                 * @enum {string}
-                 */
-                type: "organization_member_role";
-                attributes: {
-                    /**
-                     * @description Role name. For project-scoped assignments this is the base role name.
-                     * @example developer
-                     */
-                    name: string;
-                    /**
-                     * @description Whether this role applies org-wide or is scoped to specific projects for the user.
-                     * @enum {string}
-                     */
-                    scope: "organization" | "project";
-                    /** @description Project refs this role is scoped to. Empty array for org-level roles. */
-                    projects: {
-                        ref: string;
-                        name: string;
-                    }[];
                 };
             };
         };
@@ -2371,6 +2298,120 @@ export interface components {
                 };
             }[];
         };
+        V2ListMembersResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "organization_member";
+                /** Format: uuid */
+                id: string;
+                attributes: {
+                    /** @description Member's username */
+                    username: string | null;
+                    /** @description Member's primary email */
+                    primary_email: string | null;
+                    /** @description Whether Multi-Factor Authentication is enabled for this member */
+                    mfa_enabled: boolean;
+                    /** @description Whether this member is a Single Sign-On user */
+                    is_sso_user: boolean;
+                    /** @description Member's avatar URL */
+                    avatar_url: string | null;
+                    /** @description Roles assigned to this member. Includes both org-level and project-scoped roles. */
+                    roles: {
+                        /**
+                         * @description Role name. For project-scoped roles this is the base role name.
+                         * @example developer
+                         */
+                        name: string;
+                        /**
+                         * @description Whether this role applies org-wide or is scoped to specific projects for the user.
+                         * @enum {string}
+                         */
+                        scope: "organization" | "project";
+                        /** @description Project refs this role is scoped to. Empty array for org-level roles. */
+                        projects: {
+                            ref: string;
+                            name: string;
+                        }[];
+                    }[];
+                };
+            }[];
+            links: {
+                /**
+                 * @description URL path to the first page if available.
+                 * @example /v2/organizations/my-org/members?page[size]=10
+                 */
+                first?: string | null;
+                /**
+                 * @description URL path to the previous page.
+                 * @example /v2/organizations/my-org/members?page[size]=10&page[before]=019adf7d-4513-74c5-bb9a-f1bc0f7a95d7
+                 */
+                prev: string | null;
+                /**
+                 * @description URL path to the next page.
+                 * @example /v2/organizations/my-org/members?page[size]=10&page[after]=019adf7d-4513-7062-b292-78b86cc470a4
+                 */
+                next: string | null;
+                /**
+                 * @description URL path to the last page if available.
+                 * @example /v2/organizations/my-org/members?page[size]=10&page[after]=019adf7d-4513-71ba-b264-21900edb4295
+                 */
+                last?: string | null;
+            };
+        };
+        V2AssignOrganizationMemberRoleRequest: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "organization_member_role";
+                attributes: {
+                    /**
+                     * @description Role name to assign. Must be one of: owner, administrator, developer, read-only. Must be on a Team or Enterprise plan to use the read-only role.
+                     * @example developer
+                     * @enum {string}
+                     */
+                    role: "owner" | "administrator" | "developer" | "read-only" | "no-access";
+                    /** @description The projects to assign a project-scoped role for. If omitted, assigns an org-wide role. */
+                    projects?: {
+                        /**
+                         * @description Project ref
+                         * @example abcjuqabhgwjjutfvtpa
+                         */
+                        ref: string;
+                    }[];
+                };
+            };
+        };
+        OrganizationMemberRoleResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "organization_member_role";
+                attributes: {
+                    /**
+                     * @description Role name. For project-scoped assignments this is the base role name.
+                     * @example developer
+                     */
+                    name: string;
+                    /**
+                     * @description Whether this role applies org-wide or is scoped to specific projects for the user.
+                     * @enum {string}
+                     */
+                    scope: "organization" | "project";
+                    /** @description Project refs this role is scoped to. Empty array for org-level roles. */
+                    projects: {
+                        ref: string;
+                        name: string;
+                    }[];
+                };
+            };
+        };
         V2ListProjectsResponse_Output: {
             data: {
                 /**
@@ -2390,7 +2431,7 @@ export interface components {
                      * @description Project status
                      * @enum {string}
                      */
-                    status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+                    status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
                     /** @description Cloud provider hosting the project */
                     cloud_provider: string;
                     /** @description Region the project is hosted in */
@@ -4080,140 +4121,6 @@ export interface operations {
             };
         };
     };
-    "v2-list-organization-members": {
-        parameters: {
-            query?: {
-                page?: {
-                    size?: number;
-                    /** Format: uuid */
-                    after?: string;
-                    /** Format: uuid */
-                    before?: string;
-                };
-                filter?: {
-                    username?: string;
-                    /** Format: email */
-                    primary_email?: string;
-                };
-            };
-            header?: never;
-            path: {
-                /** @description Organization slug */
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["V2ListMembersResponse_Output"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description Forbidden action */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description Rate limit exceeded */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-        };
-    };
-    "v2-assign-organization-member-role": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Organization slug */
-                slug: string;
-                user_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["V2AssignOrganizationMemberRoleRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrganizationMemberRoleResponse_Output"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description This feature requires the Team, or Enterprise organization plan. */
-            402: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description Forbidden action */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description Rate limit exceeded */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-            /** @description Failed to assign organization member role */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseBody"];
-                };
-            };
-        };
-    };
     "v2-list-organization-roles": {
         parameters: {
             query?: never;
@@ -4378,6 +4285,206 @@ export interface operations {
             };
             /** @description Rate limit exceeded */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-list-organization-members": {
+        parameters: {
+            query?: {
+                page?: {
+                    size?: number;
+                    /** Format: uuid */
+                    after?: string;
+                    /** Format: uuid */
+                    before?: string;
+                };
+                filter?: {
+                    username?: string;
+                    /** Format: email */
+                    primary_email?: string;
+                };
+            };
+            header?: never;
+            path: {
+                /** @description Organization slug */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ListMembersResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-assign-organization-member-role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Organization slug */
+                slug: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2AssignOrganizationMemberRoleRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationMemberRoleResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description This feature requires the Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to assign organization member role */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-remove-organization-members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Organization slug */
+                slug: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Organization member not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to remove organization member */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
