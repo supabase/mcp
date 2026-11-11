@@ -19,7 +19,7 @@ import { z } from 'zod/v4';
 import { createSupabaseApiPlatform } from '../platform/api-platform.js';
 import { createSupabaseMcpServer } from '../server.js';
 import { assertValidConnectUrlTemplate } from '../tools/secret-tools.js';
-import { CURRENT_ELICITATION_TOOLS } from '../types.js';
+import { CURRENT_ELICITATION_TOOLS, featureGroupNameSchema } from '../types.js';
 import { dashboardUrlForApiUrl, parseFeatureGroups } from '../util.js';
 import { parseList } from './util.js';
 
@@ -38,7 +38,8 @@ const querySchema = z.object({
   features: z
     .string()
     .transform((value) => parseList(value))
-    .optional(),
+    .optional()
+    .pipe(z.array(featureGroupNameSchema).optional()),
   skip_elicitations: z
     .string()
     .transform((value) => parseList(value))

@@ -28,6 +28,13 @@ export const deprecatedFeatureGroupSchema = z.enum(['debug']);
 
 export const currentFeatureGroupSchema = z.enum(CURRENT_FEATURE_GROUPS);
 
+// Every accepted `features` name, current and deprecated. Unlike the union
+// below, its error message lists the valid values.
+export const featureGroupNameSchema = z.enum([
+  ...CURRENT_FEATURE_GROUPS,
+  ...deprecatedFeatureGroupSchema.options,
+]);
+
 export const featureGroupSchema = z
   .union([deprecatedFeatureGroupSchema, currentFeatureGroupSchema])
   .transform((value) => {

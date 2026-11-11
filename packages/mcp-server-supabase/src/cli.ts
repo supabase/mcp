@@ -3,8 +3,11 @@ import { parseArgs } from 'node:util';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 
 import packageJson from '../package.json' with { type: 'json' };
+import { z } from 'zod/v4';
+
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import { createSupabaseMcpServer } from './server.js';
+import { featureGroupNameSchema } from './types.js';
 import { startLocalHttpEntry } from './transports/local-http-entry.js';
 import { parseList } from './transports/util.js';
 import { dashboardUrlForApiUrl, parseFeatureGroups } from './util.js';
@@ -110,6 +113,12 @@ async function main() {
   });
 
   if (features) {
+    const result = z.array(featureGroupNameSchema).safeParse(features);
+    if (!result.success) {
+      console.error(z.prettifyError(result.error));
+      process.exitCode = 1;
+      return;
+    }
     parseFeatureGroups(platform, features);
   }
 

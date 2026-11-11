@@ -1116,6 +1116,33 @@ describe('startLocalHttpEntry', () => {
     }
   );
 
+  test.each(['bogus', 'database,bogus'])(
+    'rejects unsupported features %s over HTTP with a 400 naming the valid groups',
+    async (features) => {
+      const response = await fetch(`${entry.url}?features=${features}`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+      });
+      expect(response.status).toBe(400);
+      const { error } = (await response.json()) as { error: string };
+      expect(error).toContain('database');
+      expect(error).toContain('at features[');
+    }
+  );
+
+  test.each(['database', 'database,debug'])(
+    'accepts supported features %s over HTTP',
+    async (features) => {
+      const client = await connect(
+        { pin: MODERN_PROTOCOL_VERSION },
+        `features=${features}`
+      );
+      const { tools } = await client.listTools();
+      expect(tools.length).toBeGreaterThan(0);
+    }
+  );
+
   test.each(['unknown', 'Create_Project'])(
     'rejects unsupported skip name %s over HTTP',
     async (skip) => {
