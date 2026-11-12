@@ -7,17 +7,21 @@ import {
 } from '@modelcontextprotocol/server';
 import type { ToolObservation, ToolOutcome } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
-import {
-  advisorySchema,
-  buildRlsDisabledAdvisory,
-  selectAdvisory,
-} from '../advisories/index.js';
+import { advisorySchema } from '../advisories/index.js';
 import { ToolCallerError } from '../errors.js';
 import type { ObservationFact } from '../observation.js';
-import { listExtensionsSql, listTablesSql } from '../pg-meta/index.js';
 import {
+  listColumnsSql,
+  listExtensionsSql,
+  listKeyColumnsSql,
+  listTablesSql,
+} from '../pg-meta/index.js';
+import {
+  columnRowSchema,
+  type KeyColumnRow,
+  keyColumnRowSchema,
   postgresExtensionSchema,
-  postgresTableSchema,
+  tableRowSchema,
 } from '../pg-meta/types.js';
 import type { DatabaseOperations } from '../platform/types.js';
 import { migrationSchema } from '../platform/types.js';
@@ -128,46 +132,105 @@ const listTablesInputSchema = z.object({
     .default(false),
 });
 
+const listTablesColumnSchema = z.object({
+  name: z.string(),
+  data_type: z.string(),
+  format: z.string(),
+  options: z.array(z.string()),
+  default_value: z.any().optional(),
+  identity_generation: z.union([z.string(), z.null()]).optional(),
+  enums: z.array(z.string()).optional(),
+  check: z.union([z.string(), z.null()]).optional(),
+  comment: z.union([z.string(), z.null()]).optional(),
+});
+
+const foreignKeyConstraintSchema = z.object({
+  name: z.string(),
+  source_table: z.string(),
+  source_columns: z.array(z.string()),
+  target_table: z.string(),
+  target_columns: z.array(z.string()),
+});
+
 const listTablesOutputSchema = z.object({
   tables: z.array(
     z.object({
       name: z.string(),
-      rls_enabled: z.boolean(),
+      rls_enabled: z.boolean().nullable(),
       rows: z.number().nullable(),
       comment: z.string().nullable().optional(),
       partition_of: z.string().optional(),
-      columns: z
-        .array(
-          z.object({
-            name: z.string(),
-            data_type: z.string(),
-            format: z.string(),
-            options: z.array(z.string()),
-            default_value: z.any().optional(),
-            identity_generation: z.union([z.string(), z.null()]).optional(),
-            enums: z.array(z.string()).optional(),
-            check: z.union([z.string(), z.null()]).optional(),
-            comment: z.union([z.string(), z.null()]).optional(),
-          })
-        )
-        .nullable()
-        .optional(),
+      columns: z.array(listTablesColumnSchema).nullable().optional(),
       primary_keys: z.array(z.string()).nullable().optional(),
-      foreign_key_constraints: z
-        .array(
-          z.object({
-            name: z.string(),
-            source_table: z.string(),
-            source_columns: z.array(z.string()),
-            target_table: z.string(),
-            target_columns: z.array(z.string()),
-          })
-        )
-        .optional(),
+      foreign_key_constraints: z.array(foreignKeyConstraintSchema).optional(),
     })
   ),
   advisory: advisorySchema.optional(),
 });
+
+type KeyConstraint = {
+  type: KeyColumnRow['constraint_type'];
+  name: string;
+  table: string;
+  columns: string[];
+  target?: { table: string; columns: string[] };
+};
+
+/**
+ * Groups key column rows, already ordered by key position, into one entry
+ * per constraint.
+ *
+ * Postgres allows the same constraint name on different tables in a schema,
+ * while `information_schema.referential_constraints` is keyed by name only,
+ * so a foreign key column can come back once per same-named constraint. The
+ * first row that resolves a referenced column wins, and a foreign key whose
+ * columns don't all resolve to one referenced table is left without a target.
+ */
+function groupKeyConstraints(rows: KeyColumnRow[]): KeyConstraint[] {
+  const keyColumns = new Map<string, KeyColumnRow>();
+  for (const row of rows) {
+    const key = [
+      row.schema,
+      row.table,
+      row.constraint_name,
+      row.ordinal_position,
+    ].join('\0');
+    const existing = keyColumns.get(key);
+    if (!existing || (existing.target_name === null && row.target_name)) {
+      keyColumns.set(key, row);
+    }
+  }
+
+  const constraints = new Map<string, KeyColumnRow[]>();
+  for (const row of keyColumns.values()) {
+    const key = [row.schema, row.table, row.constraint_name].join('\0');
+    constraints.set(key, [...(constraints.get(key) ?? []), row]);
+  }
+
+  return [...constraints.values()].map((columns) => {
+    const [first] = columns as [KeyColumnRow, ...KeyColumnRow[]];
+    const targetTables = new Set(
+      columns.map(({ target_schema, target_table, target_name }) =>
+        target_name === null ? null : `${target_schema}.${target_table}`
+      )
+    );
+    const [targetTable] = targetTables;
+
+    return {
+      type: first.constraint_type,
+      name: first.constraint_name,
+      table: `${first.schema}.${first.table}`,
+      columns: columns.map(({ name }) => name),
+      ...(targetTables.size === 1 &&
+        targetTable && {
+          target: {
+            table: targetTable,
+            columns: columns.map(({ target_name }) => target_name ?? ''),
+          },
+        }),
+    };
+  });
+}
 
 const listExtensionsInputSchema = z.object({
   project_id: z.string(),
@@ -293,148 +356,123 @@ export function getDatabaseTools({
       ...databaseToolDefs.list_tables,
       inject: { project_id },
       execute: async ({ project_id, schemas, verbose }) => {
-        const { query, parameters } = listTablesSql(schemas);
-        const data = await database.executeSql(project_id, {
-          query,
-          parameters,
-          read_only: true,
-        });
-        const parsedTables = data.map((table) =>
-          postgresTableSchema.parse(table)
-        );
-        const tables = parsedTables.map(
-          // Reshape to reduce token bloat
-          ({
-            // Discarded fields
-            id,
-            bytes,
-            size,
-            rls_forced,
-            live_rows_estimate,
-            dead_rows_estimate,
-            replica_identity,
+        const query = (sql: { query: string; parameters: string[] }) =>
+          database.executeSql<unknown>(project_id, { ...sql, read_only: true });
 
-            // Modified fields
-            columns,
-            primary_keys,
-            relationships,
-            comment,
-            partition_of,
-
-            // Modified passthrough
-            schema,
-            name,
-            ...table
-          }) => {
-            const compactTable = {
-              name: `${schema}.${name}`,
-              ...table,
-              rows: live_rows_estimate,
-
-              // Omit fields when empty
-              ...(comment !== null && { comment }),
-              ...(partition_of !== null && { partition_of }),
-            };
-
-            if (!verbose) {
-              return compactTable;
-            }
-
-            const foreign_key_constraints = relationships?.map(
-              ({
-                constraint_name,
-                source_schema,
-                source_table_name,
-                source_columns,
-                target_table_schema,
-                target_table_name,
-                target_columns,
-              }) => ({
-                name: constraint_name,
-                source_table: `${source_schema}.${source_table_name}`,
-                source_columns,
-                target_table: `${target_table_schema}.${target_table_name}`,
-                target_columns,
-              })
-            );
-
-            return {
-              ...compactTable,
-              columns: columns
-                ? columns.map(
-                    ({
-                      // Discarded fields
-                      id,
-                      table,
-                      table_id,
-                      schema,
-                      ordinal_position,
-
-                      // Modified fields
-                      default_value,
-                      is_identity,
-                      identity_generation,
-                      is_generated,
-                      is_nullable,
-                      is_updatable,
-                      is_unique,
-                      check,
-                      comment,
-                      enums,
-
-                      // Passthrough rest
-                      ...column
-                    }) => {
-                      const options: string[] = [];
-                      if (is_identity) options.push('identity');
-                      if (is_generated) options.push('generated');
-                      if (is_nullable) options.push('nullable');
-                      if (is_updatable) options.push('updatable');
-                      if (is_unique) options.push('unique');
-
-                      return {
-                        ...column,
-                        options,
-
-                        // Omit fields when empty
-                        ...(default_value !== null && { default_value }),
-                        ...(identity_generation !== null && {
-                          identity_generation,
-                        }),
-                        ...(enums.length > 0 && { enums }),
-                        ...(check !== null && { check }),
-                        ...(comment !== null && { comment }),
-                      };
-                    }
-                  )
-                : null,
-              primary_keys: primary_keys
-                ? primary_keys.map(
-                    ({ table_id, schema, table_name, ...primary_key }) =>
-                      primary_key.name
-                  )
-                : null,
-
-              // Omit fields when empty
-              ...(foreign_key_constraints.length > 0 && {
-                foreign_key_constraints,
-              }),
-            };
-          }
-        );
-        const advisory = selectAdvisory([
-          buildRlsDisabledAdvisory(
-            parsedTables.map(({ schema, name, rls_enabled }) => ({
-              schema,
-              name,
-              rls_enabled,
-            }))
-          ),
+        const [tableRows, columnRows, keyColumnRows] = await Promise.all([
+          query(listTablesSql(schemas)),
+          verbose ? query(listColumnsSql(schemas)) : [],
+          verbose ? query(listKeyColumnsSql(schemas)) : [],
         ]);
 
+        const tableNames = tableRows.map((row) => {
+          const { schema, name } = tableRowSchema.parse(row);
+          return `${schema}.${name}`;
+        });
+
+        if (!verbose) {
+          return {
+            tables: tableNames.map((name) => ({
+              name,
+              rls_enabled: null,
+              rows: null,
+            })),
+          };
+        }
+
+        const constraints = groupKeyConstraints(
+          keyColumnRows.map((row) => keyColumnRowSchema.parse(row))
+        );
+
+        const primaryKeys = new Map<string, string[]>();
+        const uniqueColumns = new Set<string>();
+        const foreignKeys = new Map<
+          string,
+          z.infer<typeof foreignKeyConstraintSchema>[]
+        >();
+
+        for (const constraint of constraints) {
+          if (constraint.type === 'PRIMARY KEY') {
+            primaryKeys.set(constraint.table, constraint.columns);
+          } else if (constraint.type === 'UNIQUE') {
+            if (constraint.columns.length === 1) {
+              uniqueColumns.add(`${constraint.table}.${constraint.columns[0]}`);
+            }
+          } else if (constraint.target) {
+            const foreignKey = {
+              name: constraint.name,
+              source_table: constraint.table,
+              source_columns: constraint.columns,
+              target_table: constraint.target.table,
+              target_columns: constraint.target.columns,
+            };
+            for (const table of new Set([
+              foreignKey.source_table,
+              foreignKey.target_table,
+            ])) {
+              foreignKeys.set(table, [
+                ...(foreignKeys.get(table) ?? []),
+                foreignKey,
+              ]);
+            }
+          }
+        }
+
+        const columns = new Map<
+          string,
+          z.infer<typeof listTablesColumnSchema>[]
+        >();
+
+        for (const row of columnRows) {
+          const {
+            schema,
+            table,
+            name,
+            data_type,
+            format,
+            default_value,
+            is_identity,
+            identity_generation,
+            is_generated,
+            is_nullable,
+            is_updatable,
+          } = columnRowSchema.parse(row);
+          const tableName = `${schema}.${table}`;
+
+          const options: string[] = [];
+          if (is_identity) options.push('identity');
+          if (is_generated) options.push('generated');
+          if (is_nullable) options.push('nullable');
+          if (is_updatable) options.push('updatable');
+          if (uniqueColumns.has(`${tableName}.${name}`)) options.push('unique');
+
+          columns.set(tableName, [
+            ...(columns.get(tableName) ?? []),
+            {
+              name,
+              data_type,
+              format,
+              options,
+              ...(default_value !== null && { default_value }),
+              ...(identity_generation !== null && { identity_generation }),
+            },
+          ]);
+        }
+
         return {
-          tables,
-          ...(advisory && { advisory }),
+          tables: tableNames.map((name) => {
+            const tableForeignKeys = foreignKeys.get(name) ?? [];
+            return {
+              name,
+              rls_enabled: null,
+              rows: null,
+              columns: columns.get(name) ?? [],
+              primary_keys: primaryKeys.get(name) ?? [],
+              ...(tableForeignKeys.length > 0 && {
+                foreign_key_constraints: tableForeignKeys,
+              }),
+            };
+          }),
         };
       },
     }),

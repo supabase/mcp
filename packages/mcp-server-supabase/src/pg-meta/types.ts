@@ -1,69 +1,38 @@
 import { z } from 'zod/v4';
 
-export const postgresPrimaryKeySchema = z.object({
+const yesNoSchema = z.enum(['YES', 'NO']).transform((value) => value === 'YES');
+
+export const tableRowSchema = z.object({
   schema: z.string(),
-  table_name: z.string(),
   name: z.string(),
-  table_id: z.number().int(),
 });
 
-export const postgresRelationshipSchema = z.object({
-  id: z.number().int(),
-  constraint_name: z.string(),
-  source_schema: z.string(),
-  source_table_name: z.string(),
-  source_columns: z.array(z.string()),
-  target_table_schema: z.string(),
-  target_table_name: z.string(),
-  target_columns: z.array(z.string()),
-});
-
-export const postgresColumnSchema = z.object({
-  table_id: z.number().int(),
+export const columnRowSchema = z.object({
   schema: z.string(),
   table: z.string(),
-  id: z.string().regex(/^(\d+)\.(\d+)$/),
-  ordinal_position: z.number().int(),
   name: z.string(),
-  default_value: z.any(),
+  default_value: z.string().nullable(),
   data_type: z.string(),
   format: z.string(),
-  is_identity: z.boolean(),
-  identity_generation: z.union([
-    z.literal('ALWAYS'),
-    z.literal('BY DEFAULT'),
-    z.null(),
-  ]),
-  is_generated: z.boolean(),
-  is_nullable: z.boolean(),
-  is_updatable: z.boolean(),
-  is_unique: z.boolean(),
-  enums: z.array(z.string()),
-  check: z.union([z.string(), z.null()]),
-  comment: z.union([z.string(), z.null()]),
+  is_identity: yesNoSchema,
+  identity_generation: z.enum(['ALWAYS', 'BY DEFAULT']).nullable(),
+  is_generated: z
+    .enum(['ALWAYS', 'NEVER'])
+    .transform((value) => value === 'ALWAYS'),
+  is_nullable: yesNoSchema,
+  is_updatable: yesNoSchema,
 });
 
-export const postgresTableSchema = z.object({
-  id: z.number().int(),
+export const keyColumnRowSchema = z.object({
+  constraint_type: z.enum(['PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY']),
+  constraint_name: z.string(),
   schema: z.string(),
+  table: z.string(),
   name: z.string(),
-  rls_enabled: z.boolean(),
-  rls_forced: z.boolean(),
-  replica_identity: z.union([
-    z.literal('DEFAULT'),
-    z.literal('INDEX'),
-    z.literal('FULL'),
-    z.literal('NOTHING'),
-  ]),
-  bytes: z.number().int(),
-  size: z.string(),
-  live_rows_estimate: z.number().int(),
-  dead_rows_estimate: z.number().int(),
-  comment: z.string().nullable(),
-  partition_of: z.string().nullable(),
-  columns: z.array(postgresColumnSchema).optional(),
-  primary_keys: z.array(postgresPrimaryKeySchema),
-  relationships: z.array(postgresRelationshipSchema),
+  ordinal_position: z.coerce.number().int(),
+  target_schema: z.string().nullable(),
+  target_table: z.string().nullable(),
+  target_name: z.string().nullable(),
 });
 
 export const postgresExtensionSchema = z.object({
@@ -74,8 +43,7 @@ export const postgresExtensionSchema = z.object({
   comment: z.union([z.string(), z.null()]),
 });
 
-export type PostgresPrimaryKey = z.infer<typeof postgresPrimaryKeySchema>;
-export type PostgresRelationship = z.infer<typeof postgresRelationshipSchema>;
-export type PostgresColumn = z.infer<typeof postgresColumnSchema>;
-export type PostgresTable = z.infer<typeof postgresTableSchema>;
+export type TableRow = z.infer<typeof tableRowSchema>;
+export type ColumnRow = z.infer<typeof columnRowSchema>;
+export type KeyColumnRow = z.infer<typeof keyColumnRowSchema>;
 export type PostgresExtension = z.infer<typeof postgresExtensionSchema>;
