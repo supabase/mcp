@@ -17,6 +17,17 @@ SELECT
   pg_stat_get_live_tuples(c.oid) AS live_rows_estimate,
   pg_stat_get_dead_tuples(c.oid) AS dead_rows_estimate,
   obj_description(c.oid) AS comment,
+  (
+    select
+      pn.nspname || '.' || pc.relname
+    from
+      pg_inherits i
+      join pg_class pc on pc.oid = i.inhparent
+      join pg_namespace pn on pn.oid = pc.relnamespace
+    where
+      i.inhrelid = c.oid
+      and pc.relkind = 'p'
+  ) as partition_of,
   coalesce(pk.primary_keys, '[]') as primary_keys,
   coalesce(
     jsonb_agg(relationships) filter (where relationships is not null),
@@ -26,26 +37,27 @@ FROM
   pg_namespace nc
   JOIN pg_class c ON nc.oid = c.relnamespace
   left join (
+    -- Walk indkey positionally so columns keep key order. indnkeyatts excludes
+    -- INCLUDE columns.
     select
       table_id,
-      jsonb_agg(_pk.*) as primary_keys
+      jsonb_agg(to_jsonb(_pk) - 'ord' order by _pk.ord) as primary_keys
     from (
       select
         n.nspname as schema,
         c.relname as table_name,
         a.attname as name,
-        c.oid :: int8 as table_id
+        c.oid :: int8 as table_id,
+        k.ord
       from
-        pg_index i,
-        pg_class c,
-        pg_attribute a,
-        pg_namespace n
+        pg_index i
+        join pg_class c on i.indrelid = c.oid
+        join pg_namespace n on c.relnamespace = n.oid
+        cross join lateral unnest(i.indkey :: int2[]) with ordinality as k(attnum, ord)
+        join pg_attribute a on a.attrelid = c.oid and a.attnum = k.attnum
       where
-        i.indrelid = c.oid
-        and c.relnamespace = n.oid
-        and a.attrelid = c.oid
-        and a.attnum = any (i.indkey)
-        and i.indisprimary
+        i.indisprimary
+        and k.ord <= i.indnkeyatts
     ) as _pk
     group by table_id
   ) as pk
@@ -74,6 +86,7 @@ FROM
         on ta.attrelid = c.confrelid and ta.attnum = cols.confkey
     where
       c.contype = 'f'
+      and c.conparentid = 0
     group by
       c.oid, c.conname, nsa.nspname, csa.relname, nta.nspname, cta.relname
   ) as relationships

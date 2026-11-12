@@ -223,40 +223,17 @@ describe.each(tools)('%s observation', (name) => {
   });
 });
 
-test.each([
-  {
-    name: 'list_projects',
-    args: {},
-    bucket: 'other',
-  },
-  {
-    name: 'execute_sql',
-    args: { project_id: 'PRIVATE_PROJECT', query: 'SELECT 1;' },
-    bucket: 'execute_sql',
-  },
-  {
-    name: 'apply_migration',
-    args: {
-      project_id: 'PRIVATE_PROJECT',
-      name: 'PRIVATE_MIGRATION',
-      query: 'SELECT 1;',
+test('list_projects records the other bucket without feature facts', async () => {
+  const h = await setup({ configured: false });
+  await callModernTool(h.client, { name: 'list_projects', arguments: {} });
+  expect(h.attempts).toEqual([
+    {
+      context: { method: 'tools/call', tool: 'other' },
+      facts: [],
+      ends: [{ result: 'completed', durationMs: expect.any(Number) }],
     },
-    bucket: 'apply_migration',
-  },
-] as const)(
-  '$name records the $bucket bucket without feature facts',
-  async ({ name, args, bucket }) => {
-    const h = await setup({ configured: false });
-    await callModernTool(h.client, { name, arguments: args });
-    expect(h.attempts).toEqual([
-      {
-        context: { method: 'tools/call', tool: bucket },
-        facts: [],
-        ends: [{ result: 'completed', durationMs: expect.any(Number) }],
-      },
-    ]);
-    const duration = h.attempts[0]!.ends[0]!.durationMs;
-    expect(Number.isFinite(duration)).toBe(true);
-    expect(duration).toBeGreaterThanOrEqual(0);
-  }
-);
+  ]);
+  const duration = h.attempts[0]!.ends[0]!.durationMs;
+  expect(Number.isFinite(duration)).toBe(true);
+  expect(duration).toBeGreaterThanOrEqual(0);
+});

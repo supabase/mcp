@@ -3,7 +3,7 @@ experimental = true
 lockfile = true
 
 [tools]
-node = "lts"
+node = "24"
 pnpm = "10"
 
 [tools."github:modelcontextprotocol/registry"]

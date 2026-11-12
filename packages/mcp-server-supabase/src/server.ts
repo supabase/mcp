@@ -1,4 +1,10 @@
-import { createRequestStateCodec } from '@modelcontextprotocol/server';
+import {
+  CLIENT_INFO_META_KEY,
+  createRequestStateCodec,
+  type Implementation,
+  isSpecType,
+  type ServerContext,
+} from '@modelcontextprotocol/server';
 import {
   createMcpServer,
   type Tool,
@@ -20,14 +26,17 @@ import { getAccountTools } from './tools/account-tools.js';
 import { getBranchingTools } from './tools/branching-tools.js';
 import {
   type ElicitationState,
+  ExpiredRequestState,
   isFormCapable,
   isUrlCapable,
+  stopExpiredState,
 } from './tools/confirmation.js';
 import { getDatabaseTools } from './tools/database-operation-tools.js';
 import { getDebuggingTools } from './tools/debugging-tools.js';
 import { getDevelopmentTools } from './tools/development-tools.js';
 import { getDocsTools } from './tools/docs-tools.js';
 import { getEdgeFunctionTools } from './tools/edge-function-tools.js';
+import { getFeedbackTools } from './tools/feedback-tools.js';
 import { getNotebookTools } from './tools/notebook-tools.js';
 import {
   assertValidConnectUrlTemplate,
@@ -44,6 +53,14 @@ import { parseFeatureGroups } from './util.js';
 
 const { version } = packageJson;
 
+// Clients on protocol 2026-07-28 send their info in each request instead of an initialize handshake
+function getRequestClientInfo(ctx: ServerContext | undefined) {
+  const envelope = ctx?.mcpReq.envelope;
+  if (!envelope || !(CLIENT_INFO_META_KEY in envelope)) return undefined;
+  const client = envelope[CLIENT_INFO_META_KEY];
+  return isSpecType.Implementation(client) ? client : undefined;
+}
+
 export type SupabaseMcpServerOptions = {
   /**
    * Platform implementation for Supabase.
@@ -54,6 +71,8 @@ export type SupabaseMcpServerOptions = {
    * The API URL for the Supabase Content API.
    */
   contentApiUrl?: string;
+  /** Dashboard base URL for notebook links. Defaults to the production dashboard. */
+  dashboardUrl?: string;
 
   /**
    * The project ID to scope the server to.
@@ -70,7 +89,7 @@ export type SupabaseMcpServerOptions = {
 
   /**
    * Features to enable.
-   * Options: 'account', 'branching', 'database', 'debugging', 'development', 'docs', 'functions', 'notebooks', 'storage'
+   * Options: 'account', 'branching', 'database', 'debugging', 'development', 'docs', 'feedback', 'functions', 'notebooks', 'storage'
    */
   features?: string[];
 
@@ -78,6 +97,13 @@ export type SupabaseMcpServerOptions = {
    * Callback for after a supabase tool is called.
    */
   onToolCall?: ToolCallCallback;
+
+  /**
+   * The connected MCP client. Hosts that serve legacy clients statelessly must
+   * pass the client from their restored session, since a fresh server never
+   * sees `initialize`. Requests and handshakes the server sees take precedence.
+   */
+  clientInfo?: Implementation;
 
   /** Optional per-request observer; see ObservedMethod for covered handlers. */
   observer?: RequestObserver;
@@ -93,17 +119,19 @@ export type SupabaseMcpServerOptions = {
       key: string | Uint8Array;
       /** The authenticated principal `requestState` is bound to. */
       principal: string;
-      /** How long a minted `requestState` stays valid, in seconds. */
-      ttlSeconds?: number;
     };
     /**
-     * Form confirmation for the listed cost and destructive SQL tools. Clients
-     * without form capability keep the existing SQL behavior and legacy
-     * `get_cost` -> `confirm_cost` -> `confirm_cost_id` flow.
+     * Form confirmation for the listed cost, destructive SQL and notebook
+     * tools. Clients without form capability run raw SQL without a prompt,
+     * but cannot run mutating notebook cells when confirmation is enabled.
+     * Cost tools keep the legacy `get_cost` -> `confirm_cost` ->
+     * `confirm_cost_id` flow.
      */
     confirmation?: {
       /** Tools that accept a confirmation elicitation. Empty disables all forms. */
       enabledTools: readonly ElicitationToolName[];
+      /** How long a confirmation `requestState` stays valid, in seconds. Defaults to 600. */
+      ttlSeconds?: number;
     };
     /**
      * URL-mode secret collection for `create_edge_function_secret`. Requires
@@ -118,6 +146,8 @@ export type SupabaseMcpServerOptions = {
        * Example: `https://supabase.com/dashboard/mcp/secrets?ref={ref}&name={name}`.
        */
       connectUrlTemplate: string;
+      /** How long a secret-collection `requestState` stays valid, in seconds. Defaults to 600. */
+      ttlSeconds?: number;
     };
   };
 };
@@ -130,6 +160,8 @@ const DEFAULT_FEATURES: FeatureGroup[] = [
   'development',
   'functions',
   'branching',
+  'feedback',
+  'notebooks',
 ];
 
 export const PLATFORM_INDEPENDENT_FEATURES: FeatureGroup[] = ['docs'];
@@ -162,6 +194,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     readOnly,
     features,
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
+    dashboardUrl,
     onToolCall,
     observer,
     elicitation,
@@ -191,16 +224,34 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
   const enabledConfirmationTools =
     elicitation?.confirmation?.enabledTools ?? [];
-  const elicitationCodec =
-    elicitation &&
-    (enabledConfirmationTools.length > 0 || elicitation.secretCollection)
+  // Each flow uses its own TTL for minting and for its expired message.
+  const confirmationTtlSeconds = elicitation?.confirmation?.ttlSeconds ?? 600;
+  const secretCollectionTtlSeconds =
+    elicitation?.secretCollection?.ttlSeconds ?? 600;
+  const codecOptions = elicitation && {
+    key: elicitation.requestState.key,
+    bind: (ctx: ServerContext) =>
+      `${ctx.mcpReq.method}:${elicitation.requestState.principal}`,
+  };
+  const confirmationCodec =
+    codecOptions && enabledConfirmationTools.length > 0
       ? createRequestStateCodec<ElicitationState>({
-          key: elicitation.requestState.key,
-          ttlSeconds: elicitation.requestState.ttlSeconds,
-          bind: (ctx) =>
-            `${ctx.mcpReq.method}:${elicitation.requestState.principal}`,
+          ...codecOptions,
+          ttlSeconds: confirmationTtlSeconds,
         })
       : undefined;
+  const secretCollectionCodec =
+    codecOptions && elicitation?.secretCollection
+      ? createRequestStateCodec<ElicitationState>({
+          ...codecOptions,
+          ttlSeconds: secretCollectionTtlSeconds,
+        })
+      : undefined;
+  // Both codecs share the HMAC key and binding. The SDK verifies each token's
+  // signed expiry; a codec's configured TTL only affects tokens it mints.
+  const verificationCodec = confirmationCodec ?? secretCollectionCodec;
+
+  let handshakeClientInfo: Implementation | undefined;
 
   const server = createMcpServer<ObservedTool, ObservationFact>({
     name: 'supabase',
@@ -208,6 +259,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     version,
     instructions,
     async onInitialize(info) {
+      handshakeClientInfo = info.clientInfo;
       // Note: in stateless HTTP mode, `onInitialize` will not always be called
       // so we cannot rely on it for initialization. It's still useful for telemetry.
       const { clientInfo } = info;
@@ -226,11 +278,24 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       (CURRENT_ELICITATION_TOOLS as readonly string[]).includes(name)
         ? (name as ElicitationToolName)
         : 'other',
-    requestState: elicitationCodec && {
-      verify: elicitationCodec.verify,
+    requestState: verificationCodec && {
+      // The codec checks the MAC before expiry, so 'expired' means an
+      // authentic token. Every other failure still becomes the SDK's -32602.
+      verify: async (state, ctx) => {
+        try {
+          return await verificationCodec.verify(state, ctx);
+        } catch (error) {
+          if (error instanceof Error && error.message === 'expired') {
+            return new ExpiredRequestState();
+          }
+          throw error;
+        }
+      },
     },
     toolsListTtlMs: CONTENT_API_SCHEMA_TTL_MS,
     tools: async (ctx) => {
+      const clientInfo =
+        getRequestClientInfo(ctx) ?? handshakeClientInfo ?? options.clientInfo;
       const contentApiClient = await contentApiClientPromise;
       const {
         account,
@@ -242,6 +307,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         branching,
         secrets,
         notebooks,
+        feedback,
       } = platform;
       const tools: Record<
         string,
@@ -259,9 +325,9 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             account,
             readOnly,
             confirmation:
-              elicitationCodec &&
+              confirmationCodec &&
               enabledConfirmationTools.includes('create_project')
-                ? { codec: elicitationCodec }
+                ? { codec: confirmationCodec }
                 : undefined,
           })
         );
@@ -275,11 +341,11 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             projectId,
             readOnly,
             confirmation:
-              elicitationCodec &&
+              confirmationCodec &&
               (enabledConfirmationTools.includes('execute_sql') ||
                 enabledConfirmationTools.includes('apply_migration'))
                 ? {
-                    codec: elicitationCodec,
+                    codec: confirmationCodec,
                     enabledTools: enabledConfirmationTools.filter(
                       (tool): tool is 'execute_sql' | 'apply_migration' =>
                         tool === 'execute_sql' || tool === 'apply_migration'
@@ -313,9 +379,9 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             projectId,
             readOnly,
             confirmation:
-              elicitationCodec &&
+              confirmationCodec &&
               enabledConfirmationTools.includes('create_branch')
-                ? { codec: elicitationCodec }
+                ? { codec: confirmationCodec }
                 : undefined,
           })
         );
@@ -326,25 +392,74 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       }
 
       if (notebooks && enabledFeatures.has('notebooks')) {
-        Object.assign(tools, getNotebookTools({ notebooks, projectId }));
+        Object.assign(
+          tools,
+          getNotebookTools({
+            notebooks,
+            // Feature groups control tool discovery, not the operations that
+            // notebook cells can run. The notebooks group owns this tool.
+            database,
+            debugging,
+            projectId,
+            dashboardUrl,
+            readOnly,
+            confirmation:
+              confirmationCodec &&
+              (enabledConfirmationTools.includes('run_notebook') ||
+                enabledConfirmationTools.includes('delete_notebook'))
+                ? {
+                    codec: confirmationCodec,
+                    enabledTools: enabledConfirmationTools.filter(
+                      (tool): tool is 'run_notebook' | 'delete_notebook' =>
+                        tool === 'run_notebook' || tool === 'delete_notebook'
+                    ),
+                  }
+                : undefined,
+          })
+        );
+      }
+
+      if (feedback && enabledFeatures.has('feedback')) {
+        Object.assign(
+          tools,
+          getFeedbackTools({ feedback, projectId, clientInfo, readOnly })
+        );
       }
 
       if (
         elicitation?.secretCollection &&
         secrets &&
-        elicitationCodec &&
+        secretCollectionCodec &&
         enabledFeatures.has('functions')
       ) {
         const secretTools = getSecretTools({
           secrets,
           projectId,
           readOnly,
-          codec: elicitationCodec,
+          codec: secretCollectionCodec,
           connectUrlTemplate: elicitation.secretCollection.connectUrlTemplate,
         });
         secretTools.create_edge_function_secret.hidden =
           !ctx || !isUrlCapable(ctx);
         Object.assign(tools, secretTools);
+      }
+
+      // Every tool that resumes signed state answers an expired token first,
+      // before its own routing can ignore it.
+      for (const name of [
+        ...CURRENT_ELICITATION_TOOLS,
+        'create_edge_function_secret',
+      ]) {
+        const tool = tools[name];
+        if (tool) {
+          tools[name] = stopExpiredState(
+            name,
+            tool,
+            name === 'create_edge_function_secret'
+              ? secretCollectionTtlSeconds
+              : confirmationTtlSeconds
+          );
+        }
       }
 
       if (readOnly) {
@@ -360,7 +475,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       // that still need them. With nothing left to quote they are hidden
       // entirely.
       if (
-        elicitationCodec &&
+        confirmationCodec &&
         elicitation?.confirmation &&
         ctx &&
         isFormCapable(ctx)

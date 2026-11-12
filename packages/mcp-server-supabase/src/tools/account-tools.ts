@@ -3,7 +3,11 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { type ToolObservation, tool } from '@supabase/mcp-utils';
+import {
+  type ToolObservation,
+  tool,
+  ToolCallerError,
+} from '@supabase/mcp-utils';
 import type { ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
@@ -312,6 +316,7 @@ export function getAccountTools({
         ctx: ServerContext,
         observation?: ToolObservation<ObservationFact>
       ) => {
+        const receivedAt = Date.now();
         if (readOnly) {
           observation?.record({
             kind: 'confirmation_decision',
@@ -319,7 +324,9 @@ export function getAccountTools({
             route: 'blocked',
             reason: 'read_only',
           });
-          throw new Error('Cannot create a project in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot create a project in read-only mode.'
+          );
         }
 
         if (confirmation && isFormCapable(ctx)) {
@@ -361,7 +368,14 @@ export function getAccountTools({
                 }),
               },
               requestState: await codec.mint(
-                { tool: 'create_project', name, region, organization_id, cost },
+                {
+                  tool: 'create_project',
+                  name,
+                  region,
+                  organization_id,
+                  cost,
+                  issued_at: Date.now(),
+                },
                 ctx
               ),
             });
@@ -371,6 +385,7 @@ export function getAccountTools({
             ctx,
             tool: 'create_project',
             schema: projectCostStateSchema,
+            receivedAt,
             requestKey: 'confirm_cost',
             askForConfirmation,
             observation,
@@ -384,7 +399,6 @@ export function getAccountTools({
                 state.cost.recurrence === cost.recurrence &&
                 state.cost.amount === cost.amount),
             declinedText: 'Project creation was declined.',
-            cancelledText: 'Project creation was cancelled.',
           });
           switch (confirmationState.kind) {
             case 'reprompt':
@@ -404,7 +418,9 @@ export function getAccountTools({
         // Legacy clients only: form-capable clients returned above. Without
         // this, a missing ID would hit the opaque hash-mismatch error below.
         if (!confirm_cost_id) {
-          throw new Error(missingConfirmCostIdMessage);
+          throw new ToolCallerError(missingConfirmCostIdMessage, {
+            kind: 'confirmation_required',
+          });
         }
 
         const cost = await getNextProjectCost(account, organization_id);
@@ -418,8 +434,9 @@ export function getAccountTools({
         });
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
-          throw new Error(
-            'Cost confirmation ID does not match the expected cost of creating a project.'
+          throw new ToolCallerError(
+            'Cost confirmation ID does not match the expected cost of creating a project.',
+            { kind: 'confirmation_required' }
           );
         }
 
@@ -432,7 +449,9 @@ export function getAccountTools({
       ...accountToolDefs.pause_project,
       execute: async ({ project_id }) => {
         if (readOnly) {
-          throw new Error('Cannot pause a project in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot pause a project in read-only mode.'
+          );
         }
 
         await account.pauseProject(project_id);
@@ -443,7 +462,9 @@ export function getAccountTools({
       ...accountToolDefs.restore_project,
       execute: async ({ project_id }) => {
         if (readOnly) {
-          throw new Error('Cannot restore a project in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot restore a project in read-only mode.'
+          );
         }
 
         await account.restoreProject(project_id);

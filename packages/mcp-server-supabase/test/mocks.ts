@@ -15,6 +15,7 @@ import {
 } from '../src/content-api/graphql.js';
 import { getDeploymentId, getPathPrefix } from '../src/edge-function.js';
 import type { components } from '../src/management-api/types.js';
+import type { components as v2Components } from '../src/management-api-v2/types.js';
 import type { NotebookCell } from '../src/platform/types.js';
 
 const { version } = packageJson;
@@ -1017,6 +1018,48 @@ export const mockManagementApi = [
   ),
 
   /**
+   * Create notebook
+   */
+  http.post<
+    { ref: string },
+    v2Components['schemas']['V2CreateNotebookRequest']
+  >(`${API_URL}/v2/projects/:ref/notebooks`, async ({ params, request }) => {
+    const project = mockProjects.get(params.ref);
+    if (!project) {
+      return HttpResponse.json(
+        { error: { code: 'not_found', message: 'Project not found' } },
+        { status: 404 }
+      );
+    }
+
+    const { data } = await request.json();
+    expect(data.type).toBe('notebook');
+    const { name, description, content } = data.attributes;
+    const notebook = project.createNotebook({
+      name,
+      description,
+      content: {
+        schema_version: 1,
+        cells: content.cells.map((cell) => ({
+          ...cell,
+          id: crypto.randomUUID(),
+        })),
+      },
+    });
+
+    return HttpResponse.json(
+      {
+        data: {
+          type: 'notebook',
+          id: notebook.id,
+          attributes: { ...notebook.attributes, content: notebook.content },
+        },
+      },
+      { status: 201 }
+    );
+  }),
+
+  /**
    * List notebooks
    */
   http.get<{ ref: string }>(
@@ -1091,6 +1134,31 @@ export const mockManagementApi = [
           attributes: { ...notebook.attributes, content: notebook.content },
         },
       });
+    }
+  ),
+
+  /**
+   * Delete notebook
+   */
+  http.delete<{ ref: string; id: string }>(
+    `${API_URL}/v2/projects/:ref/notebooks/:id`,
+    ({ params }) => {
+      const project = mockProjects.get(params.ref);
+      if (!project) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Project not found' } },
+          { status: 404 }
+        );
+      }
+
+      if (!project.notebooks.delete(params.id)) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Notebook not found' } },
+          { status: 404 }
+        );
+      }
+
+      return new HttpResponse(null, { status: 204 });
     }
   ),
 ];

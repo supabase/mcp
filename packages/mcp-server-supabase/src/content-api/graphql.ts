@@ -7,6 +7,7 @@ import {
   type DocumentNode,
 } from 'graphql';
 import { z } from 'zod/v4';
+import { ToolCallerError } from '@supabase/mcp-utils';
 
 export const graphqlRequestSchema = z.object({
   query: z.string(),
@@ -15,13 +16,24 @@ export const graphqlRequestSchema = z.object({
 
 export const graphqlErrorSchema = z.object({
   message: z.string(),
-  locations: z.array(
-    z.object({
-      line: z.number(),
-      column: z.number(),
-    })
-  ),
+  locations: z
+    .array(
+      z.object({
+        line: z.number(),
+        column: z.number(),
+      })
+    )
+    .optional(),
+  path: z.array(z.union([z.string(), z.number()])).optional(),
 });
+
+// Request-validation messages the Content API route
+// (supabase/supabase apps/docs/app/api/graphql/route.ts) returns for GET
+// requests, without `locations`.
+const getOperationValidationMessages: readonly string[] = [
+  'GET requests must specify an operation name or send only a single operation',
+  'GET requests may only execute query operations',
+];
 
 export const graphqlResponseSchema = z.object({
   data: z.record(z.string(), z.unknown()).nullish(),
@@ -113,30 +125,31 @@ export class GraphQLClient {
     request: GraphQLRequest,
     options: QueryOptions = { validateSchema: false }
   ) {
+    let documentNode: DocumentNode;
     try {
-      // Check that this is a valid GraphQL query
-      const documentNode = parse(request.query);
-
-      // Validate the query against the schema if requested
-      if (options.validateSchema) {
-        const { schema } = await this.schemaLoaded;
-        const errors = validate(schema, documentNode);
-        if (errors.length > 0) {
-          throw new Error(
-            `Invalid GraphQL query: ${errors.map((e) => e.message).join(', ')}`
-          );
-        }
-      }
-
-      return this.#query(request);
+      documentNode = parse(request.query);
     } catch (error) {
-      // Make it obvious that this is a GraphQL error
       if (error instanceof GraphQLError) {
-        throw new Error(`Invalid GraphQL query: ${error.message}`);
+        throw new ToolCallerError(`Invalid GraphQL query: ${error.message}`, {
+          cause: error,
+        });
       }
-
       throw error;
     }
+
+    if (options.validateSchema) {
+      // Schema load failures reject `schemaLoaded`. Outages stay plain errors; a validation
+      // error from the schema query is branded like any other by `#query`.
+      const { schema } = await this.schemaLoaded;
+      const errors = validate(schema, documentNode);
+      if (errors.length > 0) {
+        throw new ToolCallerError(
+          `Invalid GraphQL query: ${errors.map((e) => e.message).join(', ')}`
+        );
+      }
+    }
+
+    return this.#query(request);
   }
 
   /**
@@ -186,14 +199,26 @@ export class GraphQLClient {
     }
 
     if (data.errors?.length) {
-      throw new Error(
-        `Supabase Content API GraphQL error: ${data.errors
-          .map(
-            (err) =>
-              `${err.message} (line ${err.locations[0]?.line ?? 'unknown'}, column ${err.locations[0]?.column ?? 'unknown'})`
-          )
-          .join(', ')}`
+      const message = `Supabase Content API GraphQL error: ${data.errors
+        .map((err) => {
+          const location = err.locations?.[0];
+          return location
+            ? `${err.message} (line ${location.line}, column ${location.column})`
+            : err.message;
+        })
+        .join(', ')}`;
+
+      // Only request-validation errors reflect the caller's query: no `path`,
+      // and either `locations` or a known GET-operation message. Anything else
+      // (an execution error with a `path`, or an outage envelope such as
+      // `Internal Server Error`) is a Content API fault.
+      const isCallerError = data.errors.every(
+        (err) =>
+          !err.path &&
+          (err.locations !== undefined ||
+            getOperationValidationMessages.includes(err.message))
       );
+      throw isCallerError ? new ToolCallerError(message) : new Error(message);
     }
 
     if (!data.data) {

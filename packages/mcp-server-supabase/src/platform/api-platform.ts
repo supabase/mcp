@@ -3,9 +3,12 @@ import {
   parseMultipartStream,
 } from '@mjackson/multipart-parser';
 import type { InitData } from '@supabase/mcp-utils';
-import { fileURLToPath } from 'node:url';
 import packageJson from '../../package.json' with { type: 'json' };
-import { getDeploymentId, normalizeFilename } from '../edge-function.js';
+import {
+  getDeploymentId,
+  getFilenameFromUrlOrPath,
+  normalizeFilename,
+} from '../edge-function.js';
 import { getClickHouseLogQuery } from '../logs.js';
 import {
   assertProjectScopedSuccess,
@@ -18,8 +21,10 @@ import {
 } from '../management-api-v2/index.js';
 import type { components as ManagementApiV2Components } from '../management-api-v2/types.js';
 import { generatePassword } from '../password.js';
+import { createFeedbackOperations } from './feedback.js';
 import {
   applyMigrationOptionsSchema,
+  createNotebookOptionsSchema,
   createBranchOptionsSchema,
   createProjectOptionsSchema,
   deployEdgeFunctionOptionsSchema,
@@ -94,6 +99,8 @@ export function createSupabaseApiPlatform(
   const { accessToken, apiUrl } = options;
 
   const managementApiUrl = apiUrl ?? 'https://api.supabase.com';
+
+  let userId: string | undefined;
 
   let managementApiClient = createManagementApiClient(
     managementApiUrl,
@@ -510,18 +517,14 @@ export function createSupabaseApiPlatform(
         const entrypoint_path = edgeFunction.entrypoint_path
           ? normalizeFilename({
               deploymentId,
-              filename: fileURLToPath(edgeFunction.entrypoint_path, {
-                windows: false,
-              }),
+              filename: getFilenameFromUrlOrPath(edgeFunction.entrypoint_path),
             })
           : undefined;
 
         const import_map_path = edgeFunction.import_map_path
           ? normalizeFilename({
               deploymentId,
-              filename: fileURLToPath(edgeFunction.import_map_path, {
-                windows: false,
-              }),
+              filename: getFilenameFromUrlOrPath(edgeFunction.import_map_path),
             })
           : undefined;
 
@@ -562,18 +565,14 @@ export function createSupabaseApiPlatform(
       const entrypoint_path = edgeFunction.entrypoint_path
         ? normalizeFilename({
             deploymentId,
-            filename: fileURLToPath(edgeFunction.entrypoint_path, {
-              windows: false,
-            }),
+            filename: getFilenameFromUrlOrPath(edgeFunction.entrypoint_path),
           })
         : undefined;
 
       const import_map_path = edgeFunction.import_map_path
         ? normalizeFilename({
             deploymentId,
-            filename: fileURLToPath(edgeFunction.import_map_path, {
-              windows: false,
-            }),
+            filename: getFilenameFromUrlOrPath(edgeFunction.import_map_path),
           })
         : undefined;
 
@@ -898,6 +897,21 @@ export function createSupabaseApiPlatform(
   };
 
   const notebooks: NotebookOperations = {
+    async createNotebook(projectId, options) {
+      const attributes = createNotebookOptionsSchema.parse(options);
+      const response = await managementApiV2Client.POST(
+        '/v2/projects/{ref}/notebooks',
+        {
+          params: { path: { ref: projectId } },
+          body: { data: { type: 'notebook', attributes } },
+        }
+      );
+
+      assertSuccessV2(response, 'Failed to create notebook');
+
+      const { id, attributes: notebook } = response.data.data;
+      return { id, ...notebook };
+    },
     async listNotebooks(projectId: string) {
       const notebooks: Notebook[] = [];
       let cursor: string | undefined;
@@ -948,6 +962,14 @@ export function createSupabaseApiPlatform(
 
       return { id, ...attributes };
     },
+    async deleteNotebook(projectId: string, notebookId: string) {
+      const response = await managementApiV2Client.DELETE(
+        '/v2/projects/{ref}/notebooks/{id}',
+        { params: { path: { ref: projectId, id: notebookId } } }
+      );
+
+      assertSuccessV2(response, 'Failed to delete notebook');
+    },
   };
 
   const platform: SupabasePlatform = {
@@ -981,6 +1003,23 @@ export function createSupabaseApiPlatform(
     storage,
     secrets,
     notebooks,
+    feedback: createFeedbackOperations({
+      // Staging, local, and custom API URLs keep their feedback out of production
+      environment:
+        new URL(managementApiUrl).origin === 'https://api.supabase.com'
+          ? 'production'
+          : 'staging',
+      async getUserId() {
+        // X-Gotrue-Id is set on every response, see how CLI uses this too: https://github.com/supabase/cli/blob/8a549dffa6bc5c88069c61c1f55ef55ad9b82ae2/apps/cli/src/command-internal/identity-stitch.ts#L10-L20
+        userId ??=
+          (
+            await managementApiClient.GET('/v1/profile', {
+              signal: AbortSignal.timeout(5_000),
+            })
+          ).response.headers.get('X-Gotrue-Id') ?? undefined;
+        return userId;
+      },
+    }),
   };
 
   return platform;

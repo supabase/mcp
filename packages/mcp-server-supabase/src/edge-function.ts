@@ -1,5 +1,6 @@
 import { codeBlock } from 'common-tags';
-import { resolve } from 'node:path';
+import { resolve } from 'node:path/posix';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Gets the deployment ID for an Edge Function.
@@ -27,6 +28,18 @@ function withoutPrefix(value: string, prefix: string) {
 }
 
 /**
+ * Converts a `file://` URL to a path, passing through anything that isn't one.
+ * Edge Function paths in metadata may sometimes be a path rather than a URL.
+ */
+export function getFilenameFromUrlOrPath(urlOrPath: string) {
+  try {
+    return fileURLToPath(urlOrPath, { windows: false });
+  } catch {
+    return urlOrPath;
+  }
+}
+
+/**
  * Strips prefix from edge function file names, accounting for Deno 1 and 2.
  */
 export function normalizeFilename({
@@ -36,6 +49,7 @@ export function normalizeFilename({
   const pathPrefix = getPathPrefix(deploymentId);
 
   // Deno 2 uses relative filenames, Deno 1 uses absolute. Resolve both to absolute first.
+  // Resolve Deno paths the same way on Windows.
   const filenameAbsolute = resolve(pathPrefix, filename);
 
   // Strip prefix(es)

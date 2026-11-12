@@ -1,4 +1,5 @@
 import { stripIndent } from 'common-tags';
+import { ToolCallerError } from '@supabase/mcp-utils';
 import type { LogsService } from './platform/types.js';
 
 export function getClickHouseLogQuery(
@@ -73,4 +74,42 @@ export function getClickHouseLogQuery(
     default:
       throw new Error(`unsupported log service type: ${service}`);
   }
+}
+
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function resolveLogWindow(
+  iso_timestamp_start?: string,
+  iso_timestamp_end?: string
+) {
+  const endMs = iso_timestamp_end ? Date.parse(iso_timestamp_end) : Date.now();
+  if (Number.isNaN(endMs)) {
+    throw new ToolCallerError(
+      `Invalid iso_timestamp_end: "${iso_timestamp_end}". Expected an ISO 8601 timestamp.`
+    );
+  }
+
+  const startMs = iso_timestamp_start
+    ? Date.parse(iso_timestamp_start)
+    : endMs - DAY_MS;
+  if (Number.isNaN(startMs)) {
+    throw new ToolCallerError(
+      `Invalid iso_timestamp_start: "${iso_timestamp_start}". Expected an ISO 8601 timestamp.`
+    );
+  }
+
+  if (startMs >= endMs) {
+    throw new ToolCallerError(
+      'iso_timestamp_start must be before iso_timestamp_end.'
+    );
+  }
+
+  if (endMs - startMs > DAY_MS) {
+    throw new ToolCallerError('The log window can be at most 24 hours.');
+  }
+
+  return {
+    iso_timestamp_start: new Date(startMs).toISOString(),
+    iso_timestamp_end: new Date(endMs).toISOString(),
+  };
 }

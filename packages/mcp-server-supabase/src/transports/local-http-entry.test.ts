@@ -24,6 +24,7 @@ import {
   API_URL,
   createOrganization,
   createProject,
+  createProjectFixture,
   MCP_CLIENT_NAME,
   MCP_CLIENT_VERSION,
   mockBranches,
@@ -506,7 +507,7 @@ describe('startLocalHttpEntry', () => {
     expect(denied).toMatchObject({ isError: true });
   });
 
-  test('expires shared HTTP cost and secret state after two minutes', async () => {
+  test('keeps HTTP confirmations valid past the secret TTL and expires each flow at its own TTL', async () => {
     const now = Date.now();
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
     const client = await connect(
@@ -566,28 +567,72 @@ describe('startLocalHttpEntry', () => {
     if (!isInputRequiredResult(secret)) {
       throw new Error('expected an input_required result');
     }
+    // AI-1438. A URL secret link expires at 120 s, while the confirmation
+    // remains usable at 161 s and expires after its own 600 s lifetime.
+    // The earlier shared-TTL test expected both to expire after 120 s.
     clock.mockReturnValue(now + 121_000);
-    for (const continuation of [
+    const secretExpired = (await client.request(
       {
-        name: 'create_branch',
-        arguments: { project_id: project.id, name: 'feature' },
-        requestState: result.requestState,
-        inputResponses: { confirm_cost: { action: 'cancel' } },
+        method: 'tools/call',
+        params: {
+          name: 'create_edge_function_secret',
+          arguments: { project_id: project.id, name: 'HTTP_SECRET' },
+          requestState: secret.requestState,
+          inputResponses: { store_secret: { action: 'accept', content: {} } },
+        },
       },
+      { allowInputRequired: true }
+    )) as CallToolResult | InputRequiredResult;
+    expect(isInputRequiredResult(secretExpired)).toBe(false);
+    expect(secretExpired).toMatchObject({
+      isError: true,
+      structuredContent: {
+        status: 'expired',
+        message: expect.stringContaining('expired after 2 minutes'),
+      },
+    });
+
+    clock.mockReturnValue(now + 161_000);
+    const confirmed = (await client.request(
       {
-        name: 'create_edge_function_secret',
-        arguments: { project_id: project.id, name: 'HTTP_SECRET' },
-        requestState: secret.requestState,
-        inputResponses: { store_secret: { action: 'cancel' } },
+        method: 'tools/call',
+        params: {
+          name: 'create_branch',
+          arguments: { project_id: project.id, name: 'feature' },
+          requestState: result.requestState,
+          inputResponses: { confirm_cost: { action: 'decline' } },
+        },
       },
-    ]) {
-      await expect(
-        client.request(
-          { method: 'tools/call', params: continuation },
-          { allowInputRequired: true }
-        )
-      ).rejects.toMatchObject({ code: -32602 });
-    }
+      { allowInputRequired: true }
+    )) as CallToolResult | InputRequiredResult;
+    expect(isInputRequiredResult(confirmed)).toBe(false);
+    expect(confirmed).toMatchObject({
+      structuredContent: { status: 'declined' },
+    });
+    expect(mockBranches.size).toBe(0);
+
+    clock.mockReturnValue(now + 601_000);
+    const confirmationExpired = (await client.request(
+      {
+        method: 'tools/call',
+        params: {
+          name: 'create_branch',
+          arguments: { project_id: project.id, name: 'feature' },
+          requestState: result.requestState,
+          inputResponses: { confirm_cost: { action: 'accept', content: {} } },
+        },
+      },
+      { allowInputRequired: true }
+    )) as CallToolResult | InputRequiredResult;
+    expect(isInputRequiredResult(confirmationExpired)).toBe(false);
+    expect(confirmationExpired).toMatchObject({
+      isError: true,
+      structuredContent: {
+        status: 'expired',
+        message: expect.stringContaining('expired after 10 minutes'),
+      },
+    });
+    expect(mockBranches.size).toBe(0);
   });
 
   test.each(['execute_sql', 'apply_migration'] as const)(
@@ -867,6 +912,190 @@ describe('startLocalHttpEntry', () => {
     );
     const again = await client.listTools();
     expect(again.tools).toEqual(tools);
+  });
+
+  test.each(['', 'execute_sql', 'run_notebook'])(
+    'notebook run confirmation respects HTTP skip_elicitations=%j',
+    async (skip) => {
+      const skipped = skip === 'run_notebook';
+      const { project } = await createProjectFixture();
+      await project.db.exec('create table films (id int)');
+      const notebook = project.createNotebook({
+        name: 'HTTP execution',
+        content: {
+          schema_version: 1,
+          cells: [
+            {
+              id: 'first',
+              type: 'database',
+              sql: 'create table notebook_probe (id int)',
+              row_limit: 100,
+            },
+            {
+              id: 'last',
+              type: 'database',
+              sql: 'drop table films',
+              row_limit: 100,
+            },
+          ],
+        },
+      });
+      const client = await connect(
+        { pin: MODERN_PROTOCOL_VERSION },
+        `project_ref=${project.id}&features=notebooks,database&skip_elicitations=${skip}`,
+        {
+          capabilities: { elicitation: { form: {} } },
+          inputRequired: { autoFulfill: false },
+        }
+      );
+      const result = (await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'run_notebook',
+            arguments: {
+              notebook_id: notebook.id,
+              expected_updated_at: notebook.attributes.updated_at,
+            },
+          },
+        },
+        { allowInputRequired: true }
+      )) as CallToolResult | InputRequiredResult;
+      expect(isInputRequiredResult(result)).toBe(!skipped);
+      if (!isInputRequiredResult(result)) {
+        expect(result.isError).toBeFalsy();
+      }
+      expect(
+        (
+          await project.db.query(
+            "select to_regclass('public.notebook_probe') as name"
+          )
+        ).rows
+      ).toEqual([{ name: skipped ? 'notebook_probe' : null }]);
+      expect(
+        (await project.db.query("select to_regclass('public.films') as name"))
+          .rows
+      ).toEqual([{ name: skipped ? null : 'films' }]);
+    }
+  );
+
+  test('a green API URL sends notebook confirmation and notebook links to the green dashboard', async () => {
+    await entry.close();
+    entry = await startEntry({ apiUrl: 'https://api.supabase.green' });
+    const { project } = await createProjectFixture();
+    const notebook = project.createNotebook({
+      name: 'Green notebook',
+      content: {
+        schema_version: 1,
+        cells: [
+          {
+            id: 'update',
+            type: 'database',
+            sql: "update films set title = 'x' where id = 1",
+            row_limit: 100,
+          },
+        ],
+      },
+    });
+    mockServer.use(
+      http.get(
+        'https://api.supabase.green/v2/projects/:ref/notebooks/:id',
+        () =>
+          HttpResponse.json({
+            data: {
+              type: 'notebook',
+              id: notebook.id,
+              attributes: { ...notebook.attributes, content: notebook.content },
+            },
+          })
+      ),
+      http.get('https://api.supabase.green/v2/projects/:ref/notebooks', () =>
+        HttpResponse.json({
+          data: [
+            {
+              type: 'notebook',
+              id: notebook.id,
+              attributes: notebook.attributes,
+            },
+          ],
+          links: { next: null },
+        })
+      ),
+      http.post('https://api.supabase.green/v2/projects/:ref/notebooks', () =>
+        HttpResponse.json({
+          data: {
+            type: 'notebook',
+            id: notebook.id,
+            attributes: { ...notebook.attributes, content: notebook.content },
+          },
+        })
+      )
+    );
+    const client = await connect(
+      { pin: MODERN_PROTOCOL_VERSION },
+      `project_ref=${project.id}&features=notebooks&read_only=false`,
+      {
+        capabilities: { elicitation: { form: {} } },
+        inputRequired: { autoFulfill: false },
+      }
+    );
+
+    const result = (await client.request(
+      {
+        method: 'tools/call',
+        params: {
+          name: 'run_notebook',
+          arguments: {
+            notebook_id: notebook.id,
+            expected_updated_at: notebook.attributes.updated_at,
+          },
+        },
+      },
+      { allowInputRequired: true }
+    )) as CallToolResult | InputRequiredResult;
+
+    if (!isInputRequiredResult(result)) {
+      throw new Error('expected notebook confirmation');
+    }
+    const params = result.inputRequests?.confirm_run?.params;
+    if (!params || !('message' in params)) {
+      throw new Error('expected form confirmation');
+    }
+    expect(params.message.split('\n').at(-1)).toBe(
+      `Run notebook? https://supabase.green/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`
+    );
+    const created = toolOutput(
+      await client.callTool({
+        name: 'create_notebook',
+        arguments: {
+          name: 'Green notebook',
+          content: {
+            cells: [
+              {
+                type: 'database',
+                sql: "update films set title = 'x' where id = 1",
+                row_limit: 100,
+              },
+            ],
+          },
+        },
+      })
+    );
+    const greenUrl = `https://supabase.green/dashboard/project/${project.id}/explorer/notebook/${notebook.id}`;
+    expect(created.url).toBe(greenUrl);
+    const fetched = toolOutput(
+      await client.callTool({
+        name: 'get_notebook',
+        arguments: { notebook_id: notebook.id },
+      })
+    );
+    expect(fetched.url).toBe(greenUrl);
+    const listed = toolOutput(
+      await client.callTool({ name: 'list_notebooks', arguments: {} })
+    );
+    expect(listed.notebooks.map((n: { url: string }) => n.url)).toEqual([
+      greenUrl,
+    ]);
   });
 
   test.each(['', ' , '])(

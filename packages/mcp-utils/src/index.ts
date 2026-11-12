@@ -1,4 +1,9 @@
 export * from './cache.js';
+export {
+  isToolCallerError,
+  ToolCallerError,
+  type ToolCallerErrorKind,
+} from './errors.js';
 export * from './server.js';
 export * from './stream-transport.js';
 export * from './types.js';

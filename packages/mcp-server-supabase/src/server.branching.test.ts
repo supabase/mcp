@@ -12,7 +12,15 @@ import {
   createProjectFixture,
   mockBranches,
 } from '../test/mocks.js';
-import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import {
+  expectTerminalResult,
+  freezeClock,
+} from '../test/confirmation-results.js';
+import {
+  callModernTool,
+  captureToolErrors,
+  createServerHarness,
+} from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, getBranchCost } from './pricing.js';
 import * as pricing from './pricing.js';
 import type { SupabaseMcpServerOptions } from './server.js';
@@ -94,9 +102,11 @@ describe('tools', () => {
   });
 
   test('create branch in read-only mode throws an error', async () => {
+    const { errors, onToolCall } = captureToolErrors();
     const { callTool } = await setup({
       readOnly: true,
       features: ['account', 'branching'],
+      onToolCall,
     });
 
     const { project } = await createProjectFixture({
@@ -126,6 +136,9 @@ describe('tools', () => {
     await expect(result).rejects.toThrow(
       'Cannot create a branch in read-only mode.'
     );
+    // A refusal, not a confirmation step, so it carries no kind.
+    expect(errors).toMatchObject([{ name: 'ToolCallerError' }]);
+    expect(errors[0]).not.toHaveProperty('kind');
   });
 
   test('delete branch', async () => {
@@ -659,6 +672,42 @@ describe('tools', () => {
     );
   });
 
+  test('create branch with mismatched cost confirmation fails as a caller error', async () => {
+    const { errors, onToolCall } = captureToolErrors();
+    const { callTool } = await setup({ features: ['branching'], onToolCall });
+
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    await expect(
+      callTool({
+        name: 'create_branch',
+        arguments: {
+          project_id: project.id,
+          name: 'test-branch',
+          confirm_cost_id: 'not-the-cost-hash',
+        },
+      })
+    ).rejects.toMatchObject({
+      name: 'ToolCallerError',
+      message:
+        'Cost confirmation ID does not match the expected cost of creating a branch.',
+    });
+    expect(errors).toMatchObject([
+      { name: 'ToolCallerError', kind: 'confirmation_required' },
+    ]);
+  });
+
   describe('create_branch cost confirmation via elicitation', () => {
     test('create_branch requires confirm_cost_id when cost confirmation is not configured', async () => {
       const { client } = await setup({ features: ['branching'] });
@@ -748,12 +797,14 @@ describe('tools', () => {
     });
 
     test('client without forms that calls first gets the confirm_cost steps and no branch', async () => {
+      const { errors, onToolCall } = captureToolErrors();
       const { callTool } = await setup({
         features: ['account', 'branching'],
         elicitation: {
           requestState: ELICITATION_REQUEST_STATE,
           confirmation: COST_CONFIRMATION,
         },
+        onToolCall,
       });
       const org = await createOrganization({
         name: 'My Org',
@@ -772,14 +823,20 @@ describe('tools', () => {
           name: 'create_branch',
           arguments: { project_id: project.id, name: 'test-branch' },
         })
-      ).rejects.toThrow(
-        /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
-      );
+      ).rejects.toMatchObject({
+        name: 'ToolCallerError',
+        message: expect.stringMatching(
+          /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
+        ),
+      });
       expect(
         Array.from(mockBranches.values()).filter(
           (branch) => branch.name === 'test-branch' && !branch.is_default
         )
       ).toHaveLength(0);
+      expect(errors).toMatchObject([
+        { name: 'ToolCallerError', kind: 'confirmation_required' },
+      ]);
     });
 
     test('form-capable client: accept creates the branch exactly once', async () => {
@@ -847,8 +904,8 @@ describe('tools', () => {
         arguments: { project_id: project.id, name: 'test-branch' },
       });
 
-      expect(result.isError).toBeFalsy();
-      expect(result.structuredContent).toEqual({ status: 'declined' });
+      // Regression: the decline message is missing from either result channel.
+      expectTerminalResult(result, 'declined', 'Branch creation was declined.');
       expect(mockBranches.size).toBe(0);
     });
 
@@ -870,14 +927,19 @@ describe('tools', () => {
         organization_id: org.id,
       });
       project.status = 'ACTIVE_HEALTHY';
-
+      freezeClock();
       const result = await client.callTool({
         name: 'create_branch',
         arguments: { project_id: project.id, name: 'test-branch' },
       });
 
-      expect(result.isError).toBeFalsy();
-      expect(result.structuredContent).toEqual({ status: 'cancelled' });
+      // Regression: the cancel message is missing from either result channel,
+      // or drops the timing sentence (0 ms gap under the frozen clock).
+      expectTerminalResult(
+        result,
+        'cancelled',
+        "The client cancelled this confirmation 0.0 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically."
+      );
       expect(mockBranches.size).toBe(0);
     });
 
@@ -998,7 +1060,12 @@ describe('tools', () => {
         if (isInputRequiredResult(second)) {
           throw new Error('expected a CallToolResult');
         }
-        expect(second.structuredContent).toEqual({ status: 'declined' });
+        // Regression: the decline message is missing from either result channel.
+        expectTerminalResult(
+          second,
+          'declined',
+          'Branch creation was declined.'
+        );
         expect(mockBranches.size).toBe(0);
       } finally {
         getBranchCostSpy.mockRestore();
@@ -1083,8 +1150,12 @@ describe('tools', () => {
         throw new Error('expected a CallToolResult');
       }
 
-      expect(second.isError).toBe(true);
-      expect(second.structuredContent).toEqual({ status: 'error' });
+      // Regression: the mismatch error is missing from either result channel.
+      expectTerminalResult(
+        second,
+        'error',
+        'Request state arguments do not match the current arguments.'
+      );
       expect(mockBranches.size).toBe(0);
     });
 
@@ -1185,15 +1256,12 @@ describe('tools', () => {
         throw new Error('expected a CallToolResult');
       }
 
-      expect(result.isError).toBe(true);
-      expect(result.structuredContent).toEqual({ status: 'error' });
-      expect(
-        result.content.some(
-          (c) =>
-            c.type === 'text' &&
-            c.text === 'Request state was not issued for create_branch.'
-        )
-      ).toBe(true);
+      // Regression: the wrong-tool error is missing from either result channel.
+      expectTerminalResult(
+        result,
+        'error',
+        'Request state was not issued for create_branch.'
+      );
       expect(mockBranches.size).toBe(0);
     });
 

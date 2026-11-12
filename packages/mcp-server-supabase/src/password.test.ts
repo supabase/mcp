@@ -23,8 +23,12 @@ describe('generatePassword', () => {
   });
 
   it('should generate a password with symbols', () => {
-    const password = generatePassword({ symbols: true });
-    expect(/[!@#$%^&*()_+~`|}{[\]:;?><,./-=]/.test(password)).toBe(true);
+    const password = generatePassword({
+      symbols: true,
+      uppercase: false,
+      lowercase: false,
+    });
+    expect(/^[^A-Za-z0-9]+$/.test(password)).toBe(true);
   });
 
   it('should generate a password with uppercase only', () => {

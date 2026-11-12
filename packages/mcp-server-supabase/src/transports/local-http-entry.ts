@@ -20,7 +20,7 @@ import { createSupabaseApiPlatform } from '../platform/api-platform.js';
 import { createSupabaseMcpServer } from '../server.js';
 import { assertValidConnectUrlTemplate } from '../tools/secret-tools.js';
 import { CURRENT_ELICITATION_TOOLS } from '../types.js';
-import { parseFeatureGroups } from '../util.js';
+import { dashboardUrlForApiUrl, parseFeatureGroups } from '../util.js';
 import { parseList } from './util.js';
 
 export type LocalHttpEntryOptions = {
@@ -102,15 +102,12 @@ export async function startLocalHttpEntry({
   log = (line) =>
     console.error(`[${new Date().toLocaleTimeString('en-GB')}] ${line}`),
 }: LocalHttpEntryOptions) {
+  const dashboardUrl = dashboardUrlForApiUrl(apiUrl);
   if (secretUrlTemplate === undefined) {
     switch (new URL(apiUrl ?? 'https://api.supabase.com').origin) {
       case 'https://api.supabase.com':
-        secretUrlTemplate =
-          'https://supabase.com/dashboard/mcp/secrets?ref={ref}&name={name}';
-        break;
       case 'https://api.supabase.green':
-        secretUrlTemplate =
-          'https://supabase.green/dashboard/mcp/secrets?ref={ref}&name={name}';
+        secretUrlTemplate = `${dashboardUrl}/mcp/secrets?ref={ref}&name={name}`;
         break;
       default:
         throw new Error(
@@ -191,10 +188,10 @@ export async function startLocalHttpEntry({
                 readOnly,
                 features,
                 contentApiUrl,
+                dashboardUrl,
                 elicitation: {
                   requestState: {
                     key: requestStateKey,
-                    ttlSeconds: 120,
                     // One process can serve several PATs, so the principal is the token's hash.
                     principal: createHash('sha256')
                       .update(accessToken)
@@ -204,8 +201,12 @@ export async function startLocalHttpEntry({
                     enabledTools: CURRENT_ELICITATION_TOOLS.filter(
                       (tool) => !skipElicitations?.includes(tool)
                     ),
+                    ttlSeconds: 600,
                   },
-                  secretCollection,
+                  secretCollection: secretCollection && {
+                    ...secretCollection,
+                    ttlSeconds: 120,
+                  },
                 },
               }),
             { legacy: 'stateless', onerror: console.error }

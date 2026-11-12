@@ -10,7 +10,15 @@ import {
   createProject,
   mockProjects,
 } from '../test/mocks.js';
-import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import {
+  expectTerminalResult,
+  freezeClock,
+} from '../test/confirmation-results.js';
+import {
+  callModernTool,
+  captureToolErrors,
+  createServerHarness,
+} from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, PROJECT_COST_MONTHLY } from './pricing.js';
 import type { SupabaseMcpServerOptions } from './server.js';
 
@@ -321,7 +329,8 @@ describe('tools', () => {
   });
 
   test('create project in read-only mode throws an error', async () => {
-    const { callTool } = await setup({ readOnly: true });
+    const { errors, onToolCall } = captureToolErrors();
+    const { callTool } = await setup({ readOnly: true, onToolCall });
 
     const freeOrg = await createOrganization({
       name: 'Free Org',
@@ -353,6 +362,9 @@ describe('tools', () => {
     await expect(result).rejects.toThrow(
       'Cannot create a project in read-only mode.'
     );
+    // A refusal, not a confirmation step, so it carries no kind.
+    expect(errors).toMatchObject([{ name: 'ToolCallerError' }]);
+    expect(errors[0]).not.toHaveProperty('kind');
   });
 
   test('create project without region fails', async () => {
@@ -518,6 +530,37 @@ describe('tools', () => {
     await expect(createProjectPromise).rejects.toThrow(
       /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
     );
+  });
+
+  test('create project with mismatched cost confirmation fails as a caller error', async () => {
+    const { errors, onToolCall } = captureToolErrors();
+    const { callTool } = await setup({ onToolCall });
+
+    const freeOrg = await createOrganization({
+      name: 'Free Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    await expect(
+      callTool({
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: freeOrg.id,
+          confirm_cost_id: 'not-the-cost-hash',
+        },
+      })
+    ).rejects.toMatchObject({
+      name: 'ToolCallerError',
+      message:
+        'Cost confirmation ID does not match the expected cost of creating a project.',
+    });
+    expect(mockProjects.size).toBe(0);
+    expect(errors).toMatchObject([
+      { name: 'ToolCallerError', kind: 'confirmation_required' },
+    ]);
   });
 
   describe('create_project cost confirmation via elicitation', () => {
@@ -712,11 +755,13 @@ describe('tools', () => {
     });
 
     test('client without forms that calls first gets the confirm_cost steps and no project', async () => {
+      const { errors, onToolCall } = captureToolErrors();
       const { callTool } = await setup({
         elicitation: {
           requestState: ELICITATION_REQUEST_STATE,
           confirmation: COST_CONFIRMATION,
         },
+        onToolCall,
       });
       const { org } = await createOrganizationWithBillableNextProject();
 
@@ -729,11 +774,17 @@ describe('tools', () => {
             organization_id: org.id,
           },
         })
-      ).rejects.toThrow(
-        /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
-      );
+      ).rejects.toMatchObject({
+        name: 'ToolCallerError',
+        message: expect.stringMatching(
+          /get_cost[\s\S]*confirm_cost[\s\S]*confirmation_id[\s\S]*confirm_cost_id/
+        ),
+      });
       // Only the existing project that makes the next one billable.
       expect(mockProjects.size).toBe(1);
+      expect(errors).toMatchObject([
+        { name: 'ToolCallerError', kind: 'confirmation_required' },
+      ]);
     });
 
     test('form-capable client: $0 creates without elicitation', async () => {
@@ -810,8 +861,12 @@ describe('tools', () => {
         },
       });
 
-      expect(result.isError).toBeFalsy();
-      expect(result.structuredContent).toEqual({ status: 'declined' });
+      // Regression: the decline message is missing from either result channel.
+      expectTerminalResult(
+        result,
+        'declined',
+        'Project creation was declined.'
+      );
       expect(mockProjects.size).toBe(1);
     });
 
@@ -821,7 +876,7 @@ describe('tools', () => {
         elicitationAction: 'cancel',
       });
       const { org } = await createOrganizationWithBillableNextProject();
-
+      freezeClock();
       const result = await client.callTool({
         name: 'create_project',
         arguments: {
@@ -831,8 +886,13 @@ describe('tools', () => {
         },
       });
 
-      expect(result.isError).toBeFalsy();
-      expect(result.structuredContent).toEqual({ status: 'cancelled' });
+      // Regression: the cancel message is missing from either result channel,
+      // or drops the timing sentence (0 ms gap under the frozen clock).
+      expectTerminalResult(
+        result,
+        'cancelled',
+        "The client cancelled this confirmation 0.0 s after it was sent. Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically."
+      );
       expect(mockProjects.size).toBe(1);
     });
 
@@ -877,8 +937,12 @@ describe('tools', () => {
         throw new Error('expected a CallToolResult');
       }
 
-      expect(second.isError).toBe(true);
-      expect(second.structuredContent).toEqual({ status: 'error' });
+      // Regression: the mismatch error is missing from either result channel.
+      expectTerminalResult(
+        second,
+        'error',
+        'Request state arguments do not match the current arguments.'
+      );
       expect(mockProjects.size).toBe(1);
     });
 
@@ -960,7 +1024,12 @@ describe('tools', () => {
         throw new Error('expected a CallToolResult');
       }
 
-      expect(second.structuredContent).toEqual({ status: 'declined' });
+      // Regression: the decline message is missing from either result channel.
+      expectTerminalResult(
+        second,
+        'declined',
+        'Project creation was declined.'
+      );
       expect(mockProjects.size).toBe(1);
     });
   });

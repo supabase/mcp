@@ -7,7 +7,7 @@ import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import { createSupabaseMcpServer } from './server.js';
 import { startLocalHttpEntry } from './transports/local-http-entry.js';
 import { parseList } from './transports/util.js';
-import { parseFeatureGroups } from './util.js';
+import { dashboardUrlForApiUrl, parseFeatureGroups } from './util.js';
 
 const { version } = packageJson;
 
@@ -124,6 +124,7 @@ async function main() {
         readOnly,
         features,
         contentApiUrl,
+        dashboardUrl: dashboardUrlForApiUrl(apiUrl),
       }),
     { onerror: console.error }
   );

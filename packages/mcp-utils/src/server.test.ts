@@ -168,6 +168,7 @@ describe('tools', () => {
     });
 
     await expect(goodToolPromise).resolves.toEqual({ value: 'bar' });
+    expect(onToolCall).toHaveBeenCalledTimes(1);
     expect(onToolCall).toHaveBeenLastCalledWith({
       name: 'good_tool',
       arguments: { foo: 'bar' },
@@ -185,6 +186,7 @@ describe('tools', () => {
     });
 
     await expect(badToolPromise).rejects.toThrow('Failure: bar');
+    expect(onToolCall).toHaveBeenCalledTimes(2);
     expect(onToolCall).toHaveBeenLastCalledWith({
       name: 'bad_tool',
       arguments: { foo: 'bar' },

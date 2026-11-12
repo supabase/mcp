@@ -4,6 +4,7 @@ import {
 } from '@modelcontextprotocol/server';
 import type { ObservationFact } from '../observation.js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { expectTerminalResult } from '../../test/confirmation-results.js';
 import {
   checkConfirmationState,
   observeOperation,
@@ -102,7 +103,7 @@ describe('create_project confirmation observations', () => {
       argsMatch: () => true,
       payloadMatch: () => true,
       declinedText: 'Declined.',
-      cancelledText: 'Cancelled.',
+      receivedAt: Date.now(),
       observation: {
         record: (fact: ObservationFact) => {
           facts.push(fact);
@@ -144,13 +145,12 @@ describe('create_project confirmation observations', () => {
       ...options(facts, askForConfirmation),
       ctx,
     });
-    expect(result).toMatchObject({
-      kind: 'terminal',
-      result: {
-        structuredContent: { status: 'error' },
-        isError: true,
-      },
-    });
+    if (result.kind !== 'terminal') throw new Error('expected terminal');
+    expectTerminalResult(
+      result.result,
+      'error',
+      'Request state was not issued for create_project.'
+    );
     expect(facts).toEqual([]);
   });
 });

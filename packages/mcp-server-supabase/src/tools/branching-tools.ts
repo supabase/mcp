@@ -3,7 +3,11 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { type ToolObservation, tool } from '@supabase/mcp-utils';
+import {
+  type ToolObservation,
+  tool,
+  ToolCallerError,
+} from '@supabase/mcp-utils';
 import type { ObservationFact } from '../observation.js';
 import { z } from 'zod/v4';
 import type { BranchingOperations } from '../platform/types.js';
@@ -206,6 +210,7 @@ export function getBranchingTools({
         ctx: ServerContext,
         observation?: ToolObservation<ObservationFact>
       ) => {
+        const receivedAt = Date.now();
         if (readOnly) {
           observation?.record({
             kind: 'confirmation_decision',
@@ -213,7 +218,9 @@ export function getBranchingTools({
             route: 'blocked',
             reason: 'read_only',
           });
-          throw new Error('Cannot create a branch in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot create a branch in read-only mode.'
+          );
         }
 
         if (confirmation && isFormCapable(ctx)) {
@@ -241,7 +248,13 @@ export function getBranchingTools({
                 }),
               },
               requestState: await codec.mint(
-                { tool: 'create_branch', project_id, name, cost },
+                {
+                  tool: 'create_branch',
+                  project_id,
+                  name,
+                  cost,
+                  issued_at: Date.now(),
+                },
                 ctx
               ),
             });
@@ -251,6 +264,7 @@ export function getBranchingTools({
             ctx,
             tool: 'create_branch',
             schema: branchCostStateSchema,
+            receivedAt,
             requestKey: 'confirm_cost',
             askForConfirmation,
             observation,
@@ -261,7 +275,6 @@ export function getBranchingTools({
               state.cost.recurrence === cost.recurrence &&
               state.cost.amount === cost.amount,
             declinedText: 'Branch creation was declined.',
-            cancelledText: 'Branch creation was cancelled.',
           });
           switch (confirmationState.kind) {
             case 'reprompt':
@@ -279,7 +292,9 @@ export function getBranchingTools({
         // Legacy clients only: form-capable clients returned above. Without
         // this, a missing ID would hit the opaque hash-mismatch error below.
         if (!confirm_cost_id) {
-          throw new Error(missingConfirmCostIdMessage);
+          throw new ToolCallerError(missingConfirmCostIdMessage, {
+            kind: 'confirmation_required',
+          });
         }
 
         const cost = getBranchCost();
@@ -293,8 +308,9 @@ export function getBranchingTools({
         });
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
-          throw new Error(
-            'Cost confirmation ID does not match the expected cost of creating a branch.'
+          throw new ToolCallerError(
+            'Cost confirmation ID does not match the expected cost of creating a branch.',
+            { kind: 'confirmation_required' }
           );
         }
         return await observeOperation('cost', observation?.record, () =>
@@ -313,7 +329,9 @@ export function getBranchingTools({
       ...branchingToolDefs.delete_branch,
       execute: async ({ branch_id }) => {
         if (readOnly) {
-          throw new Error('Cannot delete a branch in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot delete a branch in read-only mode.'
+          );
         }
 
         await branching.deleteBranch(branch_id);
@@ -324,7 +342,7 @@ export function getBranchingTools({
       ...branchingToolDefs.merge_branch,
       execute: async ({ branch_id }) => {
         if (readOnly) {
-          throw new Error('Cannot merge a branch in read-only mode.');
+          throw new ToolCallerError('Cannot merge a branch in read-only mode.');
         }
 
         await branching.mergeBranch(branch_id);
@@ -335,7 +353,7 @@ export function getBranchingTools({
       ...branchingToolDefs.reset_branch,
       execute: async ({ branch_id, migration_version }) => {
         if (readOnly) {
-          throw new Error('Cannot reset a branch in read-only mode.');
+          throw new ToolCallerError('Cannot reset a branch in read-only mode.');
         }
 
         await branching.resetBranch(branch_id, {
@@ -348,7 +366,9 @@ export function getBranchingTools({
       ...branchingToolDefs.rebase_branch,
       execute: async ({ branch_id }) => {
         if (readOnly) {
-          throw new Error('Cannot rebase a branch in read-only mode.');
+          throw new ToolCallerError(
+            'Cannot rebase a branch in read-only mode.'
+          );
         }
 
         await branching.rebaseBranch(branch_id);

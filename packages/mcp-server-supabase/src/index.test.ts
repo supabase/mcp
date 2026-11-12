@@ -8,7 +8,13 @@ import {
   MCP_CLIENT_NAME,
   MCP_CLIENT_VERSION,
 } from '../test/mocks.js';
-import { createSupabaseMcpServer, version } from './index.js';
+import {
+  createSupabaseMcpServer,
+  isToolCallerError,
+  ToolCallerError,
+  version,
+  type ToolCallerErrorKind,
+} from './index.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 
 type SetupOptions = {
@@ -65,5 +71,47 @@ describe('index', () => {
 
   test('index.ts exports a version', () => {
     expect(version).toStrictEqual(expect.any(String));
+  });
+
+  test('isToolCallerError matches ToolCallerError instances', () => {
+    const error = new ToolCallerError('bad input');
+
+    expect(error).toMatchObject({
+      name: 'ToolCallerError',
+      message: 'bad input',
+    });
+    expect(isToolCallerError(error)).toBe(true);
+  });
+
+  test('ToolCallerError carries an optional kind', () => {
+    const cause = new Error('root cause');
+    const error = new ToolCallerError('needs confirmation', {
+      kind: 'confirmation_required',
+      cause,
+    });
+
+    expect(error.kind).toBe('confirmation_required');
+    expect(error.cause).toBe(cause);
+    expect(error).toMatchObject({
+      name: 'ToolCallerError',
+      message: 'needs confirmation',
+    });
+    expect(isToolCallerError(error)).toBe(true);
+    expect(new ToolCallerError('bad input').kind).toBeUndefined();
+  });
+
+  test('isToolCallerError matches the brand from another package copy', () => {
+    const foreign = Object.assign(new Error('bad input'), {
+      [Symbol.for('supabase.mcp.callerError')]: true,
+    });
+
+    expect(foreign instanceof ToolCallerError).toBe(false);
+    expect(isToolCallerError(foreign)).toBe(true);
+  });
+
+  test('isToolCallerError rejects plain errors and non-errors', () => {
+    expect(isToolCallerError(new Error('boom'))).toBe(false);
+    expect(isToolCallerError(null)).toBe(false);
+    expect(isToolCallerError('ToolCallerError')).toBe(false);
   });
 });

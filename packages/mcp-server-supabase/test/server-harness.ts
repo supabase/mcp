@@ -33,6 +33,7 @@ type SetupOptions = {
   accessToken?: string;
   projectId?: string;
   platform?: SupabasePlatform;
+  clientInfo?: SupabaseMcpServerOptions['clientInfo'];
   readOnly?: boolean;
   features?: string[];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
@@ -172,6 +173,7 @@ export function createServerHarness() {
       readOnly,
       features,
       elicitation,
+      clientInfo: options.clientInfo,
       observer: options.observer,
       onToolCall: options.onToolCall,
     }));
@@ -193,7 +195,9 @@ export function createServerHarness() {
       }
       const result = JSON.parse(textContent.text);
       if (output.isError) {
-        throw new Error(result.error.message);
+        throw Object.assign(new Error(result.error.message), {
+          name: result.error.name ?? 'Error',
+        });
       }
       return result;
     }
@@ -211,6 +215,8 @@ export function createServerHarness() {
             'create_branch',
             'execute_sql',
             'apply_migration',
+            'run_notebook',
+            'delete_notebook',
           ],
         },
       },
@@ -219,6 +225,7 @@ export function createServerHarness() {
       elicitationAction,
       readOnly,
       projectId,
+      features,
     } = options;
     const platform =
       options.platform ??
@@ -237,7 +244,7 @@ export function createServerHarness() {
       platform,
       projectId,
       readOnly,
-      features: options.features,
+      features,
       observer: options.observer,
       onToolCall: options.onToolCall,
       elicitation: secretCollection
@@ -335,4 +342,18 @@ export function createServerHarness() {
       return mockServer;
     },
   };
+}
+
+/**
+ * Collects the raw errors the server's `onToolCall` hook receives, which is
+ * what a host sees before the error is serialized for the client.
+ */
+export function captureToolErrors() {
+  const errors: unknown[] = [];
+  const onToolCall: NonNullable<SupabaseMcpServerOptions['onToolCall']> = (
+    details
+  ) => {
+    if (!details.success) errors.push(details.error);
+  };
+  return { errors, onToolCall };
 }

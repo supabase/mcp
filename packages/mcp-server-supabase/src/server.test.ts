@@ -1,19 +1,26 @@
 import type { JSONRPCMessage } from '@modelcontextprotocol/client';
 import {
+  ACCESS_TOKEN,
+  API_URL,
   contentApiMockSchema,
   createOrganization,
   createProject,
   createProjectFixture,
+  MCP_CLIENT_NAME,
+  MCP_CLIENT_VERSION,
   mockContentApiSchemaLoadCount,
 } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
+import { isToolCallerError } from '@supabase/mcp-utils';
+import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabasePlatform } from './platform/types.js';
-import { instructions } from './server.js';
+import { createMcpHandler } from '@modelcontextprotocol/server';
+import { createSupabaseMcpServer, instructions } from './server.js';
 import { supabaseMcpToolSchemas } from './tools/tool-schemas.js';
 import { stripIndent } from 'common-tags';
 import gqlmin from 'gqlmin';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { globalRegistry } from 'zod/v4';
+import { globalRegistry, ZodError } from 'zod/v4';
 
 const harness = createServerHarness();
 const setup = harness.setup;
@@ -97,6 +104,7 @@ describe('tools', () => {
         'branching',
         'storage',
         'notebooks',
+        'feedback',
       ],
     });
 
@@ -467,7 +475,366 @@ describe('feature groups', () => {
     const { tools } = await client.listTools();
     const toolNames = tools.map((tool) => tool.name);
 
-    expect(toolNames).toEqual(['list_notebooks', 'get_notebook']);
+    expect(toolNames).toEqual([
+      'create_notebook',
+      'list_notebooks',
+      'get_notebook',
+      'run_notebook',
+      'delete_notebook',
+    ]);
+  });
+
+  test('platforms without notebook creation keep their existing notebook tools', async () => {
+    const { client } = await setup({
+      features: ['notebooks'],
+      platform: {
+        notebooks: {
+          listNotebooks: vi.fn(),
+          getNotebook: vi.fn(),
+          deleteNotebook: vi.fn(),
+        },
+      },
+    });
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
+      'list_notebooks',
+      'get_notebook',
+      'delete_notebook',
+    ]);
+  });
+
+  test('notebook tools are enabled by default when the platform supports them', async () => {
+    const listDefaultToolNames = async (platform?: SupabasePlatform) => {
+      const { client } = await setup({ platform });
+      return (await client.listTools()).tools.map((tool) => tool.name);
+    };
+    const { notebooks: _, ...platformWithoutNotebooks } =
+      createSupabaseApiPlatform({ accessToken: ACCESS_TOKEN, apiUrl: API_URL });
+    const notebookTools = [
+      'create_notebook',
+      'list_notebooks',
+      'get_notebook',
+      'run_notebook',
+      'delete_notebook',
+    ];
+
+    expect(await listDefaultToolNames()).toEqual(
+      expect.arrayContaining(notebookTools)
+    );
+    const toolsWithoutAdapter = await listDefaultToolNames(
+      platformWithoutNotebooks
+    );
+    for (const name of notebookTools) {
+      expect(toolsWithoutAdapter).not.toContain(name);
+    }
+  });
+
+  test('feedback tools', async () => {
+    const { client } = await setup({
+      features: ['feedback'],
+    });
+
+    const { tools } = await client.listTools();
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toEqual(['submit_feedback', 'delete_feedback']);
+  });
+
+  test('submit_feedback advertises the feedback length limit', async () => {
+    const { client } = await setup({ features: ['feedback'] });
+
+    const { tools } = await client.listTools();
+    const submitFeedback = tools.find(({ name }) => name === 'submit_feedback');
+
+    expect(submitFeedback?.description).toContain('1000 characters');
+    expect(submitFeedback?.inputSchema.properties?.feedback).toMatchObject({
+      maxLength: 1000,
+      description: expect.stringContaining('1000 characters'),
+    });
+  });
+
+  test('feedback tools treat a null project_id as omitted', async () => {
+    const feedback = {
+      submit: vi.fn().mockResolvedValue({ deleteToken: 'tok' }),
+      delete: vi.fn().mockResolvedValue({ deleted: true }),
+    };
+    const { callTool } = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+    });
+
+    await expect(
+      callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi', project_id: null },
+      })
+    ).resolves.toEqual({ delete_token: 'tok' });
+    await expect(
+      callTool({
+        name: 'delete_feedback',
+        arguments: {
+          delete_token: '5d6d3b3e-4b2f-4a52-9b77-0f0e6a4f6a11',
+          project_id: null,
+        },
+      })
+    ).resolves.toEqual({ deleted: true });
+    expect(feedback.submit.mock.calls[0]![0].projectId).toBeUndefined();
+    expect(feedback.delete.mock.calls[0]![0].projectId).toBeUndefined();
+  });
+
+  // An empty project_ref is stored but never matches a delete header.
+  test('feedback tools reject an empty project_id', async () => {
+    const feedback = {
+      submit: vi.fn().mockResolvedValue({ deleteToken: 'tok' }),
+      delete: vi.fn().mockResolvedValue({ deleted: true }),
+    };
+    const { callTool } = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+    });
+
+    await expect(
+      callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi', project_id: '' },
+      })
+    ).rejects.toThrow('project_id');
+    await expect(
+      callTool({
+        name: 'delete_feedback',
+        arguments: {
+          delete_token: '5d6d3b3e-4b2f-4a52-9b77-0f0e6a4f6a11',
+          project_id: '',
+        },
+      })
+    ).rejects.toThrow('project_id');
+    expect(feedback.submit).not.toHaveBeenCalled();
+    expect(feedback.delete).not.toHaveBeenCalled();
+  });
+
+  test('submit_feedback passes the request client info', async () => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const { client } = await harness.setupModern({
+      platform: { feedback: { submit, delete: vi.fn() } },
+      features: ['feedback'],
+    });
+
+    await client.callTool({
+      name: 'submit_feedback',
+      arguments: { feedback: 'hi' },
+    });
+
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      })
+    );
+  });
+
+  test('submit_feedback prefers the handshake over the host client info', async () => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const { callTool } = await setup({
+      platform: { feedback: { submit, delete: vi.fn() } },
+      features: ['feedback'],
+      clientInfo: { name: 'host', version: '0.0.1' },
+    });
+
+    await callTool({ name: 'submit_feedback', arguments: { feedback: 'hi' } });
+
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      })
+    );
+  });
+
+  test('submit_feedback falls back to the host client info', async () => {
+    const submit = vi.fn().mockResolvedValue({ deleteToken: 'tok' });
+    const handler = createMcpHandler(
+      () =>
+        createSupabaseMcpServer({
+          platform: { feedback: { submit, delete: vi.fn() } },
+          features: ['feedback'],
+          clientInfo: { name: 'host', version: '0.0.1' },
+        }),
+      { legacy: 'stateless' }
+    );
+
+    // A stateless legacy follow-up request, with no initialize and no _meta
+    await handler.fetch(
+      new Request('https://mcp.test', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'submit_feedback', arguments: { feedback: 'hi' } },
+        }),
+      })
+    );
+    await handler.close();
+
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientInfo: { name: 'host', version: '0.0.1' },
+      })
+    );
+  });
+
+  test('feedback tools refuse direct calls in read-only mode', async () => {
+    const feedback = {
+      submit: vi.fn().mockResolvedValue({ deleteToken: 'tok' }),
+      delete: vi.fn().mockResolvedValue({ deleted: true }),
+    };
+    const { callTool } = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+      readOnly: true,
+    });
+
+    await expect(
+      callTool({ name: 'submit_feedback', arguments: { feedback: 'hi' } })
+    ).rejects.toThrow('Cannot submit feedback in read-only mode.');
+    await expect(
+      callTool({
+        name: 'delete_feedback',
+        arguments: { delete_token: '5d6d3b3e-4b2f-4a52-9b77-0f0e6a4f6a11' },
+      })
+    ).rejects.toThrow('Cannot delete feedback in read-only mode.');
+    expect(feedback.submit).not.toHaveBeenCalled();
+    expect(feedback.delete).not.toHaveBeenCalled();
+  });
+
+  test('onToolCall receives branded read-only denials and unbranded backend failures', async () => {
+    const errors: unknown[] = [];
+    const feedback = {
+      submit: vi.fn().mockRejectedValue(new Error('upstream down')),
+      delete: vi.fn(),
+    };
+    const onToolCall: NonNullable<Parameters<typeof setup>[0]>['onToolCall'] = (
+      details
+    ) => {
+      if (!details.success) errors.push(details.error);
+    };
+
+    const readOnly = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+      readOnly: true,
+      onToolCall,
+    });
+    await expect(
+      readOnly.callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi' },
+      })
+    ).rejects.toThrow('Cannot submit feedback in read-only mode.');
+
+    const writable = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+      onToolCall,
+    });
+    await expect(
+      writable.callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi' },
+      })
+    ).rejects.toThrow('upstream down');
+
+    expect(errors.map(isToolCallerError)).toEqual([true, false]);
+  });
+
+  test('argument and unknown-tool failures reach onToolCall as caller errors and keep their client result', async () => {
+    const failures: Array<{
+      name: string;
+      arguments: unknown;
+      error: unknown;
+    }> = [];
+    const { client } = await setup({
+      onToolCall: (details) => {
+        if (!details.success) {
+          failures.push({
+            name: details.name,
+            arguments: details.arguments,
+            error: details.error,
+          });
+        }
+      },
+    });
+
+    const parseResult = await client.callTool({
+      name: 'list_organizations',
+      arguments: { extra: true },
+    });
+    const unknownToolResult = await client.callTool({
+      name: 'no_such_tool',
+      arguments: { foo: 'bar' },
+    });
+
+    // zod's issue for `.strict()` rejecting the extra key, as JSON text.
+    const extraKeyIssue = 'Unrecognized key: \\"extra\\"';
+    expect(failures).toMatchObject([
+      {
+        name: 'list_organizations',
+        arguments: { extra: true },
+        error: {
+          name: 'ToolCallerError',
+          message: expect.stringContaining(extraKeyIssue),
+          cause: expect.any(ZodError),
+        },
+      },
+      {
+        name: 'no_such_tool',
+        arguments: { foo: 'bar' },
+        error: { name: 'ToolCallerError', message: 'tool not found' },
+      },
+    ]);
+    expect(failures[1]?.error).not.toHaveProperty('cause');
+
+    const clientErrors = [parseResult, unknownToolResult].map((result) => {
+      const content = result.content.at(0);
+      return {
+        isError: result.isError,
+        error:
+          content?.type === 'text' ? JSON.parse(content.text).error : content,
+      };
+    });
+    expect(clientErrors).toMatchObject([
+      {
+        isError: true,
+        error: {
+          name: 'ZodError',
+          message: expect.stringContaining(extraKeyIssue),
+        },
+      },
+      { isError: true, error: { name: 'Error', message: 'tool not found' } },
+    ]);
+  });
+
+  test('feedback tools are hidden in read-only mode', async () => {
+    const { client } = await setup({
+      features: ['feedback'],
+      readOnly: true,
+    });
+
+    const { tools } = await client.listTools();
+
+    expect(tools).toEqual([]);
+  });
+
+  test('feedback group needs the feedback platform operation', async () => {
+    const setupPromise = setup({
+      platform: {},
+      features: ['feedback'],
+    });
+
+    await expect(setupPromise).rejects.toThrow(
+      "This platform does not support the 'feedback' feature group"
+    );
   });
 
   test('invalid group fails', async () => {

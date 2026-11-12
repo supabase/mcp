@@ -87,11 +87,7 @@ FROM
     SELECT DISTINCT ON (table_id, ordinal_position)
       conrelid AS table_id,
       conkey[1] AS ordinal_position,
-      substring(
-        pg_get_constraintdef(pg_constraint.oid, true),
-        8,
-        length(pg_get_constraintdef(pg_constraint.oid, true)) - 8
-      ) AS "definition"
+      pg_get_expr(pg_constraint.conbin, pg_constraint.conrelid, true) AS "definition"
     FROM pg_constraint
     WHERE contype = 'c' AND cardinality(conkey) = 1
     ORDER BY table_id, ordinal_position, oid asc

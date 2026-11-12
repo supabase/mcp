@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeFilename } from './edge-function.js';
+import {
+  getFilenameFromUrlOrPath,
+  normalizeFilename,
+} from './edge-function.js';
 
 describe('normalizeFilename', () => {
   it('handles deno 1 paths', () => {
@@ -28,5 +31,31 @@ describe('normalizeFilename', () => {
       filename: '/my/local/source/index.ts',
     });
     expect(result).toBe('/my/local/source/index.ts');
+  });
+});
+
+describe('getFilenameFromUrlOrPath', () => {
+  it('converts file URLs to paths', () => {
+    expect(
+      getFilenameFromUrlOrPath('file:///tmp/user_fn_abc_1/source/index.ts')
+    ).toBe('/tmp/user_fn_abc_1/source/index.ts');
+  });
+
+  it('passes through absolute paths', () => {
+    expect(getFilenameFromUrlOrPath('/tmp/user_fn_abc_1/source/index.ts')).toBe(
+      '/tmp/user_fn_abc_1/source/index.ts'
+    );
+  });
+
+  it('passes through relative paths', () => {
+    expect(getFilenameFromUrlOrPath('supabase/functions/hello/index.ts')).toBe(
+      'supabase/functions/hello/index.ts'
+    );
+  });
+
+  it('passes through non-file URLs', () => {
+    expect(getFilenameFromUrlOrPath('https://example.com/index.ts')).toBe(
+      'https://example.com/index.ts'
+    );
   });
 });

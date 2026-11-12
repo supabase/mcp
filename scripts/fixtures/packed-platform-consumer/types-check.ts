@@ -55,12 +55,12 @@ const optionsWithElicitation: SupabaseMcpServerOptions = {
     requestState: {
       key: 'a'.repeat(32),
       principal: 'packed-consumer-fixture',
-      ttlSeconds: 120,
     },
-    confirmation: { enabledTools },
+    confirmation: { enabledTools, ttlSeconds: 600 },
     secretCollection: {
       connectUrlTemplate:
         'https://example.com/dashboard/mcp/secrets?ref={ref}&name={name}',
+      ttlSeconds: 120,
     },
   },
 };
@@ -125,6 +125,45 @@ const coreOptions: McpServerOptions<'named', Fact> = {
 };
 void createMcpServer(coreOptions);
 
+const sqlFeature: Supabase.ConfirmationFeature = 'destructive_sql';
+const notebookFeature: Supabase.ConfirmationFeature = 'notebook';
+const sqlFacts = [
+  {
+    kind: 'confirmation_decision',
+    feature: sqlFeature,
+    route: 'bypass',
+    reason: 'not_destructive',
+  },
+  {
+    kind: 'confirmation_decision',
+    feature: notebookFeature,
+    route: 'bypass',
+    reason: 'not_mutating',
+  },
+  { kind: 'operation', feature: sqlFeature, disposition: 'started' },
+  {
+    kind: 'operation',
+    feature: sqlFeature,
+    disposition: 'returned',
+    durationMs: 1,
+  },
+  {
+    kind: 'operation',
+    feature: sqlFeature,
+    disposition: 'threw',
+    durationMs: 2,
+  },
+  { kind: 'notebook_run', outcome: 'refused', reason: 'too_many_cells' },
+  {
+    kind: 'notebook_run',
+    outcome: 'completed',
+    executed: 3,
+    skipped: 2,
+    errored: 1,
+    budget_exhausted: true,
+  },
+] satisfies Supabase.ObservationFact[];
+void sqlFacts;
 const supabaseObserver: Supabase.RequestObserver = (context) => {
   if (context.method === 'tools/call') {
     const tool:
@@ -132,6 +171,8 @@ const supabaseObserver: Supabase.RequestObserver = (context) => {
       | 'create_branch'
       | 'execute_sql'
       | 'apply_migration'
+      | 'run_notebook'
+      | 'delete_notebook'
       | 'other' = context.tool;
     void tool;
   } else {
@@ -140,7 +181,22 @@ const supabaseObserver: Supabase.RequestObserver = (context) => {
   }
   return {
     record: (fact) => {
-      const feature: 'cost' = fact.feature;
+      if (fact.kind === 'notebook_run') {
+        if (fact.outcome === 'completed') {
+          const counts: Readonly<{
+            executed: number;
+            skipped: number;
+            errored: number;
+            budget_exhausted: boolean;
+          }> = fact;
+          void counts;
+        } else {
+          const reason: 'too_many_cells' = fact.reason;
+          void reason;
+        }
+        return;
+      }
+      const feature: 'cost' | 'destructive_sql' | 'notebook' = fact.feature;
       void feature;
       if (fact.kind === 'operation' && fact.disposition !== 'started') {
         const durationMs: number = fact.durationMs;

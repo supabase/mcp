@@ -7,6 +7,19 @@ import {
   type FeatureGroup,
 } from './types.js';
 
+/** Maps a Management API origin to the dashboard used for user-facing links. */
+export function dashboardUrlForApiUrl(apiUrl?: string): string {
+  const origin = new URL(apiUrl ?? 'https://api.supabase.com').origin;
+  switch (origin) {
+    case 'https://api.supabase.com':
+      return 'https://supabase.com/dashboard';
+    case 'https://api.supabase.green':
+      return 'https://supabase.green/dashboard';
+    default:
+      return `${origin}/dashboard`;
+  }
+}
+
 /**
  * Parses a key-value string into an object.
  *
