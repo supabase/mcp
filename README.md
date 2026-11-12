@@ -50,6 +50,15 @@ See the [Supabase MCP Server](https://supabase.com/mcp) docs for the full list o
 
 The docs also feature an interactive URL builder to populate configuration options for you.
 
+The opt-in `warehouse` feature group exposes `get_warehouse_context` on MCP servers
+that support Warehouse diagnostics. It is available in read-only sessions and
+uses the session's project scope. It reads the authenticated Warehouse API endpoint
+`GET /platform/warehouse/:ref/context`; the API must support this endpoint before
+enabling the feature. The response includes setup, configured compute,
+pipeline state, linked tables, and supported operations. Missing lag is
+unknown, and observation timestamps indicate retrieval time, not data freshness.
+This tool does not execute SQL or change Warehouse configuration.
+
 ## Usage with AI SDK's MCP Client
 
 The `@supabase/mcp-server-supabase` package exports `createToolSchemas()` to populate input and output schemas for Vercel AI SDK's [MCP client](https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools). This allows Supabase MCP tools to be treated as static tools with client-side validation and inferred TypeScript types for their inputs and outputs.

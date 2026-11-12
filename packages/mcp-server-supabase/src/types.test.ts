@@ -12,6 +12,7 @@ describe('featureGroupsSchema', () => {
       'functions',
       'branching',
       'storage',
+      'warehouse',
     ];
 
     for (const feature of validFeatures) {

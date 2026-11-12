@@ -10,13 +10,16 @@ import type {
 } from 'openapi-typescript-helpers';
 import { z } from 'zod/v4';
 import type { paths } from './types.js';
+import type { WarehousePaths } from '../platform/warehouse.js';
+
+type ManagementApiPaths = paths & WarehousePaths;
 
 export function createManagementApiClient(
   baseUrl: string,
   accessToken: string,
   headers: Record<string, string> = {}
 ) {
-  return createClient<paths>({
+  return createClient<ManagementApiPaths>({
     baseUrl,
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -25,7 +28,7 @@ export function createManagementApiClient(
   });
 }
 
-export type ManagementApiClient = Client<paths>;
+export type ManagementApiClient = Client<ManagementApiPaths>;
 
 export type SuccessResponseType<
   T extends Record<string | number, any>,
