@@ -110,7 +110,13 @@ async function main() {
   });
 
   if (features) {
-    parseFeatureGroups(platform, features);
+    try {
+      parseFeatureGroups(platform, features);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+      return;
+    }
   }
 
   // `serveStdio` reports transport startup and out-of-band wire errors only
