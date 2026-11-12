@@ -17,7 +17,7 @@ import type {
   ObservedTool,
   RequestObserver,
 } from './observation.js';
-import { getAppResources } from './apps/index.js';
+import { APPS_EXTENSIONS, getAppResources } from './apps/index.js';
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
@@ -257,6 +257,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     version,
     instructions,
     resources: getAppResources(),
+    extensions: APPS_EXTENSIONS,
     async onInitialize(info) {
       handshakeClientInfo = info.clientInfo;
       // Note: in stateless HTTP mode, `onInitialize` will not always be called

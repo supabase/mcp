@@ -397,6 +397,41 @@ describe('resources', () => {
   });
 });
 
+describe('extensions', () => {
+  test('extensions are declared in server capabilities', async () => {
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      tools: {},
+      extensions: {
+        'io.modelcontextprotocol/ui': {
+          mimeTypes: ['text/html;profile=mcp-app'],
+        },
+      },
+    });
+
+    const { client } = await setup({ server });
+
+    expect(client.getServerCapabilities()?.extensions).toEqual({
+      'io.modelcontextprotocol/ui': {
+        mimeTypes: ['text/html;profile=mcp-app'],
+      },
+    });
+  });
+
+  test('extensions are omitted when not configured', async () => {
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      tools: {},
+    });
+
+    const { client } = await setup({ server });
+
+    expect(client.getServerCapabilities()?.extensions).toBeUndefined();
+  });
+});
+
 describe('resources helper', () => {
   test('should add scheme to resource URIs', () => {
     const output = resources('my-scheme', [

@@ -316,6 +316,12 @@ export type McpServerOptions<Bucket extends string = never, Fact = never> = {
     verify?: (state: string, ctx: ServerContext) => unknown | Promise<unknown>;
   };
 
+  /**
+   * Extensions to declare in `capabilities.extensions`, keyed by extension ID
+   * (for example MCP Apps' `io.modelcontextprotocol/ui`).
+   */
+  extensions?: ServerCapabilities['extensions'];
+
   /** Optional per-request observer; see ObservedMethod for covered handlers. */
   observer?: RequestObserver<Bucket, Fact>;
   classifyTool?: (name: string) => Bucket | 'other';
@@ -338,6 +344,10 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
 
   if (options.tools) {
     capabilities.tools = {};
+  }
+
+  if (options.extensions) {
+    capabilities.extensions = options.extensions;
   }
 
   const server = new Server(
