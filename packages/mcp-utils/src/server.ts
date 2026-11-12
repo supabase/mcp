@@ -202,8 +202,13 @@ export type InitData = {
 };
 
 type ToolCallBaseDetails = {
+  /**
+   * The tool name the client sent. It may not be a registered tool, so it is
+   * an unbounded, client-chosen value: don't use it as a metric label as-is.
+   */
   name: string;
   arguments: Record<string, unknown>;
+  /** Absent for unknown tools. */
   annotations?: Annotations;
 };
 

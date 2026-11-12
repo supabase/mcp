@@ -2,7 +2,10 @@ const toolCallerErrorBrand = Symbol.for('supabase.mcp.callerError');
 
 /**
  * What a caller error asks of the caller. `confirmation_required` means the
- * tool needs a confirmation step first (e.g. a matching `confirm_cost_id`).
+ * tool needs a confirmation step first: a mismatched `confirm_cost_id`, or a
+ * missing one when inline cost confirmation is configured. Without it, the
+ * schema check rejects a missing `confirm_cost_id` first, and the error has a
+ * `ZodError` cause and no kind.
  */
 export type ToolCallerErrorKind = 'confirmation_required';
 
