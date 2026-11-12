@@ -2,6 +2,7 @@ import {
   EXTENSION_ID,
   RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server';
+import type { Client } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { createServerHarness } from '../test/server-harness.js';
 import { LIST_PROJECTS_UI_URI, LIST_TABLES_UI_URI } from './apps/index.js';
@@ -11,59 +12,95 @@ const harness = createServerHarness();
 beforeEach(() => harness.reset());
 afterEach(() => harness.close());
 
-describe('MCP Apps', () => {
-  test('every UI resource a tool links to is registered as an MCP App', async () => {
-    const { client } = await harness.setup();
+const VIEW_URIS = [LIST_PROJECTS_UI_URI, LIST_TABLES_UI_URI];
 
-    const { tools } = await client.listTools();
-    const { resources } = await client.listResources();
+const APPS_CLIENT_CAPABILITIES = {
+  extensions: { [EXTENSION_ID]: { mimeTypes: [RESOURCE_MIME_TYPE] } },
+};
 
-    const linkedUris = tools.flatMap((tool) => {
+async function linkedViewUris(client: Client) {
+  const { tools } = await client.listTools();
+  return tools
+    .flatMap((tool) => {
       const ui = tool._meta?.ui as { resourceUri?: string } | undefined;
       return ui?.resourceUri ? [ui.resourceUri] : [];
+    })
+    .sort();
+}
+
+async function listedViewUris(client: Client) {
+  const { resources } = await client.listResources();
+  return resources
+    .map((r) => r.uri)
+    .filter((uri) => uri.startsWith('ui://'))
+    .sort();
+}
+
+async function expectViewsUnreadable(client: Client) {
+  for (const uri of VIEW_URIS) {
+    await expect(client.readResource({ uri }), uri).rejects.toThrow();
+  }
+}
+
+describe('MCP Apps', () => {
+  test('flag off: no MCP Apps anywhere', async () => {
+    const { client } = await harness.setupModern({
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
     });
 
-    expect(linkedUris.length).toBeGreaterThan(0);
-
-    for (const uri of linkedUris) {
-      const resource = resources.find((r) => r.uri === uri);
-      expect(resource, `no resource registered for ${uri}`).toBeDefined();
-      expect(resource?.mimeType).toBe(RESOURCE_MIME_TYPE);
-    }
+    expect(await linkedViewUris(client)).toEqual([]);
+    expect(client.getServerCapabilities()?.resources).toBeUndefined();
+    expect(client.getServerCapabilities()?.extensions).toBeUndefined();
   });
 
-  test('UI resources serve self-contained HTML', async () => {
-    const { client } = await harness.setup();
+  test('flag on, client without the extension: no links or views', async () => {
+    const { client } = await harness.setupModern({ experimentalApps: true });
 
-    const { resources } = await client.listResources();
-    const uiResources = resources.filter((r) => r.uri.startsWith('ui://'));
-    expect(uiResources.map((r) => r.uri).sort()).toEqual(
-      [LIST_PROJECTS_UI_URI, LIST_TABLES_UI_URI].sort()
-    );
-
-    for (const { uri } of uiResources) {
-      const { contents } = await client.readResource({ uri });
-      const [content] = contents;
-
-      expect(content?.mimeType).toBe(RESOURCE_MIME_TYPE);
-      const html = content && 'text' in content ? content.text : '';
-      expect(html, uri).toMatch(/^<!doctype html>/i);
-      // Built by vite-plugin-singlefile: scripts are inlined, not loaded.
-      expect(html, uri).toContain('<script type="module"');
-      expect(html, uri).not.toMatch(/<script[^>]*\ssrc=/);
-    }
-  });
-
-  test('server declares the MCP Apps extension', async () => {
-    const { client } = await harness.setup();
-
+    expect(await linkedViewUris(client)).toEqual([]);
+    expect(await listedViewUris(client)).toEqual([]);
+    await expectViewsUnreadable(client);
+    // Capabilities are fixed before any request, so they follow the flag alone.
     expect(client.getServerCapabilities()?.extensions).toEqual({
       [EXTENSION_ID]: { mimeTypes: [RESOURCE_MIME_TYPE] },
     });
   });
 
-  test('UI resources set CSP and border metadata in the listing and content', async () => {
-    const { client } = await harness.setup();
+  test('flag on, legacy client: no links or views', async () => {
+    const { client } = await harness.setup({
+      experimentalApps: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+
+    expect(await linkedViewUris(client)).toEqual([]);
+    expect(await listedViewUris(client)).toEqual([]);
+    await expectViewsUnreadable(client);
+  });
+
+  test('flag on, client with the extension: tools link to listed views', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+
+    const { tools } = await client.listTools();
+    const linkOf = (name: string) =>
+      (
+        tools.find((tool) => tool.name === name)?._meta?.ui as
+          | { resourceUri?: string }
+          | undefined
+      )?.resourceUri;
+    expect(linkOf('list_projects')).toBe(LIST_PROJECTS_UI_URI);
+    expect(linkOf('list_tables')).toBe(LIST_TABLES_UI_URI);
+
+    expect(await listedViewUris(client)).toEqual([...VIEW_URIS].sort());
+    expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
+  });
+
+  test('views set CSP and border metadata in the listing and content', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
 
     const expectedMeta = {
       ui: {
@@ -73,15 +110,30 @@ describe('MCP Apps', () => {
     };
 
     const { resources } = await client.listResources();
-    const uiResources = resources.filter((r) => r.uri.startsWith('ui://'));
-    expect(uiResources.length).toBeGreaterThan(0);
+    for (const uri of VIEW_URIS) {
+      const resource = resources.find((r) => r.uri === uri);
+      expect(resource?._meta, uri).toEqual(expectedMeta);
+      expect(resource?.description, uri).toBeTruthy();
 
-    for (const resource of uiResources) {
-      expect(resource._meta, resource.uri).toEqual(expectedMeta);
-      expect(resource.description, resource.uri).toBeTruthy();
+      const { contents } = await client.readResource({ uri });
+      expect(contents[0]?._meta, uri).toEqual(expectedMeta);
+    }
+  });
 
-      const { contents } = await client.readResource({ uri: resource.uri });
-      expect(contents[0]?._meta, resource.uri).toEqual(expectedMeta);
+  test('views are self-contained HTML', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+
+    for (const uri of VIEW_URIS) {
+      const { contents } = await client.readResource({ uri });
+      const [content] = contents;
+      const html = content && 'text' in content ? content.text : '';
+      expect(html, uri).toMatch(/^<!doctype html>/i);
+      // Built by vite-plugin-singlefile: scripts are inlined, not loaded.
+      expect(html, uri).toContain('<script type="module"');
+      expect(html, uri).not.toMatch(/<script[^>]*\ssrc=/);
     }
   });
 });

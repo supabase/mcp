@@ -395,6 +395,31 @@ describe('resources', () => {
     const { resourceTemplates } = await client.listResourceTemplates();
     expect(resourceTemplates[0]?._meta).toEqual({ custom: 'value' });
   });
+
+  test('resources callback receives the request context', async () => {
+    const seen: unknown[] = [];
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      resources: (ctx) => {
+        seen.push(ctx?.mcpReq);
+        return [
+          resource('ui://test/view', {
+            name: 'view',
+            read: async (uri) => ({ uri, text: 'view' }),
+          }),
+        ];
+      },
+    });
+
+    const { client } = await setup({ server });
+    await client.listResources();
+    await client.listResourceTemplates();
+    await client.readResource({ uri: 'ui://test/view' });
+
+    expect(seen).toHaveLength(3);
+    expect(seen.every((mcpReq) => mcpReq !== undefined)).toBe(true);
+  });
 });
 
 describe('extensions', () => {

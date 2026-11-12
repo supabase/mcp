@@ -281,9 +281,15 @@ export type McpServerOptions<Bucket extends string = never, Fact = never> = {
    * asks for the list of resources or reads a resource. This allows for dynamic
    * resources that can change after the server has started.
    */
-  resources?: Prop<
-    (Resource<string, unknown> | ResourceTemplate<string, unknown>)[]
-  >;
+  resources?:
+    | (Resource<string, unknown> | ResourceTemplate<string, unknown>)[]
+    | ((
+        ctx?: ServerContext
+      ) =>
+        | (Resource<string, unknown> | ResourceTemplate<string, unknown>)[]
+        | Promise<
+            (Resource<string, unknown> | ResourceTemplate<string, unknown>)[]
+          >);
 
   /**
    * Tools to be served by the server. These can be defined as a static object
@@ -363,13 +369,13 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
     }
   );
 
-  async function getResources() {
+  async function getResources(ctx?: ServerContext) {
     if (!options.resources) {
       throw new Error('resources not available');
     }
 
     return typeof options.resources === 'function'
-      ? await options.resources()
+      ? await options.resources(ctx)
       : options.resources;
   }
 
@@ -424,9 +430,9 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
   if (options.resources) {
     server.setRequestHandler(
       'resources/list',
-      (): Promise<ListResourcesResult> =>
+      (_request, ctx): Promise<ListResourcesResult> =>
         observed('resources/list', async () => {
-          const allResources = await getResources();
+          const allResources = await getResources(ctx);
           return {
             resources: allResources
               .filter((resource) => 'uri' in resource)
@@ -445,9 +451,9 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
 
     server.setRequestHandler(
       'resources/templates/list',
-      (): Promise<ListResourceTemplatesResult> =>
+      (_request, ctx): Promise<ListResourceTemplatesResult> =>
         observed('resources/templates/list', async () => {
-          const allResources = await getResources();
+          const allResources = await getResources(ctx);
           return {
             resourceTemplates: allResources
               .filter((resource) => 'uriTemplate' in resource)
@@ -466,10 +472,10 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
 
     server.setRequestHandler(
       'resources/read',
-      (request): Promise<ReadResourceResult> =>
+      (request, ctx): Promise<ReadResourceResult> =>
         observed('resources/read', async () => {
           try {
-            const allResources = await getResources();
+            const allResources = await getResources(ctx);
             const { uri } = request.params;
 
             const resources = allResources.filter(

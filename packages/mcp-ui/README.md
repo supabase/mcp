@@ -20,13 +20,14 @@ Add `?source=dist` to load the built HTML from `dist/` instead of the dev source
 
 ## Test against the real server
 
-Run the server with `pnpm dev:http` from the repo root (it also rebuilds views on change), then use [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is a full MCP Apps host:
+Run the server with `pnpm dev:http` from the repo root (it also rebuilds views on change), then use [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is a full MCP Apps host. Views are off by default and only shown to modern-era clients that advertise MCP Apps, so add `?experimental_apps=true` to the URL and use the modern protocol:
 
 ```bash
 # Check which tools have a UI and how it's configured (no browser needed)
 npx @modelcontextprotocol/inspector --cli \
-  --transport http --server-url http://127.0.0.1:3111/mcp \
+  --transport http --server-url "http://127.0.0.1:3111/mcp?experimental_apps=true" \
   --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  --protocol-era modern --advertise-apps \
   --method tools/list --app-info
 
 # Open the web UI to call a tool and see its view rendered

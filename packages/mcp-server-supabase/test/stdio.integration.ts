@@ -277,13 +277,6 @@ describe('stdio', () => {
         version: MCP_SERVER_VERSION,
       });
       expect(client.getServerCapabilities()).toEqual({
-        // MCP Apps: the extension declaration and its ui:// view resources
-        extensions: {
-          'io.modelcontextprotocol/ui': {
-            mimeTypes: ['text/html;profile=mcp-app'],
-          },
-        },
-        resources: {},
         tools: {},
       });
       const expectedToolContent = [
