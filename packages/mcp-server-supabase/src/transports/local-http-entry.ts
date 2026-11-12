@@ -184,7 +184,9 @@ export async function startLocalHttpEntry({
               parseFeatureGroups(platform, features);
             } catch (error) {
               return Response.json(
-                { error: error instanceof Error ? error.message : String(error) },
+                {
+                  error: error instanceof Error ? error.message : String(error),
+                },
                 { status: 400 }
               );
             }
