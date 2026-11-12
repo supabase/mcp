@@ -87,6 +87,10 @@ The stdio transport is available without `--http`. Configure your MCP client to 
 }
 ```
 
+### MCP Apps views
+
+Some tools have an interactive [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) view, built from `packages/mcp-ui` (Vite and React) into self-contained HTML that the server bundle inlines (HTML is not committed). `pnpm build` builds the views before the server and `pnpm dev:http` rebuilds them on change. Like the other workspace packages, they must be built before running the server's tests. See [`packages/mcp-ui/README.md`](packages/mcp-ui/README.md) for developing views with the mock host and testing them in MCP Inspector.
+
 ## Testing
 
 Run the commands below from the repository root. Outside CI, the Supabase package's `vitest.setup.ts` calls `statSync` on `packages/mcp-server-supabase/.env.local` before loading it. Create that file if it is missing; an empty file is sufficient for mocked unit tests. Do not set `CI=1` to bypass this prerequisite.

@@ -277,6 +277,8 @@ describe('stdio', () => {
         version: MCP_SERVER_VERSION,
       });
       expect(client.getServerCapabilities()).toEqual({
+        // MCP Apps UI views (ui:// resources)
+        resources: {},
         tools: {},
       });
       const expectedToolContent = [

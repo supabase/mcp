@@ -16,6 +16,7 @@ export default defineConfig([
     splitting: true,
     loader: {
       '.sql': 'text',
+      '.html': 'text',
     },
   },
 ]);

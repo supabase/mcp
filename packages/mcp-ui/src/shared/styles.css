@@ -1,0 +1,120 @@
+/*
+ * Placeholder styles. Colors and fonts come from the host's MCP Apps style
+ * variables (via `useHostStyles`), with neutral fallbacks.
+ */
+:root {
+  --text: var(--color-text-primary, CanvasText);
+  --text-secondary: var(
+    --color-text-secondary,
+    color-mix(in oklab, currentColor 70%, transparent)
+  );
+  --text-tertiary: var(
+    --color-text-tertiary,
+    color-mix(in oklab, currentColor 50%, transparent)
+  );
+  --border: var(
+    --color-border-primary,
+    color-mix(in oklab, currentColor 12%, transparent)
+  );
+  --success: var(--color-text-success, #15803d);
+  --warning: var(--color-text-warning, #b45309);
+  --danger: var(--color-text-danger, #b91c1c);
+
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  font-size: var(--font-text-sm-size, 14px);
+  line-height: var(--font-text-sm-line-height, 1.43);
+  color: var(--text);
+}
+
+/* Not `light-dark()`: the minifier breaks it inside `var()` fallbacks. */
+[data-theme="dark"] {
+  --success: var(--color-text-success, #4ade80);
+  --warning: var(--color-text-warning, #fbbf24);
+  --danger: var(--color-text-danger, #f87171);
+}
+
+body {
+  margin: 0;
+  background: transparent;
+}
+
+.mono {
+  font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+}
+
+.text-muted {
+  color: var(--text-secondary);
+}
+
+.text-lighter {
+  color: var(--text-tertiary);
+}
+
+.text-destructive {
+  color: var(--danger);
+}
+
+.heading-meta {
+  font-size: 12px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-tertiary);
+}
+
+.card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius-md, 6px);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  padding: 8px 12px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 8px 12px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table .numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  --badge: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in oklab, var(--badge) 35%, transparent);
+  border-radius: var(--border-radius-full, 9999px);
+  background: color-mix(in oklab, var(--badge) 10%, transparent);
+  color: var(--badge);
+  font-size: 12px;
+  line-height: 1.33;
+  white-space: nowrap;
+}
+
+.badge-success {
+  --badge: var(--success);
+}
+
+.badge-warning {
+  --badge: var(--warning);
+}
+
+.badge-destructive {
+  --badge: var(--danger);
+}

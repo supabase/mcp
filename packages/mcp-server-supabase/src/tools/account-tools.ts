@@ -22,6 +22,7 @@ import {
 } from './confirmation.js';
 import type { AccountOperations } from '../platform/types.js';
 import { organizationSchema, projectSchema } from '../platform/types.js';
+import { LIST_PROJECTS_UI_URI } from '../apps/index.js';
 import { getBranchCost, getNextProjectCost } from '../pricing.js';
 import { AWS_REGION_CODES } from '../regions.js';
 import { hashObject } from '../util.js';
@@ -165,6 +166,7 @@ export const accountToolDefs = {
       'Lists all Supabase projects for the user. Use this to help discover the project ID of the project that the user is working on.',
     parameters: listProjectsInputSchema,
     outputSchema: listProjectsOutputSchema,
+    _meta: { ui: { resourceUri: LIST_PROJECTS_UI_URI } },
     annotations: {
       title: 'List projects',
       readOnlyHint: true,

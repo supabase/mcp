@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// Watches both packages and restarts the --http server when either dist changes.
+// Watches the packages and restarts the --http server when the server's dist
+// changes. MCP Apps views (packages/mcp-ui) rebuild on change, and the server
+// also watches their built HTML, since it's inlined into the server bundle.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
@@ -21,6 +23,11 @@ process.on('SIGTERM', () => shutdown(0));
 
 if (!existsSync(cli)) spawnSync('pnpm', ['build'], { stdio: 'inherit' });
 
+run('pnpm', ['build:watch'], 'packages/mcp-ui');
 run('node_modules/.bin/tsup', ['--watch'], 'packages/mcp-utils');
-run('node_modules/.bin/tsup', ['--watch'], 'packages/mcp-server-supabase');
+run(
+  'node_modules/.bin/tsup',
+  ['--watch', '.', '--watch', '../mcp-ui/dist'],
+  'packages/mcp-server-supabase'
+);
 run('node', ['--watch', cli, '--http', ...process.argv.slice(2)]);

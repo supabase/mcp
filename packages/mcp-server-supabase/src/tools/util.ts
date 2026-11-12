@@ -1,3 +1,4 @@
+import type { McpUiToolMeta } from '@modelcontextprotocol/ext-apps';
 import { type ServerContext } from '@modelcontextprotocol/server';
 import {
   type Annotations,
@@ -8,6 +9,12 @@ import {
 import { source } from 'common-tags';
 import { z } from 'zod/v4';
 
+/**
+ * Tool `_meta`. mcp-utils passes it through untyped; here the MCP Apps `ui`
+ * key is typed with the SDK's own `McpUiToolMeta`.
+ */
+export type ToolMeta = { ui?: McpUiToolMeta; [key: string]: unknown };
+
 export type ToolDef = {
   description?: string | (() => string | Promise<string>);
   parameters: z.ZodObject<any>;
@@ -17,6 +24,7 @@ export type ToolDef = {
   readOnlyBehavior?: 'exclude' | 'adapt';
   /** If true, excludes the tool from `tools/list` while keeping it callable via `tools/call`. */
   hidden?: boolean;
+  _meta?: ToolMeta;
 };
 
 export type ToolDefs = Record<string, ToolDef>;
@@ -30,7 +38,8 @@ export type InjectableTool<
   OutputSchema extends z.ZodObject,
   Injected extends Partial<z.infer<Params>> = {},
   Fact = never,
-> = Tool<Params, OutputSchema, Fact> & {
+> = Omit<Tool<Params, OutputSchema, Fact>, '_meta'> & {
+  _meta?: ToolMeta;
   /**
    * Optionally injects static parameter values into the tool's
    * execute function and removes them from the parameter schema.
@@ -52,6 +61,7 @@ export function injectableTool<
   parameters,
   outputSchema,
   hidden,
+  _meta,
   inject,
   execute,
 }: InjectableTool<Params, OutputSchema, Injected, Fact>) {
@@ -63,6 +73,7 @@ export function injectableTool<
       parameters,
       outputSchema,
       hidden,
+      _meta,
       execute,
     });
   }
@@ -92,6 +103,7 @@ export function injectableTool<
     parameters: cleanParametersSchema,
     outputSchema,
     hidden,
+    _meta,
     execute: executeWithInjection,
   });
 }

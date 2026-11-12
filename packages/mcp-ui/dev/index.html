@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MCP UI mock host</title>
+    <style>
+      body { margin: 0; font: 14px system-ui, sans-serif; }
+      header { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #ddd; }
+      #frame-wrapper { padding: 16px; }
+      iframe { width: 100%; max-width: 720px; border: 0; }
+      #log { margin: 0; font: 12px ui-monospace, monospace; white-space: pre-wrap; padding: 0 16px; color: #666; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./MockHost.tsx"></script>
+  </body>
+</html>
