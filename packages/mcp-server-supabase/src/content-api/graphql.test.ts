@@ -151,6 +151,16 @@ describe('graphql client', () => {
       true,
     ],
     [
+      [{ message: 'GET requests may only execute query operations' }],
+      'Supabase Content API GraphQL error: GET requests may only execute query operations',
+      true,
+    ],
+    [
+      [{ message: 'Internal Server Error' }],
+      'Supabase Content API GraphQL error: Internal Server Error',
+      false,
+    ],
+    [
       [
         {
           message: 'Internal Server Error',
