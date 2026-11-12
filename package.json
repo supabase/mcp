@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "build": "pnpm --filter @supabase/mcp-utils --filter @supabase/mcp-server-supabase --filter @supabase/mcp-server-postgrest build",
+    "build": "pnpm --filter \"@supabase/mcp-server-supabase...\" --filter \"@supabase/mcp-server-postgrest...\" build",
     "test": "pnpm --parallel --filter @supabase/mcp-utils --filter @supabase/mcp-server-supabase --filter @supabase/mcp-server-postgrest test",
     "test:coverage": "pnpm --filter @supabase/mcp-server-supabase test:coverage",
     "test:packed-platform-consumer": "node scripts/test-packed-platform-consumer.mjs",

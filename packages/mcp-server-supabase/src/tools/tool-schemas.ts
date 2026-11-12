@@ -33,10 +33,10 @@ export function defsToSchemas<const T extends ToolDefs>(
 ): DefsToSchemas<T> {
   return Object.fromEntries(
     Object.entries(defs).map(
-      ([name, { parameters: inputSchema, description: _, ...rest }]) => [
+      ([
         name,
-        { inputSchema, ...rest },
-      ]
+        { parameters: inputSchema, description: _, _meta: __, ...rest },
+      ]) => [name, { inputSchema, ...rest }]
     )
   ) as DefsToSchemas<T>;
 }

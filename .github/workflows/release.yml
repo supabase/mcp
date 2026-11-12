@@ -110,7 +110,7 @@ jobs:
 
       - name: Build packages
         if: ${{ steps.release.outputs.releases_created || inputs.force_publish == true }}
-        run: pnpm --filter @supabase/mcp-utils --filter @supabase/mcp-server-supabase --filter @supabase/mcp-server-postgrest build
+        run: pnpm run build
 
       - name: Publish @supabase/mcp-utils to npm
         if: ${{ steps.release.outputs['packages/mcp-utils--release_created'] || inputs.force_publish == true }}

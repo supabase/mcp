@@ -33,6 +33,7 @@ import {
   isFormCapable,
   observeOperation,
 } from './confirmation.js';
+import { LIST_TABLES_UI_URI } from '../apps/index.js';
 import { isDestructiveSql } from './destructive-sql.js';
 import {
   injectableTool,
@@ -217,6 +218,7 @@ export const databaseToolDefs = {
       'Lists all tables in one or more schemas. By default returns a compact summary. Set verbose to true to include column details, primary keys, and foreign key constraints.',
     parameters: listTablesInputSchema,
     outputSchema: listTablesOutputSchema,
+    _meta: { ui: { resourceUri: LIST_TABLES_UI_URI } },
     annotations: {
       title: 'List tables',
       readOnlyHint: true,
