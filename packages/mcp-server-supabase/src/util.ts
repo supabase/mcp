@@ -78,28 +78,35 @@ export function parseFeatureGroups(
   platform: SupabasePlatform,
   features: string[]
 ) {
-  // First pass: validate that all features are valid
-  const desiredFeatures = z.set(featureGroupSchema).parse(new Set(features));
+  try {
+    // First pass: validate that all features are valid
+    const desiredFeatures = z.set(featureGroupSchema).parse(new Set(features));
 
-  // The platform implementation can define a subset of features
-  const availableFeatures: FeatureGroup[] = [
-    ...PLATFORM_INDEPENDENT_FEATURES,
-    ...currentFeatureGroupSchema.options.filter((key) =>
-      Object.keys(platform).includes(key)
-    ),
-  ];
+    // The platform implementation can define a subset of features
+    const availableFeatures: FeatureGroup[] = [
+      ...PLATFORM_INDEPENDENT_FEATURES,
+      ...currentFeatureGroupSchema.options.filter((key) =>
+        Object.keys(platform).includes(key)
+      ),
+    ];
 
-  const availableFeaturesSchema = z.enum(
-    availableFeatures as [string, ...string[]],
-    {
-      error: (issue) => {
-        if (issue.code === 'invalid_value') {
-          return `This platform does not support the '${issue.input}' feature group. Supported groups are: ${availableFeatures.join(', ')}`;
-        }
-      },
+    const availableFeaturesSchema = z.enum(
+      availableFeatures as [string, ...string[]],
+      {
+        error: (issue) => {
+          if (issue.code === 'invalid_value') {
+            return `This platform does not support the '${issue.input}' feature group. Supported groups are: ${availableFeatures.join(', ')}`;
+          }
+        },
+      }
+    );
+
+    // Second pass: validate the desired features against this platform's available features
+    return z.set(availableFeaturesSchema).parse(desiredFeatures);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new Error(z.prettifyError(error), { cause: error });
     }
-  );
-
-  // Second pass: validate the desired features against this platform's available features
-  return z.set(availableFeaturesSchema).parse(desiredFeatures);
+    throw error;
+  }
 }
