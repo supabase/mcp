@@ -12,7 +12,7 @@ import {
   buildRlsDisabledAdvisory,
   selectAdvisory,
 } from '../advisories/index.js';
-import { ToolCallerError } from '../errors.js';
+import { ToolCallerError } from '@supabase/mcp-utils';
 import type { ObservationFact } from '../observation.js';
 import { listExtensionsSql, listTablesSql } from '../pg-meta/index.js';
 import {

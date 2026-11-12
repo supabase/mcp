@@ -14,7 +14,11 @@ import {
   expectTerminalResult,
   freezeClock,
 } from '../test/confirmation-results.js';
-import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import {
+  callModernTool,
+  captureToolErrors,
+  createServerHarness,
+} from '../test/server-harness.js';
 import { BRANCH_COST_HOURLY, PROJECT_COST_MONTHLY } from './pricing.js';
 import type { SupabaseMcpServerOptions } from './server.js';
 
@@ -325,7 +329,8 @@ describe('tools', () => {
   });
 
   test('create project in read-only mode throws an error', async () => {
-    const { callTool } = await setup({ readOnly: true });
+    const { errors, onToolCall } = captureToolErrors();
+    const { callTool } = await setup({ readOnly: true, onToolCall });
 
     const freeOrg = await createOrganization({
       name: 'Free Org',
@@ -357,6 +362,9 @@ describe('tools', () => {
     await expect(result).rejects.toThrow(
       'Cannot create a project in read-only mode.'
     );
+    // A refusal, not a confirmation step, so it carries no kind.
+    expect(errors).toMatchObject([{ name: 'ToolCallerError' }]);
+    expect(errors[0]).not.toHaveProperty('kind');
   });
 
   test('create project without region fails', async () => {
@@ -525,7 +533,8 @@ describe('tools', () => {
   });
 
   test('create project with mismatched cost confirmation fails as a caller error', async () => {
-    const { callTool } = await setup();
+    const { errors, onToolCall } = captureToolErrors();
+    const { callTool } = await setup({ onToolCall });
 
     const freeOrg = await createOrganization({
       name: 'Free Org',
@@ -549,6 +558,9 @@ describe('tools', () => {
         'Cost confirmation ID does not match the expected cost of creating a project.',
     });
     expect(mockProjects.size).toBe(0);
+    expect(errors).toMatchObject([
+      { name: 'ToolCallerError', kind: 'confirmation_required' },
+    ]);
   });
 
   describe('create_project cost confirmation via elicitation', () => {
@@ -743,11 +755,13 @@ describe('tools', () => {
     });
 
     test('client without forms that calls first gets the confirm_cost steps and no project', async () => {
+      const { errors, onToolCall } = captureToolErrors();
       const { callTool } = await setup({
         elicitation: {
           requestState: ELICITATION_REQUEST_STATE,
           confirmation: COST_CONFIRMATION,
         },
+        onToolCall,
       });
       const { org } = await createOrganizationWithBillableNextProject();
 
@@ -768,6 +782,9 @@ describe('tools', () => {
       });
       // Only the existing project that makes the next one billable.
       expect(mockProjects.size).toBe(1);
+      expect(errors).toMatchObject([
+        { name: 'ToolCallerError', kind: 'confirmation_required' },
+      ]);
     });
 
     test('form-capable client: $0 creates without elicitation', async () => {

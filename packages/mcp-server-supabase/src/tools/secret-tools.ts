@@ -5,7 +5,7 @@ import {
   type ServerContext,
 } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
-import { ToolCallerError } from '../errors.js';
+import { ToolCallerError } from '@supabase/mcp-utils';
 import type { SecretOperations } from '../platform/types.js';
 import { isUrlCapable, type ElicitationState } from './confirmation.js';
 import { injectableTool, type ToolDefs } from './util.js';
