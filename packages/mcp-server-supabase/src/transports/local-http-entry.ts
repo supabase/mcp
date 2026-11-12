@@ -179,7 +179,16 @@ export async function startLocalHttpEntry({
           );
 
           const platform = createSupabaseApiPlatform({ accessToken, apiUrl });
-          if (features) parseFeatureGroups(platform, features);
+          if (features) {
+            try {
+              parseFeatureGroups(platform, features);
+            } catch (error) {
+              return Response.json(
+                { error: error instanceof Error ? error.message : String(error) },
+                { status: 400 }
+              );
+            }
+          }
           const handler = createMcpHandler(
             () =>
               createSupabaseMcpServer({
