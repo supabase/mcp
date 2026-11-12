@@ -213,7 +213,7 @@ export const accountToolDefs = {
     },
   },
   create_project: {
-    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to any nonzero quoted cost before the project is created. ${callBeforeConfirmingDescription} A project quoted at $0 may be created without a cost-confirmation form. Always ask the user which organization to create the project in. The project can take a few minutes to initialize. Call \`get_project\` until \`status\` is \`ACTIVE_HEALTHY\` before running SQL, migrations, or other database tools against it.`,
+    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to any nonzero quoted cost before the project is created. ${callBeforeConfirmingDescription} A project quoted at $0 may be created without a cost-confirmation form. Always ask the user which organization to create the project in. The project can take a few minutes to initialize. Call \`get_project\`, waiting a few seconds between checks, until \`status\` is \`ACTIVE_HEALTHY\` before running SQL, migrations, or other database tools against it. If \`status\` becomes \`INIT_FAILED\` or \`REMOVED\`, stop and tell the user.`,
     parameters: createProjectInputSchema,
     outputSchema: createProjectOutputSchema,
     annotations: {

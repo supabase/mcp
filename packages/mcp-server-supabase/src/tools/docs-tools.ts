@@ -38,7 +38,7 @@ export function getDocsTools({ contentApiClient }: DocsToolsOptions) {
         const schema = await contentApiClient.loadSchema();
 
         return source`
-          Search the Supabase documentation using GraphQL. Must be a valid GraphQL query that uses only the fields and arguments in the schema below; other fields, arguments or fragments fail.
+          Search the Supabase documentation using GraphQL. Must be a valid GraphQL query that uses only the fields, arguments and types defined in the schema below; anything else fails.
           Example: \`{ searchDocs(query: "row level security", limit: 5) { nodes { title href content } } }\`
           You should default to calling this even if you think you already know the answer, since the documentation is always being updated.
 
