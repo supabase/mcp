@@ -27,6 +27,14 @@ export const graphqlErrorSchema = z.object({
   path: z.array(z.union([z.string(), z.number()])).optional(),
 });
 
+// Request-validation messages the Content API route
+// (supabase/supabase apps/docs/app/api/graphql/route.ts) returns for GET
+// requests, without `locations`.
+const getOperationValidationMessages: readonly string[] = [
+  'GET requests must specify an operation name or send only a single operation',
+  'GET requests may only execute query operations',
+];
+
 export const graphqlResponseSchema = z.object({
   data: z.record(z.string(), z.unknown()).nullish(),
   errors: z.array(graphqlErrorSchema).optional(),
@@ -199,11 +207,17 @@ export class GraphQLClient {
         })
         .join(', ')}`;
 
-      // An error with a `path` happened while executing a field, so it is a
-      // Content API fault. Only errors with no `path` reflect the query itself.
-      throw data.errors.some((err) => err.path)
-        ? new Error(message)
-        : new ToolCallerError(message);
+      // Only request-validation errors reflect the caller's query: no `path`,
+      // and either `locations` or a known GET-operation message. Anything else
+      // (an execution error with a `path`, or an outage envelope such as
+      // `Internal Server Error`) is a Content API fault.
+      const isCallerError = data.errors.every(
+        (err) =>
+          !err.path &&
+          (err.locations !== undefined ||
+            getOperationValidationMessages.includes(err.message))
+      );
+      throw isCallerError ? new ToolCallerError(message) : new Error(message);
     }
 
     if (!data.data) {
