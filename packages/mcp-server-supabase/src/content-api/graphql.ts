@@ -138,7 +138,8 @@ export class GraphQLClient {
     }
 
     if (options.validateSchema) {
-      // Schema load failures are server faults, so they stay unbranded.
+      // Schema load failures reject `schemaLoaded`. Outages stay plain errors; a validation
+      // error from the schema query is branded like any other by `#query`.
       const { schema } = await this.schemaLoaded;
       const errors = validate(schema, documentNode);
       if (errors.length > 0) {
