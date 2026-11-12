@@ -2464,6 +2464,22 @@ export interface components {
             /** @enum {string} */
             preview_project_status?: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
         };
+        PlanGateErrorBody: {
+            /** @description Human-readable explanation of the plan gate */
+            message: string;
+            /** @description Present on entitlement denials. Other errors with this status code (validation, billing state) carry only message. */
+            error?: {
+                /**
+                 * @description Machine-readable marker for plan-gated denials
+                 * @enum {string}
+                 */
+                code: "entitlement_required";
+                /** @description Entitlement feature key that failed the check */
+                feature: string;
+                /** @description Billing page URL for the organization, present when the org is resolvable */
+                upgrade_url?: string;
+            };
+        };
         BranchDeleteResponse_Output: {
             /** @enum {string} */
             message: "ok";
@@ -3269,22 +3285,6 @@ export interface components {
             status: "not-used" | "custom-domain-used" | "active";
             custom_domain?: string;
         };
-        PlanGateErrorBody: {
-            /** @description Human-readable explanation of the plan gate */
-            message: string;
-            /** @description Present on entitlement denials. Other errors with this status code (validation, billing state) carry only message. */
-            error?: {
-                /**
-                 * @description Machine-readable marker for plan-gated denials
-                 * @enum {string}
-                 */
-                code: "entitlement_required";
-                /** @description Entitlement feature key that failed the check */
-                feature: string;
-                /** @description Billing page URL for the organization, present when the org is resolvable */
-                upgrade_url?: string;
-            };
-        };
         /** @example {
          *       "vanity_subdomain": "acme-prod"
          *     } */
@@ -3780,6 +3780,7 @@ export interface components {
             saml_external_url: string | null;
             saml_allow_encrypted_assertions: boolean | null;
             security_sb_forwarded_for_enabled: boolean | null;
+            external_email_magic_link_disabled: boolean | null;
             security_captcha_enabled: boolean | null;
             /** @enum {string|null} */
             security_captcha_provider: "turnstile" | "hcaptcha" | null;
@@ -3892,6 +3893,7 @@ export interface components {
             saml_enabled?: boolean | null;
             saml_external_url?: string | null;
             security_sb_forwarded_for_enabled?: boolean | null;
+            external_email_magic_link_disabled?: boolean;
             security_captcha_enabled?: boolean | null;
             /** @enum {string|null} */
             security_captcha_provider?: "turnstile" | "hcaptcha" | null;
@@ -4219,7 +4221,6 @@ export interface components {
         };
         V1GetUsageApiCountResponse_Output: {
             result?: {
-                /** Format: date-time */
                 timestamp: string;
                 total_auth_requests: number;
                 total_realtime_requests: number;
@@ -5586,6 +5587,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Persistent branches are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -5948,6 +5958,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description The instance size is not available on the organization plan, or the organization has overdue invoices */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -6108,6 +6127,8 @@ export interface operations {
                 code_challenge_method?: "plain" | "sha256" | "S256";
                 /** @description Organization slug */
                 organization_slug?: string;
+                /** @description Project ref */
+                project_ref?: string;
                 target_flow?: string;
                 /** @description Resource indicator for MCP (Model Context Protocol) clients */
                 resource?: string;
@@ -6754,6 +6775,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Custom JWT templates for secret API keys are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -7017,6 +7047,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Custom JWT templates for secret API keys are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -7120,6 +7159,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Branching or persistent branches are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -9696,6 +9744,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description An auth setting in the request is not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -10046,6 +10103,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description The restore is not available on the organization plan, or the organization has overdue invoices or a service restriction */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -11981,7 +12047,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -12051,7 +12119,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -12115,7 +12185,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -12488,6 +12560,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Disk modifications are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -12689,6 +12770,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description A storage feature or file size limit in the request is not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
