@@ -1187,4 +1187,26 @@ describe('startLocalHttpEntry', () => {
     });
     expect(result.isError).toBe(true);
   });
+  test.each(['bogus', 'database,bogus'])(
+    'rejects unsupported feature groups over HTTP: %s',
+    async (features) => {
+      const response = await fetch(
+        `${entry.url}?features=${encodeURIComponent(features)}`,
+        {
+          method: 'POST',
+          headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/list',
+          }),
+        }
+      );
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toEqual(expect.any(String));
+      expect(body.error.length).toBeGreaterThan(0);
+    }
+  );
+
 });
