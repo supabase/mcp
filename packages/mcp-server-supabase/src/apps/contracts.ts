@@ -191,13 +191,16 @@ export type TableSummary = z.infer<typeof tableSummarySchema>;
 /** What a connection allows. Surfaces hide actions; the server still enforces. */
 export const capabilitiesSchema = z.object({
   readOnly: z.boolean(),
+  /** Tables, rows and database SQL. */
   database: z.boolean(),
+  /** The logs view: recent events with source and level filters. */
   logs: z.boolean().optional(),
+  /** Logs SQL (`source=logs`) in the query editor. Possible on servers whose log dialect the logs view does not support. */
   logQueries: z.boolean().optional(),
-  projectOverview: z.boolean().optional(),
   createProject: z.boolean(),
   creationMode: z.enum(['legacy', 'elicitation']),
   scopedProjectId: z.string().nullable(),
+  /** Open a project or organization by reference, for tokens that cannot list the account. */
   openResource: z.boolean().optional(),
 });
 export type Capabilities = z.infer<typeof capabilitiesSchema>;
@@ -321,6 +324,10 @@ export const projectOverviewSchema = z.object({
   traffic: section(trafficSchema),
   security: section(advisorsSchema),
   performance: section(advisorsSchema),
+  /** Total Auth users. Optional so views keep working with servers that predate it. */
+  users: section(
+    z.object({ total: z.number().int().nonnegative() })
+  ).optional(),
 });
 
 export type AdvisorIssue = z.infer<typeof advisorIssueSchema>;
@@ -379,6 +386,32 @@ export const logsPanelSchema = z.object({
   settings: logSettingsSchema,
 });
 
+/** A project's home: traffic, issues, users and checks the user can send to the agent. */
+export const homePanelSchema = z.object({
+  ...target,
+  view: z.literal('home'),
+});
+
+/** A project's saved notebooks the agent can run. */
+export const notebooksPanelSchema = z.object({
+  ...target,
+  view: z.literal('notebooks'),
+});
+
+/** A project's open issues from its security and performance advisors. */
+export const issuesPanelSchema = z.object({
+  ...target,
+  view: z.literal('issues'),
+});
+
+/** Browse a project's tables and write SQL, optionally starting at a table. */
+export const explorerPanelSchema = z.object({
+  ...target,
+  view: z.literal('explorer'),
+  schema: z.string().min(1).max(256).optional(),
+  table: z.string().min(1).max(256).optional(),
+});
+
 export const queryPanelSchema = z
   .object({
     ...target,
@@ -401,11 +434,19 @@ export const panelLaunchSchema = z.discriminatedUnion('view', [
   rowPanelSchema,
   logsPanelSchema,
   queryPanelSchema,
+  explorerPanelSchema,
+  homePanelSchema,
+  issuesPanelSchema,
+  notebooksPanelSchema,
 ]);
 export type PanelLaunch = z.infer<typeof panelLaunchSchema>;
 export type QueryPanel = z.infer<typeof queryPanelSchema>;
 export type LogsPanel = z.infer<typeof logsPanelSchema>;
 export type RowPanel = z.infer<typeof rowPanelSchema>;
+export type ExplorerPanel = z.infer<typeof explorerPanelSchema>;
+export type HomePanel = z.infer<typeof homePanelSchema>;
+export type IssuesPanel = z.infer<typeof issuesPanelSchema>;
+export type NotebooksPanel = z.infer<typeof notebooksPanelSchema>;
 
 /** What a focused surface receives: the connection bootstrap plus its launch. */
 export const panelBootstrapSchema = bootstrapSchema.extend({
@@ -445,6 +486,8 @@ export type DataOperationVisibility = 'app' | 'shared';
 interface DataOperation<I extends z.ZodType, O extends z.ZodType> {
   tool: string;
   visibility: DataOperationVisibility;
+  /** `rows`: a SQL tool whose rows the model sees wrapped as untrusted data; hosts unwrap them. */
+  result?: 'rows';
   description: string;
   input: I;
   output: O;
@@ -452,6 +495,16 @@ interface DataOperation<I extends z.ZodType, O extends z.ZodType> {
 const operation = <I extends z.ZodType, O extends z.ZodType>(
   op: DataOperation<I, O>
 ) => op;
+
+/** A saved notebook as a list shows it. Notebook names and descriptions are user content. */
+export const notebookSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  favorite: z.boolean(),
+  updated_at: z.string(),
+});
+export type NotebookSummary = z.infer<typeof notebookSummarySchema>;
 
 export const dataOperations = {
   /** Connection bootstrap. Also the global "Supabase" entrypoint. */
@@ -469,11 +522,19 @@ export const dataOperations = {
       }),
     output: bootstrapSchema,
   }),
+  /** The model's own `list_notebooks`; the view keeps only the fields it shows. */
+  listNotebooks: operation({
+    tool: 'list_notebooks',
+    visibility: 'shared',
+    description: "List a project's saved notebooks.",
+    input: projectTarget,
+    output: z.object({ notebooks: z.array(notebookSummarySchema) }),
+  }),
   getProjectOverview: operation({
     tool: 'app_get_project_overview',
     visibility: 'app',
     description:
-      'Read hourly API gateway request counts and HTTP error rates for the last 24 complete hours, plus warning/error security and performance advisors for the project home. No polling.',
+      'Read hourly API gateway request counts and HTTP error rates for the last 24 complete hours, warning/error security and performance advisors, and the total Auth user count for the project home. No polling.',
     input: projectTarget,
     output: projectOverviewSchema,
   }),
@@ -484,14 +545,14 @@ export const dataOperations = {
     input: z.object({ project_id: z.string().min(1) }),
     output: z.object({ schemas: z.array(z.object({ name: z.string() })) }),
   }),
+  /** The model's own `list_tables` in its compact form. Names come back as `schema.table`. */
   listTables: operation({
-    tool: 'app_list_tables',
-    visibility: 'app',
-    description:
-      'List tables in one schema with row estimates for the project explorer.',
+    tool: 'list_tables',
+    visibility: 'shared',
+    description: 'List tables in the given schemas with row estimates.',
     input: z.object({
       project_id: z.string().min(1),
-      schema: z.string().min(1),
+      schemas: z.array(z.string().min(1)).min(1),
     }),
     output: z.object({ tables: z.array(tableSummarySchema) }),
   }),
@@ -568,6 +629,7 @@ export const dataOperations = {
   executeSql: operation({
     tool: 'execute_sql',
     visibility: 'shared',
+    result: 'rows',
     description:
       'Run SQL with the connection’s existing approval and read-only policy.',
     input: z.object({
@@ -579,6 +641,7 @@ export const dataOperations = {
   queryLogs: operation({
     tool: 'query_logs',
     visibility: 'shared',
+    result: 'rows',
     description:
       'Run a read-only logs query in an explicit window of at most 24 hours.',
     input: z.object({
@@ -668,15 +731,20 @@ export function parseUntrustedRows(value: unknown): Row[] {
 export const SURFACE_MIME_TYPE = 'text/html;profile=mcp-app';
 
 /**
- * Path segment for published surface assets. Bump it, and keep publishing the
- * previous version, whenever a change here stops older servers or older
- * surfaces from understanding each other.
+ * The version of every surface's contract: its resource URI (`ui://supabase/panel-v1`) and its
+ * published asset path (`…/v1/panel.js`). Hosts cache resources by URI, and published tool
+ * metadata points at URIs, so a change that older servers, hosts or surfaces would
+ * misunderstand needs a new version. When bumping it, keep registering and publishing the
+ * previous version for as long as published metadata may still reference it.
  */
-export const SURFACE_ASSETS_VERSION = 'v1';
+export const SURFACE_VERSION = 'v1';
+
+const surfaceUri = <N extends string>(name: N) =>
+  `ui://supabase/${name}-${SURFACE_VERSION}` as const;
 
 export const surfaceResources = {
   projects: {
-    uri: 'ui://supabase/projects',
+    uri: surfaceUri('projects'),
     name: 'Supabase Projects',
     description: 'Browse Supabase projects and work in a project workspace.',
     layout: 'fill',
@@ -684,7 +752,7 @@ export const surfaceResources = {
     preferredDisplayMode: 'fullscreen',
   },
   panel: {
-    uri: 'ui://supabase/panel',
+    uri: surfaceUri('panel'),
     name: 'Supabase Panel',
     description:
       'A focused SQL, logs or row panel opened from the conversation.',
@@ -693,7 +761,7 @@ export const surfaceResources = {
     preferredDisplayMode: 'fullscreen',
   },
   'query-block': {
-    uri: 'ui://supabase/query-block',
+    uri: surfaceUri('query-block'),
     name: 'Supabase Query Block',
     description: 'Query results shown inline in the conversation.',
     layout: 'inline',

@@ -167,3 +167,29 @@ test('overview tool is app-only, read-only, and enforces connection scope withou
   expect(allowed.isError).not.toBe(true);
   expect(debugging.getSecurityAdvisors).toHaveBeenCalledWith('project');
 });
+
+test('counts Auth users with read-only SQL that returns only the total', async () => {
+  const readDatabase = vi.fn().mockResolvedValue([{ total: '42' }]);
+  const result = await readProjectOverview(
+    'project',
+    fixture(),
+    now,
+    readDatabase
+  );
+  expect(readDatabase).toHaveBeenCalledWith(
+    'select count(*) as total from auth.users'
+  );
+  expect(result.users).toEqual({ status: 'ready', data: { total: 42 } });
+});
+
+test('never reports zero users when the count cannot be read', async () => {
+  const failing = await readProjectOverview(
+    'project',
+    fixture(),
+    now,
+    vi.fn().mockRejectedValue(new Error('permission denied'))
+  );
+  expect(failing.users.status).toBe('unavailable');
+  const withoutDatabase = await readProjectOverview('project', fixture(), now);
+  expect(withoutDatabase.users.status).toBe('unavailable');
+});

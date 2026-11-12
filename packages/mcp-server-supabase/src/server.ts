@@ -561,6 +561,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             accountEnabled: enabledFeatures.has('account'),
             databaseEnabled: enabledFeatures.has('database'),
             debuggingEnabled: enabledFeatures.has('debugging'),
+            notebooksEnabled: enabledFeatures.has('notebooks'),
             appLinkBase: options.apps.appLinkBase,
             serverVersion: version,
             creationMode:

@@ -42,10 +42,17 @@ const advisorResult = z.object({
   ),
 });
 
+const userCountRows = z.array(z.object({ total: count })).length(1);
+
+/** Counts a project's Auth users. Returns only the total, never user data. */
+export const USER_COUNT_SQL = 'select count(*) as total from auth.users';
+
 export async function readProjectOverview(
   projectId: string,
   debugging: DebuggingOperations | undefined,
-  now = new Date()
+  now = new Date(),
+  /** Runs read-only SQL against the project's database. Omit when the connection has none. */
+  readDatabase?: (query: string) => Promise<unknown>
 ) {
   // Complete UTC hours keep the chart comparable and the query within the 24h cap.
   const hour = 3_600_000;
@@ -95,7 +102,7 @@ export async function readProjectOverview(
       truncated: issues.length > 20,
     };
   }
-  const [traffic, security, performance] = await Promise.all([
+  const [traffic, security, performance, users] = await Promise.all([
     section(
       debugging?.queryLogs &&
         (debugging.logsDialect ?? 'clickhouse') === 'clickhouse'
@@ -157,6 +164,16 @@ export async function readProjectOverview(
     ),
     section(debugging ? () => advisors('security') : undefined),
     section(debugging ? () => advisors('performance') : undefined),
+    section(
+      readDatabase
+        ? async () => {
+            const [row] = userCountRows.parse(
+              await readDatabase(USER_COUNT_SQL)
+            );
+            return { total: row!.total };
+          }
+        : undefined
+    ),
   ]);
   return {
     projectId,
@@ -166,5 +183,6 @@ export async function readProjectOverview(
     traffic,
     security,
     performance,
+    users,
   };
 }

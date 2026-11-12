@@ -22,6 +22,8 @@ export type AppToolOptions = {
   databaseEnabled: boolean;
   creationMode: 'legacy' | 'elicitation';
   debuggingEnabled?: boolean;
+  /** Saved notebooks are readable when the notebooks feature is on. */
+  notebooksEnabled?: boolean;
   appLinkBase?: string;
   serverVersion?: string;
 };
@@ -83,6 +85,7 @@ export function createAppContext(options: AppToolOptions) {
   const logQueries = options.debuggingEnabled
     ? platform.debugging?.queryLogs
     : undefined;
+  const notebooks = options.notebooksEnabled ? platform.notebooks : undefined;
   const logsEnabled =
     !!options.debuggingEnabled &&
     !!platform.debugging?.queryLogs &&
@@ -335,7 +338,6 @@ export function createAppContext(options: AppToolOptions) {
         organizationSlug: organization_slug ?? null,
       },
       capabilities: {
-        projectOverview: true,
         readOnly: !!readOnly,
         database: !!database,
         logQueries: !!logQueries,
@@ -358,10 +360,10 @@ export function createAppContext(options: AppToolOptions) {
     account,
     logQueries,
     logsEnabled,
+    notebooks,
     checkScope,
     checkProject,
     checkWrite,
-    listTables,
     getTable,
     presentation,
     rowExpression,

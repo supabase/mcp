@@ -336,6 +336,117 @@ export function getLaunchTools(app: AppContext): Record<string, Tool> {
       });
     }
 
+  tools.open_project_home_panel = tool({
+    title: 'Project home',
+    icons: appIcons,
+    description:
+      "Open a project's home beside this conversation: the last 24 hours of API traffic and error rate, open issues, user count, advisor findings, and checks the user can send back to chat. Use when the user asks how a project is doing or wants an overview. Does not return the overview to the model; use get_advisors or query_logs to analyze it yourself.",
+    parameters: z.object({ ...panelTarget }).strict(),
+    outputSchema: output,
+    annotations: readAnnotations,
+    _meta: panelMetadata,
+    async execute({ project_id }) {
+      const initial = await bootstrap({ project_ref: project_id });
+      return {
+        content: [{ type: 'text', text: 'Opened the project home.' }],
+        structuredContent: { project_id, view: 'home' },
+        _meta: panelMeta(initial, {
+          id: randomUUID(),
+          project_id,
+          view: 'home',
+        }),
+      };
+    },
+  });
+
+  tools.open_issues_panel = tool({
+    title: 'Project issues',
+    icons: appIcons,
+    description:
+      "Open a project's open issues from its security and performance advisors beside this conversation, so the user can review them and send one back to chat to investigate. Use when the user asks what is wrong with a project or about its security or performance findings. Does not return the findings to the model; use get_advisors to analyze them yourself.",
+    parameters: z.object({ ...panelTarget }).strict(),
+    outputSchema: output,
+    annotations: readAnnotations,
+    _meta: panelMetadata,
+    async execute({ project_id }) {
+      const initial = await bootstrap({ project_ref: project_id });
+      return {
+        content: [{ type: 'text', text: 'Opened the project issues.' }],
+        structuredContent: { project_id, view: 'issues' },
+        _meta: panelMeta(initial, {
+          id: randomUUID(),
+          project_id,
+          view: 'issues',
+        }),
+      };
+    },
+  });
+
+  if (app.notebooks)
+    tools.open_notebooks_panel = tool({
+      title: 'Project notebooks',
+      icons: appIcons,
+      description:
+        "Open a project's saved notebooks beside this conversation, so the user can pick one for you to run. Use when the user asks about their notebooks or saved investigations. Running a notebook from the panel asks you to run it with get_notebook and run_notebook and summarize the results. Does not return the list to the model; use list_notebooks to read it yourself.",
+      parameters: z.object({ ...panelTarget }).strict(),
+      outputSchema: output,
+      annotations: readAnnotations,
+      _meta: panelMetadata,
+      async execute({ project_id }) {
+        const initial = await bootstrap({ project_ref: project_id });
+        return {
+          content: [{ type: 'text', text: 'Opened the project notebooks.' }],
+          structuredContent: { project_id, view: 'notebooks' },
+          _meta: panelMeta(initial, {
+            id: randomUUID(),
+            project_id,
+            view: 'notebooks',
+          }),
+        };
+      },
+    });
+
+  if (database)
+    tools.open_explorer_panel = tool({
+      title: 'Database explorer',
+      icons: appIcons,
+      description:
+        "Open the project's database explorer beside this conversation, so the user can browse tables and write SQL themselves. Use when the user wants to browse or explore their data; use open_sql_panel or show_query_block to show the results of one specific query. Optionally supply schema and table to open a table first. Rows are sent only to the app, never to the model.",
+      parameters: z
+        .object({
+          ...panelTarget,
+          schema: z.string().trim().min(1).max(256).optional(),
+          table: z.string().trim().min(1).max(256).optional(),
+        })
+        .strict(),
+      outputSchema: output,
+      annotations: readAnnotations,
+      _meta: panelMetadata,
+      async execute({ project_id, schema, table }) {
+        const initial = await bootstrap({ project_ref: project_id });
+        const start = table
+          ? { schema: schema ?? 'public', table }
+          : schema
+            ? { schema }
+            : {};
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Opened the database explorer. The user can browse tables and run SQL in the panel.',
+            },
+          ],
+          structuredContent: { project_id, view: 'explorer', ...start },
+          _meta: panelMeta(initial, {
+            id: randomUUID(),
+            project_id,
+            view: 'explorer',
+            ...start,
+          }),
+        };
+      },
+    });
+
   if (database)
     tools.open_row_panel = tool({
       title: 'Row editor',

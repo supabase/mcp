@@ -14,7 +14,7 @@ import type {
 } from '@modelcontextprotocol/client';
 import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { dataOperations } from './apps/contracts.js';
+import { dataOperations, parseUntrustedJson } from './apps/contracts.js';
 import { getAppResources } from './tools/apps/index.js';
 import { HttpResponse, http } from 'msw';
 import {
@@ -38,6 +38,18 @@ const UI_CAPABILITIES = {
     'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] },
   },
 } as ClientCapabilities;
+
+/** What a view reads from a tool result, as the MCP Apps data port decodes it. */
+function toolPayload(result: {
+  isError?: unknown;
+  structuredContent?: unknown;
+  content?: unknown;
+}) {
+  const [first] = (result.content ?? []) as { text?: string }[];
+  if (result.isError) throw new Error(first?.text ?? 'Tool error');
+  if (result.structuredContent !== undefined) return result.structuredContent;
+  return parseUntrustedJson(first?.text ?? '');
+}
 
 describe('MCP Apps', () => {
   let appsBuild: Awaited<ReturnType<typeof createAppsDir>>;
@@ -87,6 +99,83 @@ describe('MCP Apps', () => {
     };
     return { project, client, call, target };
   }
+  test('project issues open beside the conversation for the model', async () => {
+    const { client, target } = await fixture({ scoped: true });
+    const definition = (await client.listTools()).tools.find(
+      (tool) => tool.name === 'open_issues_panel'
+    );
+    expect(definition).toMatchObject({
+      annotations: { readOnlyHint: true, destructiveHint: false },
+      _meta: {
+        ui: {
+          resourceUri: 'ui://supabase/panel-v1',
+          visibility: ['model', 'app'],
+        },
+      },
+    });
+    const result = await client.callTool({
+      name: 'open_issues_panel',
+      arguments: { project_id: target.project_id },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result._meta?.['supabase/panel']).toMatchObject({
+      panel: { view: 'issues', project_id: target.project_id },
+    });
+  });
+
+  test('the project home opens beside the conversation for the model', async () => {
+    const { client, target } = await fixture({ scoped: true });
+    const definition = (await client.listTools()).tools.find(
+      (tool) => tool.name === 'open_project_home_panel'
+    );
+    expect(definition).toMatchObject({
+      annotations: { readOnlyHint: true, destructiveHint: false },
+      _meta: {
+        ui: {
+          resourceUri: 'ui://supabase/panel-v1',
+          visibility: ['model', 'app'],
+        },
+      },
+    });
+    const result = await client.callTool({
+      name: 'open_project_home_panel',
+      arguments: { project_id: target.project_id },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result._meta?.['supabase/panel']).toMatchObject({
+      panel: { view: 'home', project_id: target.project_id },
+    });
+  });
+
+  test('the database explorer opens beside the conversation for the model, starting at a table', async () => {
+    const { client, target } = await fixture({ scoped: true });
+    const definition = (await client.listTools()).tools.find(
+      (tool) => tool.name === 'open_explorer_panel'
+    );
+    expect(definition).toMatchObject({
+      annotations: { readOnlyHint: true, destructiveHint: false },
+      _meta: {
+        ui: {
+          resourceUri: 'ui://supabase/panel-v1',
+          visibility: ['model', 'app'],
+        },
+      },
+    });
+    const result = await client.callTool({
+      name: 'open_explorer_panel',
+      arguments: target,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result._meta?.['supabase/panel']).toMatchObject({
+      panel: {
+        view: 'explorer',
+        project_id: target.project_id,
+        schema: 'public',
+        table: 'browser_rows',
+      },
+    });
+  });
+
   test('row panels load the exact composite key privately and support conflict-safe edits', async () => {
     const { client, call, target } = await fixture({ scoped: true });
     const key = { tenant: 'a', id: '9007199254740993' };
@@ -97,7 +186,7 @@ describe('MCP Apps', () => {
       annotations: { readOnlyHint: true, destructiveHint: false },
       _meta: {
         ui: {
-          resourceUri: 'ui://supabase/panel',
+          resourceUri: 'ui://supabase/panel-v1',
           visibility: ['model', 'app'],
         },
       },
@@ -209,7 +298,7 @@ describe('MCP Apps', () => {
     expect(entry).toMatchObject({
       title: 'Database workspace',
       _meta: {
-        ui: { resourceUri: 'ui://supabase/projects', visibility: ['app'] },
+        ui: { resourceUri: 'ui://supabase/projects-v1', visibility: ['app'] },
         'openai/ui': { entrypoints: [{ type: 'thread' }] },
       },
     });
@@ -226,15 +315,15 @@ describe('MCP Apps', () => {
     const { client } = await fixture();
     const resources = (await client.listResources()).resources;
     expect(resources.map((resource) => resource.uri)).toEqual([
-      'ui://supabase/projects',
-      'ui://supabase/panel',
-      'ui://supabase/query-block',
+      'ui://supabase/projects-v1',
+      'ui://supabase/panel-v1',
+      'ui://supabase/query-block-v1',
     ]);
     for (const [uri, surface, mode, modes] of [
-      ['ui://supabase/projects', 'projects', 'fullscreen', ['fullscreen']],
-      ['ui://supabase/panel', 'panel', 'fullscreen', ['fullscreen']],
+      ['ui://supabase/projects-v1', 'projects', 'fullscreen', ['fullscreen']],
+      ['ui://supabase/panel-v1', 'panel', 'fullscreen', ['fullscreen']],
       [
-        'ui://supabase/query-block',
+        'ui://supabase/query-block-v1',
         'query-block',
         'inline',
         ['inline', 'fullscreen'],
@@ -264,8 +353,8 @@ describe('MCP Apps', () => {
           ui: {
             resourceUri:
               name === 'show_query_block'
-                ? 'ui://supabase/query-block'
-                : 'ui://supabase/panel',
+                ? 'ui://supabase/query-block-v1'
+                : 'ui://supabase/panel-v1',
             visibility: ['model', 'app'],
           },
           'openai/ui': {
@@ -549,6 +638,63 @@ describe('MCP Apps', () => {
     expect(result.isError).toBe(true);
     expect(queryLogs).not.toHaveBeenCalled();
     expect(database).not.toHaveBeenCalled();
+  });
+  test('views list notebooks through list_notebooks without cell contents, and the panel opens beside the conversation', async () => {
+    const { project } = await createProjectFixture();
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const user = { id: 'user', username: 'ada', primary_email: null };
+    const notebook = (id: string, favorite: boolean, updated_at: string) => ({
+      id,
+      name: `Notebook ${id}`,
+      description: null,
+      favorite,
+      inserted_at: updated_at,
+      updated_at,
+      owner: user,
+      updated_by: user,
+      content: { cells: [{ sql: 'select secret' }] },
+    });
+    platform.notebooks!.listNotebooks = vi
+      .fn()
+      .mockResolvedValue([
+        notebook('old', false, '2026-11-01T00:00:00Z'),
+        notebook('new', false, '2026-11-10T00:00:00Z'),
+        notebook('pinned', true, '2026-10-01T00:00:00Z'),
+      ]);
+    const { client } = await setup({
+      apps: apps(),
+      platform,
+      projectId: project.id,
+      features: ['notebooks'],
+    });
+    // Views read the model's own list_notebooks and keep only what the list shows.
+    const listed = await client.callTool({
+      name: 'list_notebooks',
+      arguments: {},
+    });
+    const { notebooks } = dataOperations.listNotebooks.output.parse(
+      toolPayload(listed)
+    );
+    expect(notebooks.map((item) => item.id)).toEqual(['old', 'new', 'pinned']);
+    expect(JSON.stringify(notebooks)).not.toContain('select secret');
+    expect(JSON.stringify(notebooks)).not.toContain('ada');
+    expect(
+      (await client.listTools()).tools.some(
+        (tool) => tool.name === 'app_list_notebooks'
+      )
+    ).toBe(false);
+
+    const opened = await client.callTool({
+      name: 'open_notebooks_panel',
+      arguments: { project_id: project.id },
+    });
+    expect(opened.isError).not.toBe(true);
+    expect(opened._meta?.['supabase/panel']).toMatchObject({
+      panel: { view: 'notebooks', project_id: project.id },
+    });
   });
   test('logs panels launch without database or account-list access and filter sources and levels before limiting', async () => {
     const { project } = await createProjectFixture();
@@ -1002,7 +1148,7 @@ describe('MCP Apps', () => {
       title: 'Supabase',
       _meta: {
         'openai/ui': { entrypoints: [{ type: 'global' }] },
-        ui: { resourceUri: 'ui://supabase/projects', visibility: ['app'] },
+        ui: { resourceUri: 'ui://supabase/projects-v1', visibility: ['app'] },
       },
     });
     expect(entry?.icons?.[0]?.src).toContain('data:image/svg+xml,');
@@ -1011,7 +1157,7 @@ describe('MCP Apps', () => {
       capabilities: { createProject: true, readOnly: false },
     });
     const resource = await client.readResource({
-      uri: 'ui://supabase/projects',
+      uri: 'ui://supabase/projects-v1',
     });
     expect(resource.contents[0]).toMatchObject({
       text: expect.stringContaining(surfaceScript('projects')),
@@ -1197,48 +1343,41 @@ describe('MCP Apps', () => {
       undefined
     );
   });
-  test('table lists cover one schema with row estimates and respect project scope', async () => {
-    const { project, call, target } = await fixture({ scoped: true });
+  test("views list one schema's tables through list_tables on a scoped connection", async () => {
+    const { project, client } = await fixture({ scoped: true });
     await project.db.exec(
       'create schema reporting; create table reporting.daily (id int primary key);'
     );
-    const result = await call('app_list_tables', {
-      project_id: project.id,
-      schema: 'public',
-    });
-    expect(result.tables).toEqual([
-      { name: 'browser_rows', rows: expect.any(Number), rls_enabled: true },
+    // The scoped project is injected, as the MCP Apps data port relies on.
+    const list = async (schema: string) =>
+      dataOperations.listTables.output.parse(
+        toolPayload(
+          await client.callTool({
+            name: 'list_tables',
+            arguments: { schemas: [schema] },
+          })
+        )
+      ).tables;
+    expect(await list('public')).toEqual([
+      {
+        name: 'public.browser_rows',
+        rows: expect.any(Number),
+        rls_enabled: true,
+      },
     ]);
-    expect(
-      (
-        await call('app_list_tables', {
-          project_id: project.id,
-          schema: 'reporting',
-        })
-      ).tables
-    ).toEqual([
-      { name: 'daily', rows: expect.any(Number), rls_enabled: false },
+    expect(await list('reporting')).toEqual([
+      { name: 'reporting.daily', rows: expect.any(Number), rls_enabled: false },
     ]);
-    expect(
-      (await call('app_list_tables', { ...target, project_id: 'other' })).error
-    ).toBeDefined();
-    expect(
-      (
-        await call('app_list_tables', {
-          project_id: project.id,
-          schema: 'missing',
-        })
-      ).tables
-    ).toEqual([]);
+    expect(await list('missing')).toEqual([]);
   });
   test('a local build is inlined and re-read on every read, so rebuilds are served without a restart', async () => {
     const build = await createAppsDir();
     try {
       const { client } = await setup({ apps: { assets: { dir: build.dir } } });
       for (const [revision, uri, surface] of [
-        [1, 'ui://supabase/panel', 'panel'],
-        [2, 'ui://supabase/panel', 'panel'],
-        [2, 'ui://supabase/query-block', 'query-block'],
+        [1, 'ui://supabase/panel-v1', 'panel'],
+        [2, 'ui://supabase/panel-v1', 'panel'],
+        [2, 'ui://supabase/query-block-v1', 'query-block'],
       ] as const) {
         if (revision === 2) await build.build(2);
         const { contents } = await client.readResource({ uri });
@@ -1272,7 +1411,7 @@ describe('MCP Apps', () => {
       );
       const { client } = await setup({ apps: { assets: { dir: build.dir } } });
       const { contents } = await client.readResource({
-        uri: 'ui://supabase/projects',
+        uri: 'ui://supabase/projects-v1',
       });
       const text = (contents[0] as { text: string }).text;
       expect(text).toContain('const tag = "<\\/script><img src=x>";');
@@ -1289,18 +1428,18 @@ describe('MCP Apps', () => {
       const { client } = await setup({ apps: { assets: { dir: build.dir } } });
       // The built surface still loads.
       expect(
-        (await client.readResource({ uri: 'ui://supabase/projects' }))
+        (await client.readResource({ uri: 'ui://supabase/projects-v1' }))
           .contents[0]
       ).toMatchObject({
         text: expect.stringContaining(surfaceScript('projects')),
       });
       await expect(
-        client.readResource({ uri: 'ui://supabase/panel' })
+        client.readResource({ uri: 'ui://supabase/panel-v1' })
       ).rejects.toThrow();
       const panel = getAppResources({ assets: { dir: build.dir } }).find(
-        (resource) => resource.uri === 'ui://supabase/panel'
+        (resource) => resource.uri === 'ui://supabase/panel-v1'
       )!;
-      const failure = await panel.read('ui://supabase/panel').then(
+      const failure = await panel.read('ui://supabase/panel-v1').then(
         () => '',
         (error: Error) => error.message
       );
@@ -1317,7 +1456,7 @@ describe('MCP Apps', () => {
       apps: { assets: { url: 'https://cdn.example.com/mcp-apps/v1/' } },
     });
     const { contents } = await client.readResource({
-      uri: 'ui://supabase/query-block',
+      uri: 'ui://supabase/query-block-v1',
     });
     const text = (contents[0] as { text: string }).text;
     expect(text).toContain(
@@ -1360,7 +1499,7 @@ describe('MCP Apps', () => {
       },
     });
     const read = () =>
-      client.readResource({ uri: 'ui://supabase/projects' }).then(
+      client.readResource({ uri: 'ui://supabase/projects-v1' }).then(
         (result) => result.contents[0] as { text: string; _meta: unknown },
         (error: Error) => ({ text: error.message, _meta: undefined })
       );
@@ -1378,17 +1517,17 @@ describe('MCP Apps', () => {
     // Failures are reported and not cached.
     failing = true;
     await expect(
-      client.readResource({ uri: 'ui://supabase/panel' })
+      client.readResource({ uri: 'ui://supabase/panel-v1' })
     ).rejects.toThrow();
     const [, panel] = getAppResources({
       assets: { url: 'https://cdn.example.com/mcp-apps/v1', inline: true },
     });
-    await expect(panel!.read('ui://supabase/panel')).rejects.toThrow(
+    await expect(panel!.read('ui://supabase/panel-v1')).rejects.toThrow(
       'HTTP 503'
     );
     failing = false;
     expect(
-      (await client.readResource({ uri: 'ui://supabase/panel' })).contents[0]
+      (await client.readResource({ uri: 'ui://supabase/panel-v1' })).contents[0]
     ).toMatchObject({
       text: expect.stringContaining('/* panel.js */'),
     });

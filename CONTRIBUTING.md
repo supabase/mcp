@@ -94,6 +94,8 @@ pnpm dev:mock --apps-dir /absolute/path/to/supabase/apps/mcp-apps/dist/v1
 
 The monorepo's `pnpm --filter mcp-apps dev:e2e` starts this (or the real server), the surface build and a local MCP Apps host together; see `apps/mcp-apps/README.md` there.
 
+Surface resource URIs carry a version (`ui://supabase/panel-v1`, from `SURFACE_VERSION` in `src/apps/contracts.ts`), shared with the asset path. Hosts cache documents by URI and published tool metadata references them, so bump the version only for changes older hosts or surfaces would misunderstand, and keep the previous URIs registered while published metadata may still point at them. See `apps/mcp-apps/README.md` in `supabase/supabase` for the full rule.
+
 ### Alternative: stdio
 
 The stdio transport is available without `--http`. Configure your MCP client to run the local build directly:

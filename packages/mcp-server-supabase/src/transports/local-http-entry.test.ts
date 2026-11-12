@@ -155,7 +155,7 @@ describe('startLocalHttpEntry', () => {
       _meta: { 'openai/ui': { entrypoints: [{ type: 'global' }] } },
     });
     const resource = await client.readResource({
-      uri: 'ui://supabase/projects',
+      uri: 'ui://supabase/projects-v1',
     });
     expect(resource.contents[0]).toMatchObject({
       text: expect.stringContaining(surfaceScript('projects')),

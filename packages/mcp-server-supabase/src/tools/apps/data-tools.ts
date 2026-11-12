@@ -84,7 +84,12 @@ export function getDataTools(app: AppContext): Record<string, Tool> {
         app.checkScope(project_id);
         return readProjectOverview(
           project_id,
-          app.debuggingEnabled ? platform.debugging : undefined
+          app.debuggingEnabled ? platform.debugging : undefined,
+          new Date(),
+          database
+            ? (query) =>
+                database.executeSql(project_id, { query, read_only: true })
+            : undefined
         );
       },
     }),
@@ -136,22 +141,6 @@ export function getDataTools(app: AppContext): Record<string, Tool> {
             read_only: true,
           });
           return { schemas };
-        },
-      }),
-      dataTool('listTables', {
-        annotations: readAnnotations,
-        async execute({ project_id, schema }) {
-          const tables = await app.listTables(project_id, schema);
-          return {
-            tables: tables
-              .filter((table) => table.schema === schema)
-              .map((table) => ({
-                name: table.name,
-                rows: table.live_rows_estimate,
-                rls_enabled: table.rls_enabled,
-              }))
-              .sort((a, b) => a.name.localeCompare(b.name)),
-          };
         },
       }),
       dataTool('readTable', {

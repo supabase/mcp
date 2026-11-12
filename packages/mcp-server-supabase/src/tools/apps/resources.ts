@@ -4,7 +4,7 @@ import type { Resource } from '@supabase/mcp-utils';
 
 import {
   renderSurfaceDocument,
-  SURFACE_ASSETS_VERSION,
+  SURFACE_VERSION,
   SURFACE_MIME_TYPE,
   SURFACE_NAMES,
   surfaceAssetFiles,
@@ -75,7 +75,7 @@ function createAssetLoader(assets: AppAssets) {
         return await readFile(join(dir, file), 'utf8');
       } catch {
         throw new Error(
-          `Supabase MCP Apps are not built in ${dir}: missing ${file}. Build them in the Supabase monorepo with \`${APPS_BUILD_COMMAND}\` and pass the ${SURFACE_ASSETS_VERSION} build directory.`
+          `Supabase MCP Apps are not built in ${dir}: missing ${file}. Build them in the Supabase monorepo with \`${APPS_BUILD_COMMAND}\` and pass the ${SURFACE_VERSION} build directory.`
         );
       }
     };
