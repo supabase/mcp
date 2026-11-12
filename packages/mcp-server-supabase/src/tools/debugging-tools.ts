@@ -282,9 +282,8 @@ export const debuggingToolDefs = {
     },
   },
   get_advisors: {
-    hidden: true,
     description:
-      "Deprecated: use get_issues. Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
+      "Planned for future deprecation in favor of get_issues; remains available. Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
     parameters: getAdvisorsInputSchema,
     outputSchema: getAdvisorsOutputSchema,
     annotations: {

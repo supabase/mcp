@@ -245,6 +245,7 @@ describe('stdio', () => {
         'deploy_edge_function',
         'execute_sql',
         'generate_typescript_types',
+        'get_advisors',
         'get_cost',
         'get_edge_function',
         'get_issues',

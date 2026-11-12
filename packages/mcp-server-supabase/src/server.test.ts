@@ -269,7 +269,7 @@ describe('feature groups', () => {
     const { tools } = await client.listTools();
     const toolNames = tools.map((tool) => tool.name);
 
-    expect(toolNames).toEqual(['query_logs', 'get_issues']);
+    expect(toolNames).toEqual(['query_logs', 'get_issues', 'get_advisors']);
   });
 
   test('get_logs stays callable via tools/call even while hidden from tools/list', async () => {
@@ -312,7 +312,7 @@ describe('feature groups', () => {
     const { tools } = await client.listTools();
     const toolNames = tools.map((tool) => tool.name);
 
-    expect(toolNames).toEqual(['get_logs', 'get_issues']);
+    expect(toolNames).toEqual(['get_logs', 'get_issues', 'get_advisors']);
   });
 
   test('query_logs advertises the ClickHouse dialect by default', async () => {

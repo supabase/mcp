@@ -315,7 +315,9 @@ describe('tools', () => {
     const { tools } = await client.listTools();
     const advisors = tools.find((tool) => tool.name === 'get_advisors');
 
-    expect(advisors).toBeUndefined();
+    expect(advisors?.inputSchema.properties?.type).toMatchObject({
+      enum: ['security', 'performance'],
+    });
     expect(tools.some((tool) => tool.name === 'get_issues')).toBe(true);
     for (const type of ['security', 'performance']) {
       await expect(
@@ -565,7 +567,7 @@ test('issues defaults to all checks and reports unavailable health without losin
   const { tools } = await client.listTools();
   const tool = tools.find(({ name }) => name === 'get_issues');
   expect(tool?.inputSchema.properties).not.toHaveProperty('project_id');
-  expect(tools.some(({ name }) => name === 'get_advisors')).toBe(false);
+  expect(tools.some(({ name }) => name === 'get_advisors')).toBe(true);
   const result = await callTool({ name: 'get_issues', arguments: {} });
   expect(result.checks).toMatchObject([
     { type: 'security', status: 'complete' },

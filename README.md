@@ -50,6 +50,8 @@ See the [Supabase MCP Server](https://supabase.com/mcp) docs for the full list o
 
 The docs also feature an interactive URL builder to populate configuration options for you.
 
+Both `get_issues` and `get_advisors` are available in the debugging feature group. `get_issues` combines security, performance, and health checks. `get_advisors` remains available with its existing inputs and response format; deprecation is planned for the future, with no date set.
+
 ## Usage with AI SDK's MCP Client
 
 The `@supabase/mcp-server-supabase` package exports `createToolSchemas()` to populate input and output schemas for Vercel AI SDK's [MCP client](https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools). This allows Supabase MCP tools to be treated as static tools with client-side validation and inferred TypeScript types for their inputs and outputs.
