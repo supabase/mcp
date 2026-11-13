@@ -1,4 +1,12 @@
 import { z } from 'zod/v4';
+import {
+  filterAndSortIssues,
+  issueSeveritySchema,
+  issuesResultSchema,
+  normalizeIssues,
+  type IssueCategory,
+  type IssuesResult,
+} from '../issues.js';
 import { resolveLogWindow } from '../logs.js';
 import {
   logsServiceSchema,
@@ -224,7 +232,30 @@ export function groupAdvisorsResult(result: unknown): unknown {
   return { ...result, lints: groupAdvisorLints(lints) };
 }
 
+const getIssuesInputSchema = z.object({
+  project_id: z.string(),
+  type: z.enum(['all', 'security', 'performance', 'health']).default('all'),
+  severity: issueSeveritySchema
+    .default('info')
+    .describe(
+      'Minimum severity; filtering retains all findings of a matching issue'
+    ),
+});
+
 export const debuggingToolDefs = {
+  get_issues: {
+    description:
+      'Gets current project issues grouped by check, with security, performance, and health check coverage. Start here when debugging or after DDL changes. IDs identify checks within this project, not persistent incidents. An unavailable check is not a clean assessment. Include docs_url as a clickable remediation link.',
+    parameters: getIssuesInputSchema,
+    outputSchema: issuesResultSchema,
+    annotations: {
+      title: 'Get project issues',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
   get_logs: {
     description:
       'Gets logs for a Supabase project by service type. When the user asks about a specific time range, always pass iso_timestamp_start and iso_timestamp_end to match it; otherwise each call defaults to the last 24 hours and will return logs from a wider window than intended. The window must be 24 hours or less and iso_timestamp_start must be before iso_timestamp_end; other windows are rejected. If you pass only iso_timestamp_start, the end defaults to now, so for a past time range pass both timestamps. For a longer range, make one call per 24-hour slice. Edge Function logs are split by kind: `edge-function` returns invocation/request logs, while `edge-function-runtime` returns console output from inside the function. Query one service first, then correlate with other services by timestamp or error anchors. Do not poll get_logs in a loop.',
@@ -252,7 +283,7 @@ export const debuggingToolDefs = {
   },
   get_advisors: {
     description:
-      "Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
+      "Planned for future deprecation in favor of get_issues; remains available. Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
     parameters: getAdvisorsInputSchema,
     outputSchema: getAdvisorsOutputSchema,
     annotations: {
@@ -314,6 +345,56 @@ export function getDebuggingTools({
           return { result: wrapWithUntrustedDataBoundary(result) };
         },
       }),
+    }),
+    get_issues: injectableTool({
+      ...debuggingToolDefs.get_issues,
+      inject: { project_id },
+      execute: async ({ project_id, type, severity }) => {
+        const categories: IssueCategory[] =
+          type === 'all' ? ['security', 'performance', 'health'] : [type];
+        const results = await Promise.all(
+          categories.map(async (category): Promise<IssuesResult> => {
+            let response: unknown;
+            if (category === 'security') {
+              response = await debugging.getSecurityAdvisors(project_id, {
+                includeUnavailable: true,
+              });
+            } else if (category === 'performance') {
+              response = await debugging.getPerformanceAdvisors(project_id, {
+                includeUnavailable: true,
+              });
+            } else if (debugging.getHealthAdvisors) {
+              response = await debugging.getHealthAdvisors(project_id, {
+                includeUnavailable: true,
+              });
+            } else {
+              if (type === 'health')
+                throw new Error(
+                  'Health issues are not supported by this platform'
+                );
+              return {
+                issues: [],
+                checks: [
+                  {
+                    type: category,
+                    status: 'unavailable',
+                    reason: 'Health issues are not supported by this platform',
+                  },
+                ],
+              };
+            }
+            return normalizeIssues(response, category);
+          })
+        );
+        const result: IssuesResult = {
+          issues: filterAndSortIssues(
+            results.flatMap(({ issues }) => issues),
+            severity
+          ),
+          checks: results.flatMap(({ checks }) => checks),
+        };
+        return result;
+      },
     }),
     get_advisors: injectableTool({
       ...debuggingToolDefs.get_advisors,

@@ -269,7 +269,7 @@ describe('feature groups', () => {
     const { tools } = await client.listTools();
     const toolNames = tools.map((tool) => tool.name);
 
-    expect(toolNames).toEqual(['query_logs', 'get_advisors']);
+    expect(toolNames).toEqual(['query_logs', 'get_issues', 'get_advisors']);
   });
 
   test('get_logs stays callable via tools/call even while hidden from tools/list', async () => {
@@ -312,7 +312,7 @@ describe('feature groups', () => {
     const { tools } = await client.listTools();
     const toolNames = tools.map((tool) => tool.name);
 
-    expect(toolNames).toEqual(['get_logs', 'get_advisors']);
+    expect(toolNames).toEqual(['get_logs', 'get_issues', 'get_advisors']);
   });
 
   test('query_logs advertises the ClickHouse dialect by default', async () => {
@@ -1123,6 +1123,9 @@ describe('zod registry', () => {
   // inside functions (rather than at module level), new instances register on every call,
   // causing unbounded memory growth.
   test('creating multiple servers does not cause unbounded registry growth', async () => {
+    const { client } = await setup();
+    await client.listTools();
+
     const addSpy = vi.spyOn(globalRegistry, 'add');
 
     try {

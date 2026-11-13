@@ -318,6 +318,7 @@ describe('tools', () => {
     expect(advisors?.inputSchema.properties?.type).toMatchObject({
       enum: ['security', 'performance'],
     });
+    expect(tools.some((tool) => tool.name === 'get_issues')).toBe(true);
     for (const type of ['security', 'performance']) {
       await expect(
         callTool({
@@ -556,3 +557,190 @@ describe('tools', () => {
     await expect(getLogsPromise).rejects.toThrow('Invalid option');
   });
 });
+
+test('issues defaults to all checks and reports unavailable health without losing real findings', async () => {
+  const { project } = await createProjectFixture();
+  const { client, callTool } = await setup({
+    projectId: project.id,
+    readOnly: true,
+  });
+  const { tools } = await client.listTools();
+  const tool = tools.find(({ name }) => name === 'get_issues');
+  expect(tool?.inputSchema.properties).not.toHaveProperty('project_id');
+  expect(tools.some(({ name }) => name === 'get_advisors')).toBe(true);
+  const result = await callTool({ name: 'get_issues', arguments: {} });
+  expect(result.checks).toMatchObject([
+    { type: 'security', status: 'complete' },
+    { type: 'performance', status: 'complete' },
+    {
+      type: 'health',
+      status: 'unavailable',
+      reason: expect.stringContaining('advisor_check_unavailable'),
+    },
+  ]);
+  expect(result.issues).toMatchObject([
+    {
+      id: 'log_data_api_error_rate_high',
+      severity: 'critical',
+      category: 'health',
+    },
+  ]);
+});
+
+test('issues distinguishes unsupported health from completed checks on legacy platforms', async () => {
+  const platform: SupabasePlatform = {
+    debugging: {
+      async getLogs() {
+        return [];
+      },
+      async getSecurityAdvisors() {
+        return { lints: [] };
+      },
+      async getPerformanceAdvisors() {
+        return { lints: [] };
+      },
+    },
+  };
+  const { callTool } = await setup({ platform, features: ['debugging'] });
+  expect(
+    await callTool({ name: 'get_issues', arguments: { project_id: 'legacy' } })
+  ).toEqual({
+    issues: [],
+    checks: [
+      { type: 'security', status: 'complete' },
+      { type: 'performance', status: 'complete' },
+      {
+        type: 'health',
+        status: 'unavailable',
+        reason: 'Health issues are not supported by this platform',
+      },
+    ],
+  });
+  await expect(
+    callTool({
+      name: 'get_issues',
+      arguments: { project_id: 'legacy', type: 'health' },
+    })
+  ).rejects.toThrow('not supported');
+});
+
+test('issues propagates API authorization failures instead of presenting clean checks', async () => {
+  const { project } = await createProjectFixture();
+  const { callTool } = await setup();
+  harness.mockServer?.use(
+    http.get(`${API_URL}/v1/projects/:projectId/advisors/security`, () =>
+      HttpResponse.json({ message: 'Access denied' }, { status: 403 })
+    )
+  );
+  await expect(
+    callTool({ name: 'get_issues', arguments: { project_id: project.id } })
+  ).rejects.toThrow('Access denied');
+});
+
+test('explicit issue filters only run the requested check and retain lower severity evidence', async () => {
+  const { project } = await createProjectFixture();
+  const { callTool } = await setup();
+  const called: string[] = [];
+  const finding = {
+    name: 'mixed_severity',
+    title: 'Mixed severity',
+    description: 'Mixed finding levels',
+    detail: 'Affected resource',
+    remediation: 'https://example.com/fix',
+  };
+  harness.mockServer?.use(
+    http.get(`${API_URL}/v1/projects/:projectId/advisors/security`, () => {
+      called.push('security');
+      return HttpResponse.json({
+        lints: [
+          { ...finding, level: 'INFO', cache_key: 'low' },
+          { ...finding, level: 'ERROR', cache_key: 'high' },
+          { ...finding, name: 'info_only', level: 'INFO', cache_key: 'other' },
+        ],
+      });
+    }),
+    http.get(`${API_URL}/v1/projects/:projectId/advisors/performance`, () => {
+      called.push('performance');
+      return HttpResponse.json({ lints: [] });
+    }),
+    http.post(`${API_URL}/v2/projects/:projectId/advisors/run`, () => {
+      called.push('health');
+      return HttpResponse.json({});
+    })
+  );
+  const result = await callTool({
+    name: 'get_issues',
+    arguments: {
+      project_id: project.id,
+      type: 'security',
+      severity: 'critical',
+    },
+  });
+  expect(called).toEqual(['security']);
+  expect(result.checks).toEqual([{ type: 'security', status: 'complete' }]);
+  expect(result.issues).toMatchObject([
+    {
+      id: 'mixed_severity',
+      severity: 'critical',
+      category: 'security',
+      affected: [
+        { id: 'low', severity: 'info' },
+        { id: 'high', severity: 'critical' },
+      ],
+    },
+  ]);
+  expect(result.issues).toHaveLength(1);
+});
+
+test.each(['security', 'performance'] as const)(
+  'issues requests unavailable %s results without changing legacy advisors',
+  async (type) => {
+    const getAdvisors = async (
+      _projectId: string,
+      options?: { includeUnavailable?: boolean }
+    ) => ({
+      lints: options?.includeUnavailable
+        ? [
+            {
+              name: 'project_not_active',
+              title: 'Project is not active',
+              description: 'The project is inactive.',
+              detail: 'The project is inactive.',
+              level: 'ERROR',
+            },
+          ]
+        : [],
+    });
+    const platform: SupabasePlatform = {
+      debugging: {
+        async getLogs() {
+          return [];
+        },
+        getSecurityAdvisors: getAdvisors,
+        getPerformanceAdvisors: getAdvisors,
+      },
+    };
+    const { callTool } = await setup({ platform, features: ['debugging'] });
+    expect(
+      await callTool({
+        name: 'get_issues',
+        arguments: { project_id: 'inactive', type },
+      })
+    ).toEqual({
+      issues: [],
+      checks: [
+        {
+          type,
+          status: 'unavailable',
+          reason: expect.stringContaining('project_not_active'),
+        },
+      ],
+    });
+    expect(
+      await callTool({
+        name: 'get_advisors',
+        arguments: { project_id: 'inactive', type },
+      })
+    ).toEqual({ result: { lints: [] } });
+  }
+);

@@ -248,6 +248,7 @@ describe('stdio', () => {
         'get_advisors',
         'get_cost',
         'get_edge_function',
+        'get_issues',
         'get_notebook',
         'get_organization',
         'get_project',
