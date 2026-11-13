@@ -50,6 +50,45 @@ See the [Supabase MCP Server](https://supabase.com/mcp) docs for the full list o
 
 The docs also feature an interactive URL builder to populate configuration options for you.
 
+### Tool-level policy enforcement (optional)
+
+The above recommendations control **which tools** are available and whether queries are read-only. For tool-level enforcement — rate limiting, daily caps, blocking destructive SQL patterns, and audit logging — you can wrap the server with [PolicyLayer Intercept](https://github.com/policylayer/intercept), an open-source MCP proxy.
+
+Three policy presets are included in [`/policies`](/policies):
+
+| Policy | Description |
+|--------|-------------|
+| `recommended.yaml` | Rate limits on writes, blocks destructive SQL (`DROP`, `TRUNCATE`), caps on migrations and deployments |
+| `strict.yaml` | Default deny — only read tools and `SELECT` queries allowed unless explicitly opted in |
+| `permissive.yaml` | Everything allowed, rate limits on destructive and high-risk operations |
+
+Usage (stdio transport):
+
+```sh
+npx -y @policylayer/intercept \
+  --policy policies/recommended.yaml \
+  -- npx -y @supabase/mcp-server-supabase
+```
+
+Or in your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y", "@policylayer/intercept",
+        "--policy", "policies/recommended.yaml",
+        "--", "npx", "-y", "@supabase/mcp-server-supabase"
+      ]
+    }
+  }
+}
+```
+
+Policies are YAML files you can customise. See the [Intercept docs](https://github.com/policylayer/intercept) for the full reference.
+
 ## Usage with AI SDK's MCP Client
 
 The `@supabase/mcp-server-supabase` package exports `createToolSchemas()` to populate input and output schemas for Vercel AI SDK's [MCP client](https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools). This allows Supabase MCP tools to be treated as static tools with client-side validation and inferred TypeScript types for their inputs and outputs.
