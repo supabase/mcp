@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import { edgeFunctionExample } from '../edge-function.js';
-import { ToolCallerError } from '../errors.js';
+import { ToolCallerError } from '@supabase/mcp-utils';
 import type { EdgeFunctionsOperations } from '../platform/types.js';
 import {
   edgeFunctionSchema,
