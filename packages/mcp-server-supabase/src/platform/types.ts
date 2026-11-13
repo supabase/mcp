@@ -404,8 +404,14 @@ export type DebuggingOperations = {
   logsDialect?: LogsDialect;
   getLogs(projectId: string, options: GetLogsOptions): Promise<unknown>;
   queryLogs?(projectId: string, options: QueryLogsOptions): Promise<unknown>;
-  getSecurityAdvisors(projectId: string): Promise<unknown>;
-  getPerformanceAdvisors(projectId: string): Promise<unknown>;
+  getSecurityAdvisors(
+    projectId: string,
+    options?: { includeUnavailable?: boolean }
+  ): Promise<unknown>;
+  getPerformanceAdvisors(
+    projectId: string,
+    options?: { includeUnavailable?: boolean }
+  ): Promise<unknown>;
   getHealthAdvisors?(
     projectId: string,
     options?: { includeUnavailable?: boolean }

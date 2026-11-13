@@ -691,3 +691,56 @@ test('explicit issue filters only run the requested check and retain lower sever
   ]);
   expect(result.issues).toHaveLength(1);
 });
+
+test.each(['security', 'performance'] as const)(
+  'issues requests unavailable %s results without changing legacy advisors',
+  async (type) => {
+    const getAdvisors = async (
+      _projectId: string,
+      options?: { includeUnavailable?: boolean }
+    ) => ({
+      lints: options?.includeUnavailable
+        ? [
+            {
+              name: 'project_not_active',
+              title: 'Project is not active',
+              description: 'The project is inactive.',
+              detail: 'The project is inactive.',
+              level: 'ERROR',
+            },
+          ]
+        : [],
+    });
+    const platform: SupabasePlatform = {
+      debugging: {
+        async getLogs() {
+          return [];
+        },
+        getSecurityAdvisors: getAdvisors,
+        getPerformanceAdvisors: getAdvisors,
+      },
+    };
+    const { callTool } = await setup({ platform, features: ['debugging'] });
+    expect(
+      await callTool({
+        name: 'get_issues',
+        arguments: { project_id: 'inactive', type },
+      })
+    ).toEqual({
+      issues: [],
+      checks: [
+        {
+          type,
+          status: 'unavailable',
+          reason: expect.stringContaining('project_not_active'),
+        },
+      ],
+    });
+    expect(
+      await callTool({
+        name: 'get_advisors',
+        arguments: { project_id: 'inactive', type },
+      })
+    ).toEqual({ result: { lints: [] } });
+  }
+);

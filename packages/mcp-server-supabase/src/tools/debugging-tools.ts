@@ -356,9 +356,13 @@ export function getDebuggingTools({
           categories.map(async (category): Promise<IssuesResult> => {
             let response: unknown;
             if (category === 'security') {
-              response = await debugging.getSecurityAdvisors(project_id);
+              response = await debugging.getSecurityAdvisors(project_id, {
+                includeUnavailable: true,
+              });
             } else if (category === 'performance') {
-              response = await debugging.getPerformanceAdvisors(project_id);
+              response = await debugging.getPerformanceAdvisors(project_id, {
+                includeUnavailable: true,
+              });
             } else if (debugging.getHealthAdvisors) {
               response = await debugging.getHealthAdvisors(project_id, {
                 includeUnavailable: true,
