@@ -522,6 +522,22 @@ export const dataOperations = {
       }),
     output: bootstrapSchema,
   }),
+  /** The model's own `get_project`, for views that follow a project's status. */
+  getProject: operation({
+    tool: 'get_project',
+    visibility: 'shared',
+    description: 'Gets details for a Supabase project.',
+    input: z.object({ id: z.string().min(1) }),
+    output: projectSchema,
+  }),
+  /** The model's own `get_organization`, to name a project's organization. Takes the slug. */
+  getOrganization: operation({
+    tool: 'get_organization',
+    visibility: 'shared',
+    description: 'Gets details for an organization.',
+    input: z.object({ id: z.string().min(1) }),
+    output: z.object({ id: z.string(), name: z.string() }).passthrough(),
+  }),
   /** The model's own `list_notebooks`; the view keeps only the fields it shows. */
   listNotebooks: operation({
     tool: 'list_notebooks',
@@ -766,6 +782,16 @@ export const surfaceResources = {
     description: 'Query results shown inline in the conversation.',
     layout: 'inline',
     displayModes: ['inline', 'fullscreen'],
+    preferredDisplayMode: 'inline',
+  },
+  /** Rendered from `create_project` results: the new project and its live status. */
+  'project-card': {
+    uri: surfaceUri('project-card'),
+    name: 'Supabase Project Card',
+    description:
+      'A project and its current status, shown inline in the conversation.',
+    layout: 'inline',
+    displayModes: ['inline'],
     preferredDisplayMode: 'inline',
   },
 } as const;

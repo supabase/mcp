@@ -1,7 +1,7 @@
 import type { ClientCapabilities } from '@modelcontextprotocol/server';
 import type { Tool } from '@supabase/mcp-utils';
 
-import { SURFACE_MIME_TYPE } from '../../apps/contracts.js';
+import { SURFACE_MIME_TYPE, surfaceResources } from '../../apps/contracts.js';
 import { createAppContext, type AppToolOptions } from './context.js';
 import { getDataTools } from './data-tools.js';
 import { getLaunchTools } from './launch-tools.js';
@@ -41,4 +41,31 @@ export function clientSupportsApps(
 export function getAppTools(options: AppToolOptions): Record<string, Tool> {
   const app = createAppContext(options);
   return { ...getLaunchTools(app), ...getDataTools(app) };
+}
+
+/**
+ * Model tools whose own results render as a view, keyed by tool name. The view
+ * reads the tool's normal result, so the model sees the same output either way.
+ */
+const toolResultViews = {
+  create_project: 'project-card',
+} as const satisfies Record<string, keyof typeof surfaceResources>;
+
+/** Points model tools that have a view at it. Only for clients that render MCP Apps. */
+export function attachToolResultViews<T extends Pick<Tool, '_meta'>>(
+  tools: Record<string, T>
+) {
+  for (const [name, surface] of Object.entries(toolResultViews)) {
+    const tool = tools[name];
+    if (!tool) continue;
+    const { uri, preferredDisplayMode } = surfaceResources[surface];
+    tools[name] = {
+      ...tool,
+      _meta: {
+        ...tool._meta,
+        ui: { resourceUri: uri, visibility: ['model', 'app'] },
+        'openai/ui': { preferredModelDisplayMode: preferredDisplayMode },
+      },
+    };
+  }
 }

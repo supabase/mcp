@@ -1,5 +1,10 @@
 import { createAppsDir, surfaceScript, surfaceStyle } from '../test/apps.js';
-import { ACCESS_TOKEN, API_URL, createProjectFixture } from '../test/mocks.js';
+import {
+  ACCESS_TOKEN,
+  API_URL,
+  createOrganization,
+  createProjectFixture,
+} from '../test/mocks.js';
 import { expectTerminalResult } from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
@@ -318,6 +323,7 @@ describe('MCP Apps', () => {
       'ui://supabase/projects-v1',
       'ui://supabase/panel-v1',
       'ui://supabase/query-block-v1',
+      'ui://supabase/project-card-v1',
     ]);
     for (const [uri, surface, mode, modes] of [
       ['ui://supabase/projects-v1', 'projects', 'fullscreen', ['fullscreen']],
@@ -328,6 +334,7 @@ describe('MCP Apps', () => {
         'inline',
         ['inline', 'fullscreen'],
       ],
+      ['ui://supabase/project-card-v1', 'project-card', 'inline', ['inline']],
     ] as const) {
       const result = await client.readResource({ uri });
       expect(result.contents[0]).toMatchObject({
@@ -1309,6 +1316,68 @@ describe('MCP Apps', () => {
         })
       ).error
     ).toBeDefined();
+  });
+  test('a new project renders as a card that follows its status through get_project', async () => {
+    const { client } = await setup({ apps: apps(), features: ['account'] });
+    const listed = (await client.listTools()).tools.find(
+      (tool) => tool.name === 'create_project'
+    );
+    expect(listed?._meta).toMatchObject({
+      ui: {
+        resourceUri: 'ui://supabase/project-card-v1',
+        visibility: ['model', 'app'],
+      },
+    });
+
+    const org = await createOrganization({
+      name: 'Free Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+    const confirmation = toolPayload(
+      await client.callTool({
+        name: 'confirm_cost',
+        arguments: { type: 'project', recurrence: 'monthly', amount: 0 },
+      })
+    ) as { confirmation_id: string };
+    const created = await client.callTool({
+      name: 'create_project',
+      arguments: {
+        name: 'Card project',
+        region: 'us-east-1',
+        organization_id: org.id,
+        confirm_cost_id: confirmation.confirmation_id,
+      },
+    });
+    // The card reads the same result the model gets, then polls get_project.
+    const project = dataOperations.getProject.output.parse(
+      toolPayload(created)
+    );
+    expect(project).toMatchObject({
+      name: 'Card project',
+      region: 'us-east-1',
+    });
+    const latest = dataOperations.getProject.output.parse(
+      toolPayload(
+        await client.callTool({
+          name: dataOperations.getProject.tool,
+          arguments: dataOperations.getProject.input.parse({ id: project.id }),
+        })
+      )
+    );
+    expect(latest).toMatchObject({ id: project.id, name: 'Card project' });
+  });
+  test('create_project has no view for clients without MCP Apps', async () => {
+    const { client } = await harness.setup({
+      apps: apps(),
+      features: ['account'],
+      clientCapabilities: {},
+    });
+    const listed = (await client.listTools()).tools.find(
+      (tool) => tool.name === 'create_project'
+    );
+    expect(listed).toBeDefined();
+    expect(listed?._meta?.ui).toBeUndefined();
   });
   test('default connections do not expose the extension; disabled database features do not gain data tools', async () => {
     const { client } = await setup();

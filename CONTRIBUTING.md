@@ -67,7 +67,7 @@ npx https://pkg.pr.new/@supabase/mcp-server-supabase@<sha> --http
 
 ### MCP Apps
 
-The server can serve interactive views as [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) for hosts such as Claude, ChatGPT and Codex: a project browser (`open_projects`, `open_workspace`), SQL, logs and row panels (`open_sql_panel`, `open_logs_panel`, `open_row_panel`) and inline query blocks (`show_query_block`), plus app-only data tools (`app_*`) the views call. They are off unless the server is given surface assets, and are left out for clients whose capabilities lack the `io.modelcontextprotocol/ui` extension.
+The server can serve interactive views as [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) for hosts such as Claude, ChatGPT and Codex: a project browser (`open_projects`, `open_workspace`), SQL, logs and row panels (`open_sql_panel`, `open_logs_panel`, `open_row_panel`) inline query blocks (`show_query_block`) and a live project card on `create_project` results, plus app-only data tools (`app_*`) the views call. They are off unless the server is given surface assets, and are left out for clients whose capabilities lack the `io.modelcontextprotocol/ui` extension.
 
 - `src/apps/contracts.ts` is the wire contract between the server and the views: tool names and schemas (`dataOperations`), panel launches, workspace tool inputs, resource URIs and the document shell. It is published as `@supabase/mcp-server-supabase/apps` and must stay free of Node APIs, because it is bundled into the views.
 - `src/tools/apps/` registers the tools and resources. Every app tool enforces project scope, feature selection and read-only mode itself; `_meta.ui.visibility` is not authorization.

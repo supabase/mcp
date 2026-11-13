@@ -24,6 +24,7 @@ import type { SupabasePlatform } from './platform/types.js';
 import { getAccountTools } from './tools/account-tools.js';
 import {
   type AppsOptions,
+  attachToolResultViews,
   clientSupportsApps,
   getAppResources,
   getAppTools,
@@ -573,6 +574,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
                 : 'legacy',
           })
         );
+        attachToolResultViews(tools);
       }
 
       return tools;

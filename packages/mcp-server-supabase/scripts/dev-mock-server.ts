@@ -104,6 +104,31 @@ mockServer.use(
   )
 );
 
+// New projects take a while to start, as on the platform, so views that follow
+// a project's status have something to show. The test mocks start them at once.
+const STARTUP_MS = 30_000;
+mockServer.use(
+  http.post(`${API_URL}/v1/projects`, async ({ request }) => {
+    const body = (await request.json()) as {
+      name: string;
+      region: string;
+      organization_slug: string;
+    };
+    const project = await createProject({
+      name: body.name,
+      region: body.region,
+      organization_id: body.organization_slug,
+    });
+    await project.creation;
+    project.status = 'COMING_UP';
+    setTimeout(() => {
+      project.status = 'ACTIVE_HEALTHY';
+    }, STARTUP_MS);
+    const { database, ...details } = project.details;
+    return HttpResponse.json(details);
+  })
+);
+
 const organization = await createOrganization({
   name: 'Acme',
   plan: 'pro',
