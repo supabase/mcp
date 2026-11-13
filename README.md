@@ -105,6 +105,25 @@ const tools = await mcpClient.tools({
 });
 ```
 
+The package also exports `createToolAccessHints()` and `createOAuthScopeHints()` for integrations that need to reason about the minimum Management API access surface implied by a given MCP configuration:
+
+```ts
+import { createOAuthScopeHints } from '@supabase/mcp-server-supabase';
+
+createOAuthScopeHints({
+  features: ['docs'],
+});
+// => []
+
+createOAuthScopeHints({
+  features: ['database', 'docs'],
+  readOnly: true,
+});
+// => ['database:read']
+```
+
+By default, `createOAuthScopeHints()` only returns scope families documented in Supabase's public OAuth scope guide. Pass `includeInferred: true` to also include best-effort hints for Management API surfaces that are used by the MCP server but are not currently listed in the public scope table.
+
 > [!NOTE]
 > This server does not send `structuredContent` in MCP tool results. AI SDK falls back to parsing JSON from `content` text.
 
