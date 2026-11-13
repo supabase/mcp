@@ -53,12 +53,14 @@
   },
   "dependencies": {
     "@mjackson/multipart-parser": "^0.10.1",
+    "@modelcontextprotocol/core": "https://pkg.pr.new/@modelcontextprotocol/core@b0091060d73d08211c6766990aa15656d4e03271",
     "@modelcontextprotocol/node": "catalog:",
     "@supabase/mcp-utils": "workspace:^",
     "common-tags": "^1.8.2",
     "gqlmin": "^0.3.1",
     "graphql": "^16.11.0",
-    "openapi-fetch": "^0.13.5"
+    "openapi-fetch": "^0.13.5",
+    "tar-stream": "^3.1.7"
   },
   "peerDependencies": {
     "@modelcontextprotocol/server": "catalog:",
@@ -68,8 +70,8 @@
     "@ai-sdk/anthropic": "catalog:",
     "@ai-sdk/mcp": "catalog:",
     "@electric-sql/pglite": "^0.2.17",
-    "@modelcontextprotocol/client": "catalog:",
-    "@modelcontextprotocol/server": "catalog:",
+    "@modelcontextprotocol/client": "https://pkg.pr.new/@modelcontextprotocol/client@b0091060d73d08211c6766990aa15656d4e03271",
+    "@modelcontextprotocol/server": "https://pkg.pr.new/@modelcontextprotocol/server@b0091060d73d08211c6766990aa15656d4e03271",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/common-tags": "^1.8.4",
     "@types/node": "^22.8.6",
