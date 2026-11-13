@@ -75,4 +75,86 @@ describe('tools', () => {
     expect(publishableKey.type).toEqual('publishable');
     expect(publishableKey.description).toEqual('Main publishable key');
   });
+
+  test('generate typescript types without included_schemas', async () => {
+    const { callTool } = await setup();
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    const result = await callTool({
+      name: 'generate_typescript_types',
+      arguments: {
+        project_id: project.id,
+      },
+    });
+
+    expect(result).toEqual({
+      types: 'export type Database = { /* all schemas */ };',
+    });
+  });
+
+  test('generate typescript types with included_schemas', async () => {
+    const { callTool } = await setup();
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    const result = await callTool({
+      name: 'generate_typescript_types',
+      arguments: {
+        project_id: project.id,
+        included_schemas: ['public', 'auth'],
+      },
+    });
+
+    expect(result).toEqual({
+      types: 'export type Database = { /* schemas: public,auth */ };',
+    });
+  });
+
+  test('generate typescript types project scoped with included_schemas', async () => {
+    const org = await createOrganization({
+      name: 'My Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+    const project = await createProject({
+      name: 'Project 1',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+    project.status = 'ACTIVE_HEALTHY';
+
+    const { callTool } = await setup({
+      projectId: project.id,
+    });
+
+    const result = await callTool({
+      name: 'generate_typescript_types',
+      arguments: {
+        included_schemas: ['public'],
+      },
+    });
+
+    expect(result).toEqual({
+      types: 'export type Database = { /* schemas: public */ };',
+    });
+  });
 });

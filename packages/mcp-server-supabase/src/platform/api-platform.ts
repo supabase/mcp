@@ -474,7 +474,14 @@ export function createSupabaseApiPlatform(
         id: key.id ?? undefined,
       }));
     },
-    async generateTypescriptTypes(projectId: string) {
+    async generateTypescriptTypes(
+      projectId: string,
+      includedSchemas?: string[]
+    ) {
+      const included_schemas =
+        includedSchemas && includedSchemas.length > 0
+          ? includedSchemas.join(',')
+          : undefined;
       const response = await managementApiClient.GET(
         '/v1/projects/{ref}/types/typescript',
         {
@@ -482,6 +489,7 @@ export function createSupabaseApiPlatform(
             path: {
               ref: projectId,
             },
+            query: included_schemas ? { included_schemas } : undefined,
           },
         }
       );
