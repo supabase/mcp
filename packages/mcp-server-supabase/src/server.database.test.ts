@@ -1010,6 +1010,13 @@ describe('tools', () => {
     );
     await project.db.exec('create table test.test_2 (id serial primary key);');
 
+    // PGlite has no TimescaleDB, so create a table in its internal schema;
+    // without one, asserting that schema is absent would pass vacuously.
+    await project.db.exec('create schema _timescaledb_internal;');
+    await project.db.exec(
+      'create table _timescaledb_internal.test_3 (id serial primary key);'
+    );
+
     // Omitting `schemas` defaults to ["public"]; an empty array lists every
     // schema except the system schemas, which is the path under test.
     const result = await callTool({
@@ -1031,7 +1038,12 @@ describe('tools', () => {
       expect.arrayContaining(['public.test_1', 'test.test_2'])
     );
 
-    for (const schema of ['pg_catalog', 'information_schema', 'pg_toast']) {
+    for (const schema of [
+      'pg_catalog',
+      'information_schema',
+      'pg_toast',
+      '_timescaledb_internal',
+    ]) {
       expect(
         tableNames.filter((name) => name.startsWith(`${schema}.`))
       ).toEqual([]);
