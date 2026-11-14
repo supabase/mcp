@@ -3,6 +3,7 @@ import {
   createSupabaseMcpServer,
   CURRENT_ELICITATION_TOOLS,
   type ElicitationToolName,
+  type SupabaseMcpHandlerOptions,
   type SupabaseMcpServerOptions,
 } from '@supabase/mcp-server-supabase';
 import type * as Supabase from '@supabase/mcp-server-supabase';
@@ -67,6 +68,15 @@ const optionsWithElicitation: SupabaseMcpServerOptions = {
 
 const handlerWithElicitation = createSupabaseMcpHandler(optionsWithElicitation);
 void handlerWithElicitation.fetch;
+
+const handlerOptions: SupabaseMcpHandlerOptions = {
+  onerror: (error) => console.error(error),
+};
+const handlerWithErrorCallback = createSupabaseMcpHandler(
+  options,
+  handlerOptions
+);
+void handlerWithErrorCallback.fetch;
 
 type Fact = Readonly<{ kind: 'operation'; phase: 'started' | 'finished' }>;
 

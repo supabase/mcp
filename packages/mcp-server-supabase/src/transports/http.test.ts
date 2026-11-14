@@ -8,7 +8,7 @@ import {
 } from '@modelcontextprotocol/server';
 import { http, HttpResponse } from 'msw';
 import type { SetupServer } from 'msw/node';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import {
   ACCESS_TOKEN,
@@ -183,6 +183,56 @@ describe('createSupabaseMcpHandler', () => {
         },
       },
     });
+  });
+
+  test('reports transport-level validation errors through the optional error callback', async () => {
+    const onerror = vi.fn();
+    const handler = createSupabaseMcpHandler(
+      {
+        platform: createSupabaseApiPlatform({
+          accessToken: ACCESS_TOKEN,
+          apiUrl: API_URL,
+        }),
+        readOnly: true,
+      },
+      { onerror }
+    );
+    cleanups.push(() => handler.close());
+
+    const response = await handler.fetch(
+      new Request(MCP_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'Mcp-Method': 'tools/call',
+          'Mcp-Name': 'execute_sql',
+          'Mcp-Protocol-Version': '2025-01-01',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 3,
+          method: 'tools/call',
+          params: {
+            name: 'execute_sql',
+            arguments: {
+              project_id: 'project-123',
+              query: 'SELECT 1',
+            },
+          },
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: '2.0',
+      id: 3,
+      error: {
+        code: -32022,
+        message: 'Unsupported protocol version: 2025-01-01',
+      },
+    });
+    expect(onerror).toHaveBeenCalledWith(expect.any(Error));
   });
 
   test('close releases an in-flight request', async () => {
