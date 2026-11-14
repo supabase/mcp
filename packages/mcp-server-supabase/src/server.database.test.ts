@@ -1004,28 +1004,38 @@ describe('tools', () => {
       project: { name: 'Project 1', region: 'us-east-1' },
     });
 
+    await project.db.exec('create schema test;');
+    await project.db.exec(
+      'create table public.test_1 (id serial primary key);'
+    );
+    await project.db.exec('create table test.test_2 (id serial primary key);');
+
+    // Omitting `schemas` defaults to ["public"]; an empty array lists every
+    // schema except the system schemas, which is the path under test.
     const result = await callTool({
       name: 'list_tables',
       arguments: {
         project_id: project.id,
+        schemas: [],
       },
     });
 
-    expect(result).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ schema: 'pg_catalog' }),
-      ])
+    // `list_tables` returns `{ tables }`, and each table's schema is part of
+    // its qualified `name` (e.g. `public.test_1`), so assert on those names.
+    const tableNames: string[] = result.tables.map(
+      (table: { name: string }) => table.name
     );
 
-    expect(result).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ schema: 'information_schema' }),
-      ])
+    // Guard against a vacuous pass: user tables from every schema are listed.
+    expect(tableNames).toEqual(
+      expect.arrayContaining(['public.test_1', 'test.test_2'])
     );
 
-    expect(result).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ schema: 'pg_toast' })])
-    );
+    for (const schema of ['pg_catalog', 'information_schema', 'pg_toast']) {
+      expect(
+        tableNames.filter((name) => name.startsWith(`${schema}.`))
+      ).toEqual([]);
+    }
   });
 
   test('list_tables is not vulnerable to SQL injection via schemas parameter', async () => {
