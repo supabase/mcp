@@ -651,13 +651,10 @@ export function createSupabaseApiPlatform(
         existingEdgeFunction = await functions.getEdgeFunction(projectId, name);
       } catch (error) {}
 
-      const import_map_file = inputFiles.find((file) =>
-        ['deno.json', 'import_map.json'].includes(file.name)
-      );
-
       // Use existing import map path or file name heuristic if not provided
       import_map_path ??=
-        existingEdgeFunction?.import_map_path ?? import_map_file?.name;
+        existingEdgeFunction?.import_map_path ??
+        getDefaultImportMapPath(inputFiles);
 
       const response = await managementApiClient.POST(
         '/v1/projects/{ref}/functions/deploy',
@@ -1036,6 +1033,27 @@ function getNextNotebooksCursor(next: string | null | undefined) {
 
   const url = new URL(next, 'https://supabase.com');
   return url.searchParams.get('page[after]') ?? undefined;
+}
+
+/**
+ * Import map file names detected in an Edge Function's root, in order of
+ * precedence: `deno.json` before `deno.jsonc`, as the Supabase CLI does, then
+ * the legacy `import_map.json`.
+ */
+const DEFAULT_IMPORT_MAP_FILENAMES = [
+  'deno.json',
+  'deno.jsonc',
+  'import_map.json',
+] as const;
+
+/**
+ * Picks the import map to deploy with when none was given or previously set,
+ * independent of the order the files were passed in.
+ */
+function getDefaultImportMapPath(files: { name: string }[]) {
+  return DEFAULT_IMPORT_MAP_FILENAMES.find((filename) =>
+    files.some((file) => file.name === filename)
+  );
 }
 
 function getProjectDomain(apiHostname: string) {
