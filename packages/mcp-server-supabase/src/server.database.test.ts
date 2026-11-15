@@ -992,7 +992,9 @@ describe('tools', () => {
       expect.arrayContaining([expect.objectContaining({ name: 'test.test_2' })])
     );
     expect(result.tables).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: 'test.test_1' })])
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'public.test_1' }),
+      ])
     );
   });
 
