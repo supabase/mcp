@@ -93,7 +93,15 @@ export function createPostgrestMcpServer(options: PostgrestMcpServerOptions) {
             body: body ? JSON.stringify(body) : undefined,
           });
 
-          return { result: await response.json() };
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              `PostgREST request failed with status ${response.status}: ${JSON.stringify(result)}`
+            );
+          }
+
+          return { result };
         },
       }),
       sqlToRest: tool({

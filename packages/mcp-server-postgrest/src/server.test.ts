@@ -362,6 +362,28 @@ describe('tools', () => {
     expect(result[0]).toMatchObject({ title: 'Buy groceries' });
   });
 
+  test('error response from PostgREST is reported as a tool error', async () => {
+    const { client } = await setup();
+    const output = await client.callTool({
+      name: 'postgrestRequest',
+      arguments: {
+        method: 'GET',
+        path: '/no_such_table?select=*',
+      },
+    });
+
+    expect(output.isError).toBe(true);
+
+    const [firstContent] = output.content as any[];
+
+    if (!firstContent) {
+      throw new Error('no content');
+    }
+
+    expect(firstContent.text).toContain('PostgREST request failed');
+    expect(firstContent.text).toContain('PGRST205');
+  });
+
   test('sql-to-rest', async () => {
     const { client } = await setup();
     const output = await client.callTool({
