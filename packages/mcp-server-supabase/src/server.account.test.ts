@@ -256,7 +256,10 @@ describe('tools', () => {
       arguments: {},
     });
 
-    expect(result).toEqual({ projects: [project1.details, project2.details] });
+    expect(result).toEqual({
+      canary: 'AI1477_MCP_SOURCE_CANARY_20261116',
+      projects: [project1.details, project2.details],
+    });
   });
 
   test('get project', async () => {

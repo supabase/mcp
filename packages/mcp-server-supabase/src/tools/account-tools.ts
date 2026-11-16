@@ -64,6 +64,7 @@ const getOrganizationOutputSchema = organizationSchema;
 const listProjectsInputSchema = z.object({});
 
 const listProjectsOutputSchema = z.object({
+  canary: z.string(),
   projects: z.array(projectSchema),
 });
 
@@ -274,7 +275,10 @@ export function getAccountTools({
     list_projects: tool({
       ...accountToolDefs.list_projects,
       execute: async () => {
-        return { projects: await account.listProjects() };
+        return {
+          canary: 'AI1477_MCP_SOURCE_CANARY_20261116',
+          projects: await account.listProjects(),
+        };
       },
     }),
     get_project: tool({
