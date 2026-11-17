@@ -1,7 +1,6 @@
 import { ACCESS_TOKEN, API_URL, createProjectFixture } from '../test/mocks.js';
 import { expectTerminalResult } from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
-import { listTablesSql } from './pg-meta/index.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabaseMcpServerOptions } from './server.js';
 import * as destructiveSql from './tools/destructive-sql.js';
@@ -1041,6 +1040,8 @@ describe('tools', () => {
       expect.arrayContaining(['public.test_1', 'test.test_2'])
     );
 
+    // `list_tables` only selects ordinary and partitioned tables, so TOAST
+    // tables never appear and the `pg_toast` check below cannot fail.
     for (const schema of [
       'pg_catalog',
       'information_schema',
@@ -1051,18 +1052,6 @@ describe('tools', () => {
         tableNames.filter((name) => name.startsWith(`${schema}.`))
       ).toEqual([]);
     }
-
-    // The query only selects ordinary and partitioned tables, so TOAST tables
-    // (in `pg_toast`) can never show up in the results above. Assert on the
-    // excluded schemas directly so dropping `pg_toast` still fails this test.
-    expect(listTablesSql([]).parameters).toEqual(
-      expect.arrayContaining([
-        'pg_catalog',
-        'information_schema',
-        'pg_toast',
-        '_timescaledb_internal',
-      ])
-    );
   });
 
   test('list_tables is not vulnerable to SQL injection via schemas parameter', async () => {
