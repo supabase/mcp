@@ -33,7 +33,7 @@ import {
   isFormCapable,
   observeOperation,
 } from './confirmation.js';
-import { LIST_TABLES_UI_URI } from '../apps/index.js';
+import { LIST_TABLES_UI_URI } from '../resources/app-resources.js';
 import { isDestructiveSql } from './destructive-sql.js';
 import {
   injectableTool,

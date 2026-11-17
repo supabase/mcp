@@ -5,7 +5,10 @@ import {
 import type { Client } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { createServerHarness } from '../test/server-harness.js';
-import { LIST_PROJECTS_UI_URI, LIST_TABLES_UI_URI } from './apps/index.js';
+import {
+  LIST_PROJECTS_UI_URI,
+  LIST_TABLES_UI_URI,
+} from './resources/app-resources.js';
 
 const harness = createServerHarness();
 

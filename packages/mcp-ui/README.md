@@ -37,7 +37,7 @@ npx @modelcontextprotocol/inspector --web
 ## Add a view
 
 1. Create `src/views/<name>/index.html` and its React entry. `pnpm build` picks up every folder in `src/views/`.
-2. In `packages/mcp-server-supabase/src/apps/index.ts`, import `@supabase/mcp-ui/<name>.html` and register it as a resource.
+2. In `packages/mcp-server-supabase/src/resources/app-resources.ts`, import `@supabase/mcp-ui/<name>.html` and register it as a resource.
 3. Link the tool to it with `_meta: { ui: { resourceUri } }` in its definition.
 4. Add a fixture in `dev/fixtures.ts`.
 

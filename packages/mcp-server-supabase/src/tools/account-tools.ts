@@ -22,7 +22,7 @@ import {
 } from './confirmation.js';
 import type { AccountOperations } from '../platform/types.js';
 import { organizationSchema, projectSchema } from '../platform/types.js';
-import { LIST_PROJECTS_UI_URI } from '../apps/index.js';
+import { LIST_PROJECTS_UI_URI } from '../resources/app-resources.js';
 import { getBranchCost, getNextProjectCost } from '../pricing.js';
 import { AWS_REGION_CODES } from '../regions.js';
 import { hashObject } from '../util.js';
