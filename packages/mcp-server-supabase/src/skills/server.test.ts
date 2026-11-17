@@ -12,7 +12,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createServerHarness } from '../../test/server-harness.js';
-import { LIST_PROJECTS_UI_URI } from '../resources/app-resources.js';
+import { getAppResources } from '../resources/app-resources.js';
 import { buildTarball, createFakeFetch, sha256 } from './test-helpers.js';
 
 const INDEX_URL = 'https://supabase.com/.well-known/agent-skills';
@@ -202,7 +202,10 @@ describe('skills alongside MCP Apps (2026-07-28)', () => {
 
       const { resources } = await client.listResources();
       const uris = resources.map((resource) => resource.uri);
-      expect(uris.includes(LIST_PROJECTS_UI_URI)).toBe(apps);
+      const viewUris = getAppResources().map((view) => view.uri);
+      expect(uris.filter((uri) => viewUris.includes(uri)).sort()).toEqual(
+        apps ? [...viewUris].sort() : []
+      );
       expect(uris.includes(SKILL_URI)).toBe(skills);
       expect(uris.includes(FOO_URI)).toBe(skills);
     }
