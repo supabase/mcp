@@ -111,24 +111,24 @@ function progressBody<T>({
   return {
     announce,
     content: (
-      <div className="card card-body stack">
-        <div className="card-header">
+      <div className="progress-card">
+        <div data-slot="header">
           {summary(data)}
           <StepBadge steps={stepList} timedOut={timedOut} />
         </div>
         <StepLine steps={stepList} running={poll.status === 'running'} />
         {timedOut && (
-          <div className="row">
+          <div data-slot="problem">
             <Message>Timed out.</Message>
-            <button type="button" className="btn" onClick={poll.retry}>
+            <button type="button" onClick={poll.retry}>
               Retry
             </button>
           </div>
         )}
         {pollError && (
-          <div className="row">
+          <div data-slot="problem">
             <Message tone="error">{pollError}</Message>
-            <button type="button" className="btn" onClick={poll.retry}>
+            <button type="button" onClick={poll.retry}>
               Retry
             </button>
           </div>
@@ -154,9 +154,9 @@ export function Summary({
   items: { label: string; value: string }[];
 }) {
   return (
-    <div>
-      <div className="font-medium">{name}</div>
-      <div className="row text-lighter mono text-small">
+    <div className="summary">
+      <div data-slot="name">{name}</div>
+      <div data-slot="meta">
         {items.map((item) => (
           <span key={item.label}>
             {item.label}: {item.value}

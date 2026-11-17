@@ -2,12 +2,12 @@ import type { App, McpUiHostContext } from '@modelcontextprotocol/ext-apps';
 import { useHostStyles as useSdkHostStyles } from '@modelcontextprotocol/ext-apps/react';
 import { useEffect } from 'react';
 
-/** Mirrors the host's safe area (host chrome) into `--inset-*` CSS variables. */
+/** Mirrors the host's safe area (host chrome) into `--sb-inset-*` CSS variables. */
 function applyInsets(context: McpUiHostContext | undefined) {
   const style = document.documentElement.style;
   const insets = context?.safeAreaInsets;
   for (const side of ['top', 'right', 'bottom', 'left'] as const) {
-    style.setProperty(`--inset-${side}`, `${insets?.[side] ?? 0}px`);
+    style.setProperty(`--sb-inset-${side}`, `${insets?.[side] ?? 0}px`);
   }
 }
 

@@ -1,3 +1,4 @@
+import { Badge } from './Badge';
 import { SpinnerIcon, XCircleIcon } from './icons';
 
 export type StepState = 'pending' | 'active' | 'done' | 'failed';
@@ -48,18 +49,18 @@ export function StepBadge({
 }) {
   const now = current(steps);
   if (!now) {
-    return <span className="badge badge-lg badge-success">{readyLabel}</span>;
+    return <Badge tone="success">{readyLabel}</Badge>;
   }
   if (now.step.state === 'failed') {
-    return <span className="badge badge-lg badge-destructive">Failed</span>;
+    return <Badge tone="danger">Failed</Badge>;
   }
   if (timedOut) {
-    return <span className="badge badge-lg badge-warning">Timed out</span>;
+    return <Badge tone="warning">Timed out</Badge>;
   }
   return (
-    <span className="badge badge-lg">
+    <Badge>
       Step {now.index + 1} of {steps.length}
-    </span>
+    </Badge>
   );
 }
 
@@ -79,14 +80,14 @@ export function StepLine({
   if (!now) return null;
   if (now.step.state === 'failed') {
     return (
-      <div className="step step-failed">
+      <div data-slot="step" data-state={now.step.state}>
         <XCircleIcon />
         <span>{now.step.label} failed</span>
       </div>
     );
   }
   return (
-    <div className="step">
+    <div data-slot="step" data-state={now.step.state}>
       {running && <SpinnerIcon />}
       <span>{now.step.label}…</span>
     </div>

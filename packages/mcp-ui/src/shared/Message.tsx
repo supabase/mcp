@@ -9,9 +9,7 @@ export function Message({
   tone?: 'error';
 }) {
   return (
-    <p
-      className={`message ${tone === 'error' ? 'text-destructive' : 'text-lighter'}`}
-    >
+    <p className="message" data-tone={tone}>
       {children}
     </p>
   );

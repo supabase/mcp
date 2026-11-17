@@ -42,24 +42,28 @@ export function CreateProject() {
   });
 
   return (
-    <ProgressView
-      toolCall={toolCall}
-      app={app}
-      poll={poll}
-      checkWith="get_project"
-      waitingLabel="Waiting for confirmation…"
-      summary={(p) => (
-        <Summary
-          name={p.name}
-          items={[
-            { label: 'ref', value: p.ref ?? p.id },
-            { label: 'region', value: p.region },
-          ]}
-        />
-      )}
-      steps={(p) => stepsAt(LABELS, currentStep(p.status), isFailed(p.status))}
-      ready={(p) => p.status === 'ACTIVE_HEALTHY'}
-      projectRef={(p) => p.ref ?? p.id}
-    />
+    <div className="create-project-view">
+      <ProgressView
+        toolCall={toolCall}
+        app={app}
+        poll={poll}
+        checkWith="get_project"
+        waitingLabel="Waiting for confirmation…"
+        summary={(p) => (
+          <Summary
+            name={p.name}
+            items={[
+              { label: 'ref', value: p.ref ?? p.id },
+              { label: 'region', value: p.region },
+            ]}
+          />
+        )}
+        steps={(p) =>
+          stepsAt(LABELS, currentStep(p.status), isFailed(p.status))
+        }
+        ready={(p) => p.status === 'ACTIVE_HEALTHY'}
+        projectRef={(p) => p.ref ?? p.id}
+      />
+    </div>
   );
 }

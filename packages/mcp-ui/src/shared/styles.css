@@ -1,283 +1,407 @@
 /*
- * Placeholder styles. Colors and fonts come from the host's MCP Apps style
- * variables (via `useHostStyles`), with neutral fallbacks.
+ * Shared styles for every MCP UI view. Before editing, read
+ * packages/mcp-ui/.agents/skills/mcp-ui-css/SKILL.md: layers, specificity
+ * caps, host theming and markup rules. `pnpm lint:css` checks them.
  */
-:root {
-  --text: var(--color-text-primary, CanvasText);
-  --text-secondary: var(
-    --color-text-secondary,
-    color-mix(in oklab, currentColor 70%, transparent)
-  );
-  --text-tertiary: var(
-    --color-text-tertiary,
-    color-mix(in oklab, currentColor 60%, transparent)
-  );
-  --border: var(
-    --color-border-primary,
-    color-mix(in oklab, currentColor 12%, transparent)
-  );
-  --success: var(--color-text-success, #166534);
-  --warning: var(--color-text-warning, #92400e);
-  --danger: var(--color-text-danger, #b91c1c);
+@layer base, native, components, view, utilities;
+
+@layer base {
   /*
-   * Until the host sends a `theme` (optional in the spec), follow the
-   * preferred scheme so a dark host doesn't get an opaque light backdrop
-   * (https://drafts.csswg.org/css-color-adjust-1/#color-scheme-effect).
+   * Fallbacks for the host's MCP Apps style variables, from the Supabase
+   * design system. `useHostStyles` sets the host's values inline on <html>,
+   * which beats these whenever the host sends a variable.
    */
-  color-scheme: light dark;
+  :where(:root) {
+    --color-text-primary: light-dark(oklch(0.1 0 0), oklch(0.95 0.00275 157.5));
+    --color-text-secondary: light-dark(
+      oklch(0.413 0 0),
+      oklch(0.798 0.00275 157.5)
+    );
+    --color-text-tertiary: light-dark(
+      oklch(0.5475 0 0),
+      oklch(0.684 0.00275 157.5)
+    );
+    --color-text-inverse: var(--color-background-primary);
+    --color-text-disabled: color-mix(
+      in oklab,
+      var(--color-text-primary) 50%,
+      transparent
+    );
+    --color-text-success: light-dark(
+      hsl(156.5 86.5% 26.1%),
+      hsl(154.9 59.5% 70%)
+    );
+    --color-text-warning: light-dark(oklch(0.55 0.14 58), oklch(0.8 0.14 75));
+    --color-text-danger: light-dark(oklch(0.52 0.14 25), oklch(0.55 0.14 25));
 
-  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
-  font-size: var(--font-text-sm-size, 14px);
-  line-height: var(--font-text-sm-line-height, 1.43);
-  color: var(--text);
-}
+    /* Only used through `--color-text-inverse`: the body stays transparent. */
+    --color-background-primary: light-dark(
+      oklch(0.995 0 0),
+      oklch(0.19 0.0025 157.5)
+    );
+    --color-background-secondary: color-mix(
+      in oklab,
+      var(--color-text-primary) 5%,
+      transparent
+    );
+    --color-background-inverse: var(--color-text-primary);
+    --color-background-disabled: color-mix(
+      in oklab,
+      var(--color-text-primary) 8%,
+      transparent
+    );
+    --color-background-success: color-mix(
+      in oklab,
+      var(--color-text-success) 10%,
+      transparent
+    );
+    --color-background-warning: color-mix(
+      in oklab,
+      var(--color-text-warning) 10%,
+      transparent
+    );
+    --color-background-danger: color-mix(
+      in oklab,
+      var(--color-text-danger) 10%,
+      transparent
+    );
 
-/* Not `light-dark()`: the minifier breaks it inside `var()` fallbacks. */
-[data-theme="dark"] {
-  --success: var(--color-text-success, #4ade80);
-  --warning: var(--color-text-warning, #fbbf24);
-  --danger: var(--color-text-danger, #f87171);
-}
+    --color-border-primary: color-mix(
+      in oklab,
+      var(--color-text-primary) 13.5%,
+      transparent
+    );
+    --color-border-disabled: color-mix(
+      in oklab,
+      var(--color-text-primary) 8%,
+      transparent
+    );
+    --color-border-success: color-mix(
+      in oklab,
+      var(--color-text-success) 30%,
+      transparent
+    );
+    --color-border-warning: color-mix(
+      in oklab,
+      var(--color-text-warning) 30%,
+      transparent
+    );
+    --color-border-danger: color-mix(
+      in oklab,
+      var(--color-text-danger) 30%,
+      transparent
+    );
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --success: var(--color-text-success, #4ade80);
-    --warning: var(--color-text-warning, #fbbf24);
-    --danger: var(--color-text-danger, #f87171);
+    --color-ring-primary: light-dark(
+      oklch(0.7 0.15 157.5 / 0.55),
+      oklch(0.76 0.15 157.5 / 0.55)
+    );
+
+    /* No font files are loaded: these resolve to the host's or the system's. */
+    --font-sans: Inter, "Helvetica Neue", Helvetica, ui-sans-serif, system-ui,
+      sans-serif;
+    --font-mono: "Source Code Pro", ui-monospace, Menlo, monospace;
+    --font-weight-medium: 500;
+    --font-text-xs-size: 12px;
+    --font-text-xs-line-height: 1.33;
+    --font-text-sm-size: 13px;
+    --font-text-sm-line-height: 1.43;
+
+    --border-width-regular: 1px;
+    --border-radius-md: 6px;
+    --border-radius-lg: 8px;
+    --border-radius-full: 9999px;
+
+    /* Local tokens: the host standard has no spacing scale. */
+    --sb-space-1: 4px;
+    --sb-space-2: 8px;
+    --sb-space-3: 12px;
+    --sb-space-4: 16px;
+
+    /* The host's safe area insets, set by `useHostStyles`. */
+    --sb-inset-top: 0px;
+    --sb-inset-right: 0px;
+    --sb-inset-bottom: 0px;
+    --sb-inset-left: 0px;
+
+    color-scheme: light dark;
+
+    font-family: var(--font-sans);
+    font-size: var(--font-text-sm-size);
+    line-height: var(--font-text-sm-line-height);
+    color: var(--color-text-primary);
+  }
+
+  :where(body) {
+    margin: 0;
+    padding: calc(var(--sb-inset-top) + var(--sb-space-1))
+      calc(var(--sb-inset-right) + var(--sb-space-1))
+      calc(var(--sb-inset-bottom) + var(--sb-space-1))
+      calc(var(--sb-inset-left) + var(--sb-space-1));
+    background: transparent;
+  }
+
+  :where(:focus-visible) {
+    outline: 2px solid var(--color-ring-primary);
+    outline-offset: 2px;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 }
 
-/* `--inset-*` are the host's safe area insets, set by `useHostStyles`. */
-body {
-  margin: 0;
-  padding: calc(var(--inset-top, 0px) + 4px) calc(var(--inset-right, 0px) + 4px)
-    calc(var(--inset-bottom, 0px) + 4px) calc(var(--inset-left, 0px) + 4px);
-  background: transparent;
-}
+@layer native {
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sb-space-2);
+    padding: 6px var(--sb-space-3);
+    border: var(--border-width-regular) solid var(--color-border-primary);
+    border-radius: var(--border-radius-md);
+    background: transparent;
+    color: var(--color-text-primary);
+    font: inherit;
+    cursor: pointer;
 
-.mono {
-  font-family: var(--font-mono, ui-monospace, Menlo, monospace);
-}
+    &:where(:hover:not(:disabled)) {
+      background: var(--color-background-secondary);
+    }
 
-.text-muted {
-  color: var(--text-secondary);
-}
+    &:where(:disabled) {
+      color: var(--color-text-disabled);
+      border-color: var(--color-border-disabled);
+      cursor: not-allowed;
+    }
+  }
 
-.text-lighter {
-  color: var(--text-tertiary);
-}
+  a {
+    color: var(--color-text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 4px;
 
-.text-destructive {
-  color: var(--danger);
-}
+    &:where(:hover) {
+      color: var(--color-text-primary);
+    }
+  }
 
-.text-success {
-  color: var(--success);
-}
+  code {
+    font-family: var(--font-mono);
+  }
 
-.text-small {
-  font-size: 12px;
-}
-
-.font-medium {
-  font-weight: var(--font-weight-medium, 500);
-}
-
-/* A single line of status text (see Message). */
-.message {
-  margin: 0;
-  padding: 8px 0;
-}
-
-.heading-meta {
-  font-size: 12px;
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--text-tertiary);
-}
-
-.card {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--border-radius-md, 6px);
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.table th {
-  padding: 8px 12px;
-  text-align: left;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--border);
-}
-
-.table td {
-  padding: 8px 12px;
-  vertical-align: middle;
-  border-bottom: 1px solid var(--border);
-}
-
-.table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.table .numeric {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.badge {
-  --badge: var(--text-secondary);
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border: 1px solid color-mix(in oklab, var(--badge) 35%, transparent);
-  border-radius: var(--border-radius-full, 9999px);
-  background: color-mix(in oklab, var(--badge) 10%, transparent);
-  color: var(--badge);
-  font-size: 12px;
-  line-height: 1.33;
-  white-space: nowrap;
-}
-
-.badge-lg {
-  gap: 4px;
-  padding: 3px 10px;
-  font-size: 13px;
-  font-weight: var(--font-weight-medium, 500);
-}
-
-.badge-success {
-  --badge: var(--success);
-}
-
-.badge-warning {
-  --badge: var(--warning);
-}
-
-.badge-destructive {
-  --badge: var(--danger);
-}
-
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.card-body {
-  padding: 12px 16px;
-}
-
-.card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.step {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text);
-}
-
-.step-failed {
-  color: var(--danger);
-}
-
-.step svg {
-  flex: none;
-}
-
-.spinner {
-  transform-origin: center;
-  animation: spin 0.9s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
+  p {
+    margin: 0;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation-duration: 3s;
+@layer components {
+  /* The card around a long-running operation (see ProgressView). */
+  :where(.progress-card) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-space-3);
+    padding: var(--sb-space-3) var(--sb-space-4);
+    overflow: hidden;
+    border: var(--border-width-regular) solid var(--color-border-primary);
+    border-radius: var(--border-radius-lg);
+
+    :where([data-slot="header"]) {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--sb-space-3);
+    }
+
+    /* The current step, with a spinner or a failure icon. */
+    :where([data-slot="step"]) {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--color-text-primary);
+
+      &:where([data-state="failed"]) {
+        color: var(--color-text-danger);
+      }
+    }
+
+    /* Polling timed out or failed: a message and a retry button. */
+    :where([data-slot="problem"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-2);
+    }
+  }
+
+  /* Name, identifier and extra facts (see Summary). */
+  :where(.summary) {
+    :where([data-slot="name"]) {
+      font-weight: var(--font-weight-medium);
+    }
+
+    :where([data-slot="meta"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-2);
+      color: var(--color-text-tertiary);
+      font-family: var(--font-mono);
+      font-size: var(--font-text-xs-size);
+    }
+  }
+
+  :where(.badge) {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sb-space-1);
+    padding: 3px 10px;
+    border: var(--border-width-regular) solid var(--color-border-primary);
+    border-radius: var(--border-radius-full);
+    background: var(--color-background-secondary);
+    color: var(--color-text-secondary);
+    font-size: var(--font-text-sm-size);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--font-text-xs-line-height);
+    white-space: nowrap;
+
+    &:where([data-tone="success"]) {
+      color: var(--color-text-success);
+      background: var(--color-background-success);
+      border-color: var(--color-border-success);
+    }
+
+    &:where([data-tone="warning"]) {
+      color: var(--color-text-warning);
+      background: var(--color-background-warning);
+      border-color: var(--color-border-warning);
+    }
+
+    &:where([data-tone="danger"]) {
+      color: var(--color-text-danger);
+      background: var(--color-background-danger);
+      border-color: var(--color-border-danger);
+    }
+  }
+
+  :where(.icon) {
+    flex: none;
+
+    &:where([data-state="spinning"]) {
+      transform-origin: center;
+      animation: spin 0.9s linear infinite;
+
+      @media (prefers-reduced-motion: reduce) {
+        animation-duration: 3s;
+      }
+    }
+  }
+
+  button:where(.primary) {
+    border-color: transparent;
+    background: var(--color-background-inverse);
+    color: var(--color-text-inverse);
+
+    &:where(:hover:not(:disabled)) {
+      background: color-mix(
+        in oklab,
+        var(--color-background-inverse) 90%,
+        transparent
+      );
+    }
+
+    &:where(:disabled) {
+      background: var(--color-background-disabled);
+      color: var(--color-text-disabled);
+    }
+  }
+
+  /* Connection details and ping, once the project is ready. */
+  :where(.ready-actions) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-space-3);
+
+    :where([data-slot="actions"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-2);
+    }
+
+    :where([data-slot="details"]) {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sb-space-3);
+    }
+
+    :where([data-slot="ping-result"]) {
+      color: var(--color-text-secondary);
+
+      :where([data-tone="success"]) {
+        color: var(--color-text-success);
+      }
+    }
+  }
+
+  /* A single line of status text (see Message). */
+  :where(.message) {
+    padding-block: var(--sb-space-2);
+    color: var(--color-text-tertiary);
+
+    &:where([data-tone="error"]) {
+      color: var(--color-text-danger);
+    }
+  }
+
+  /* Label, monospace value and a copy button. */
+  :where(.copy-field) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-space-1);
+
+    :where([data-slot="label"]) {
+      color: var(--color-text-tertiary);
+      font-size: var(--font-text-xs-size);
+      font-weight: var(--font-weight-medium);
+    }
+
+    :where([data-slot="control"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-2);
+    }
+
+    :where([data-slot="value"]) {
+      flex: 1;
+      min-inline-size: 0;
+      padding: 6px 8px;
+      overflow-x: auto;
+      white-space: nowrap;
+      border: var(--border-width-regular) solid var(--color-border-primary);
+      border-radius: var(--border-radius-md);
+      font-size: var(--font-text-xs-size);
+    }
   }
 }
 
-.btn {
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--border-radius-md, 6px);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-}
-
-.btn:hover:not(:disabled) {
-  background: color-mix(in oklab, currentColor 8%, transparent);
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.btn-primary {
-  border-color: transparent;
-  background: var(--text);
-  color: var(--color-background-primary, Canvas);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--text) 85%, transparent);
-}
-
-.copy-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.copy-value {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.copy-value code {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 8px;
-  overflow-x: auto;
-  white-space: nowrap;
-  border: 1px solid var(--border);
-  border-radius: var(--border-radius-md, 6px);
-  font-size: 12px;
-}
-
-/* Hidden visually, still read by screen readers. */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+/*
+ * Rules that must override everything, including `view`. Keep this layer
+ * nearly empty; see the `utilities` section of
+ * packages/mcp-ui/.agents/skills/mcp-ui-css/SKILL.md before adding to it.
+ */
+@layer utilities {
+  /* Hidden visually, still read by screen readers. */
+  :where(.sr-only) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 }

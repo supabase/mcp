@@ -78,25 +78,27 @@ export function CreateBranch() {
   });
 
   return (
-    <ProgressView
-      toolCall={toolCall}
-      app={app}
-      poll={poll}
-      checkWith="list_branches"
-      waitingLabel="Waiting for confirmation…"
-      summary={(b) => (
-        <Summary
-          name={b.name}
-          items={[{ label: 'ref', value: b.project_ref }]}
-        />
-      )}
-      steps={(b) => {
-        const { step, failed } = progress(b.status);
-        return stepsAt(LABELS, step, failed);
-      }}
-      ready={(b) => b.status === 'FUNCTIONS_DEPLOYED'}
-      projectRef={(b) => b.project_ref}
-      canReachProject={!serverScoped}
-    />
+    <div className="create-branch-view">
+      <ProgressView
+        toolCall={toolCall}
+        app={app}
+        poll={poll}
+        checkWith="list_branches"
+        waitingLabel="Waiting for confirmation…"
+        summary={(b) => (
+          <Summary
+            name={b.name}
+            items={[{ label: 'ref', value: b.project_ref }]}
+          />
+        )}
+        steps={(b) => {
+          const { step, failed } = progress(b.status);
+          return stepsAt(LABELS, step, failed);
+        }}
+        ready={(b) => b.status === 'FUNCTIONS_DEPLOYED'}
+        projectRef={(b) => b.project_ref}
+        canReachProject={!serverScoped}
+      />
+    </div>
   );
 }

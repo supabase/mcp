@@ -9,11 +9,12 @@ const base = {
   strokeLinecap: 'round',
   strokeLinejoin: 'round',
   'aria-hidden': true,
+  className: 'icon',
 } as const;
 
 export function SpinnerIcon() {
   return (
-    <svg {...base} className="spinner">
+    <svg {...base} data-state="spinning">
       <circle cx="8" cy="8" r="6" opacity="0.25" />
       <path d="M14 8a6 6 0 0 0-6-6" />
     </svg>

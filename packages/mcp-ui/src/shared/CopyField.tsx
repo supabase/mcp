@@ -25,15 +25,10 @@ export function CopyField({ label, value }: { label: string; value: string }) {
 
   return (
     <div className="copy-field">
-      <span className="heading-meta">{label}</span>
-      <div className="copy-value">
-        <code className="mono">{value}</code>
-        <button
-          type="button"
-          className="btn row"
-          onClick={copy}
-          aria-label={`Copy ${label}`}
-        >
+      <span data-slot="label">{label}</span>
+      <div data-slot="control">
+        <code data-slot="value">{value}</code>
+        <button type="button" onClick={copy} aria-label={`Copy ${label}`}>
           <CopyIcon />
           {feedback === 'copied'
             ? 'Copied'

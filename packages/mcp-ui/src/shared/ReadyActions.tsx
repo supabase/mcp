@@ -229,11 +229,11 @@ export function ReadyActions({
   }
 
   return (
-    <div className="stack">
-      <div className="row">
+    <div className="ready-actions">
+      <div data-slot="actions">
         <button
           type="button"
-          className="btn btn-primary"
+          className="primary"
           onClick={() =>
             sendConnection({ type: 'request', canFetch: canReachProject })
           }
@@ -244,7 +244,6 @@ export function ReadyActions({
         {canReachProject && (
           <button
             type="button"
-            className="btn"
             onClick={() => sendPing({ type: 'start' })}
             disabled={ping.status === 'running'}
           >
@@ -252,8 +251,8 @@ export function ReadyActions({
           </button>
         )}
         {ping.status === 'ok' && (
-          <span className="text-muted">
-            <span className="text-success">Reachable</span>, {ping.ms} ms
+          <span data-slot="ping-result">
+            <span data-tone="success">Reachable</span>, {ping.ms} ms
           </span>
         )}
       </div>
@@ -266,7 +265,7 @@ export function ReadyActions({
         </a>
       )}
       {connection.status === 'details' && (
-        <div className="stack">
+        <div data-slot="details">
           <CopyField label="Project URL" value={connection.url} />
           <CopyField label="Publishable key" value={connection.key} />
         </div>
