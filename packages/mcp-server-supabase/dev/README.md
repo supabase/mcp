@@ -3,6 +3,10 @@
 A fake Supabase Management API for visual testing of MCP Apps views in MCP
 Inspector, with scenarios switchable at runtime.
 
+From the repo root, `pnpm dev:mock` starts the mock API, the dev server pointed
+at it and MCP Inspector in one go (Ctrl-C stops all three). To run the pieces
+yourself:
+
 ```sh
 pnpm build                  # once, so dist/cli.js exists
 pnpm mock-api               # terminal 1: http://localhost:4010 (MOCK_API_PORT to change)

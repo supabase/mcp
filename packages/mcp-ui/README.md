@@ -21,7 +21,13 @@ SUPABASE_ACCESS_TOKEN=<your pat> pnpm inspector
 
 ### Visually test scenarios with the mock API
 
-To see a view's progress, failure and timeout states without a Supabase account, run the mock Management API and point the dev server at it, in three terminals from the repo root:
+To see a view's progress, failure and timeout states without a Supabase account, run the mock Management API, the dev server pointed at it, and Inspector together with one command from the repo root:
+
+```bash
+pnpm dev:mock   # Ctrl-C stops all three; MOCK_API_PORT / MOCK_TOKEN override the defaults, extra args go to dev:http
+```
+
+Or run them yourself in three terminals:
 
 ```bash
 pnpm mock-api                              # fake Management API on http://localhost:4010

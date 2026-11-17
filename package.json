@@ -7,6 +7,7 @@
     "format": "biome check --write .",
     "format:check": "biome check .",
     "dev:http": "node scripts/dev-http.mjs",
+    "dev:mock": "node scripts/dev-mock.mjs",
     "inspector": "mcp-inspector --web --transport http --server-url 'http://127.0.0.1:3111/mcp?experimental_apps=true' --header \"Authorization: Bearer $SUPABASE_ACCESS_TOKEN\" --protocol-era modern",
     "mock-api": "pnpm --filter @supabase/mcp-server-supabase mock-api"
   },
