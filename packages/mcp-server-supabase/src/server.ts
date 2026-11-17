@@ -169,9 +169,8 @@ export type SupabaseMcpServerOptions = {
    * `resources/read`. Off by default — pass `{}` to enable with defaults, or
    * override `indexUrl` / `ttlMs` / `fetchImpl` for testing.
    *
-   * This currently depends on a preview build of the typescript-sdk Skills
-   * extension (modelcontextprotocol/typescript-sdk#2818) ahead of its stable
-   * release; leave disabled for production deployments until that ships.
+   * Built on the Skills extension types from the stable SDK 2.4.0
+   * (modelcontextprotocol/typescript-sdk#3047).
    */
   skills?: SkillsProviderOptions;
 };

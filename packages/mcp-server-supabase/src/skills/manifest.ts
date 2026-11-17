@@ -4,14 +4,14 @@ import type {
   SkillFrontmatter,
   SkillResourceEntry,
 } from '@modelcontextprotocol/core/ext/skills';
-import {
-  MAX_SKILL_TOTAL_BYTES,
-  SKILL_MANIFEST_FILENAME,
-  SKILL_URI_SCHEME,
-} from '@modelcontextprotocol/core/ext/skills';
+import { SKILL_LIMITS } from '@modelcontextprotocol/core/ext/skills';
 import { extract as extractTar } from 'tar-stream';
 import { z } from 'zod/v4';
-import { AGENT_SKILLS_INDEX_URL } from './constants.js';
+import {
+  AGENT_SKILLS_INDEX_URL,
+  SKILL_MANIFEST_FILENAME,
+  SKILL_URI_SCHEME,
+} from './constants.js';
 
 const SHA256_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
@@ -193,17 +193,24 @@ function buildSkill(
     });
   }
 
-  // SEP-2640 says servers SHOULD NOT exceed 512 files or 16 MiB per skill,
-  // but does not forbid larger ones: hosts MUST support skills up to these
-  // limits and MAY support larger ones. So this isn't a wire-protocol error —
-  // nothing in the spec says a host must reject an oversized skill. Skipping
-  // (rather than serving) one this large is a local, practical safeguard
-  // against unbounded memory use from unpacking a whole tarball in memory,
-  // not a spec-mandated rejection. A future revision could stream/paginate
-  // large skills instead of skipping them outright.
-  if (totalBytes > MAX_SKILL_TOTAL_BYTES) {
+  // SEP-2640 says servers SHOULD NOT exceed 512 files or 16 MiB per skill
+  // (`SKILL_LIMITS`), but does not forbid larger ones: hosts MUST support
+  // skills up to these limits and MAY support larger ones. So this isn't a
+  // wire-protocol error — nothing in the spec says a host must reject an
+  // oversized skill. Skipping (rather than serving) one this large is a
+  // local, practical safeguard against unbounded memory use from unpacking a
+  // whole tarball in memory, not a spec-mandated rejection; the SDK's own
+  // skill catalog drops skills over these limits the same way. A future
+  // revision could stream/paginate large skills instead of skipping them.
+  if (files.length > SKILL_LIMITS.files) {
     console.error(
-      `[skills] skipping skill "${entry.name}": ${totalBytes} bytes exceeds the ${MAX_SKILL_TOTAL_BYTES}-byte practical limit this server enforces (SEP-2640 permits larger skills; hosts are not required to reject them)`
+      `[skills] skipping skill "${entry.name}": ${files.length} files exceeds the ${SKILL_LIMITS.files}-file practical limit this server enforces (SEP-2640 permits larger skills; hosts are not required to reject them)`
+    );
+    return undefined;
+  }
+  if (totalBytes > SKILL_LIMITS.bytes) {
+    console.error(
+      `[skills] skipping skill "${entry.name}": ${totalBytes} bytes exceeds the ${SKILL_LIMITS.bytes}-byte practical limit this server enforces (SEP-2640 permits larger skills; hosts are not required to reject them)`
     );
     return undefined;
   }

@@ -13,3 +13,13 @@ export const AGENT_SKILLS_INDEX_URL =
  * every skill archive on every request.
  */
 export const DEFAULT_SKILLS_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Scheme of the skill resource URIs this server mints
+ * (`skill://<name>/<path>`), as SEP-2640 recommends. SDK 2.4.0 no longer
+ * exports it.
+ */
+export const SKILL_URI_SCHEME = 'skill:';
+
+/** The file every skill archive must contain at its root (SEP-2640). */
+export const SKILL_MANIFEST_FILENAME = 'SKILL.md';
