@@ -10,14 +10,14 @@
   );
   --text-tertiary: var(
     --color-text-tertiary,
-    color-mix(in oklab, currentColor 50%, transparent)
+    color-mix(in oklab, currentColor 60%, transparent)
   );
   --border: var(
     --color-border-primary,
     color-mix(in oklab, currentColor 12%, transparent)
   );
-  --success: var(--color-text-success, #15803d);
-  --warning: var(--color-text-warning, #b45309);
+  --success: var(--color-text-success, #166534);
+  --warning: var(--color-text-warning, #92400e);
   --danger: var(--color-text-danger, #b91c1c);
 
   font-family: var(--font-sans, system-ui, -apple-system, sans-serif);

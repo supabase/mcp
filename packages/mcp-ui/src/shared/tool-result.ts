@@ -3,7 +3,7 @@ import type { CallToolResult } from '@modelcontextprotocol/client';
 /**
  * Parses the JSON text from a tool result.
  *
- * TODO: read `structuredContent` once the server sends it.
+ * TODO: read `structuredContent` once the server sends it (AI-847, AI-1364).
  */
 export function parseToolResult<T>(result: CallToolResult): T {
   const [first] = result.content;
