@@ -13,6 +13,7 @@ import { z } from 'zod/v4';
 import type { BranchingOperations } from '../platform/types.js';
 import { branchSchema } from '../platform/types.js';
 import { getBranchCost } from '../pricing.js';
+import { CREATE_BRANCH_UI_URI } from '../resources/app-resources.js';
 import { hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
@@ -112,6 +113,7 @@ export const branchingToolDefs = {
     description: `Creates a development branch on a Supabase project, which can incur hourly compute and other usage charges. The user must agree to the cost before the branch is created. ${callBeforeConfirmingDescription} This will apply all migrations from the main project to a fresh branch database. Note that production data will not carry over. The branch will get its own project_id via the resulting project_ref. Use this ID to execute queries and migrations on the branch.`,
     parameters: createBranchInputSchema,
     outputSchema: createBranchOutputSchema,
+    _meta: { ui: { resourceUri: CREATE_BRANCH_UI_URI } },
     annotations: {
       title: 'Create branch',
       readOnlyHint: false,
