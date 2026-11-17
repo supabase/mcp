@@ -19,6 +19,12 @@
   --success: var(--color-text-success, #166534);
   --warning: var(--color-text-warning, #92400e);
   --danger: var(--color-text-danger, #b91c1c);
+  /*
+   * Until the host sends a `theme` (optional in the spec), follow the
+   * preferred scheme so a dark host doesn't get an opaque light backdrop
+   * (https://drafts.csswg.org/css-color-adjust-1/#color-scheme-effect).
+   */
+  color-scheme: light dark;
 
   font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
   font-size: var(--font-text-sm-size, 14px);
@@ -31,6 +37,14 @@
   --success: var(--color-text-success, #4ade80);
   --warning: var(--color-text-warning, #fbbf24);
   --danger: var(--color-text-danger, #f87171);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --success: var(--color-text-success, #4ade80);
+    --warning: var(--color-text-warning, #fbbf24);
+    --danger: var(--color-text-danger, #f87171);
+  }
 }
 
 body {
