@@ -10,35 +10,19 @@ Views talk to the host with the official SDK, [`@modelcontextprotocol/ext-apps`]
 
 ## Develop a view
 
-```bash
-pnpm --filter @supabase/mcp-ui dev
-```
-
-Opens a mock host at `/dev/` that renders each view with canned tool input and results from `dev/fixtures.ts`. It uses the SDK's real host side (`AppBridge`), so no Supabase account or MCP server is needed, and views get HMR.
-
-Add `?source=dist` to load the built HTML from `dist/` instead of the dev source.
-
-## Test against the real server
-
-Run the server with `pnpm dev:http` from the repo root (it also rebuilds views on change), then use [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is a full MCP Apps host. Views are off by default and only shown to modern-era clients that advertise MCP Apps, so add `?experimental_apps=true` to the URL and use the modern protocol:
+Views render in [MCP Inspector](https://github.com/modelcontextprotocol/inspector), a full MCP Apps host. From the repo root, in two terminals:
 
 ```bash
-# Check which tools have a UI and how it's configured (no browser needed)
-npx @modelcontextprotocol/inspector --cli \
-  --transport http --server-url "http://127.0.0.1:3111/mcp?experimental_apps=true" \
-  --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-  --protocol-era modern --advertise-apps \
-  --method tools/list --app-info
-
-# Open the web UI to call a tool and see its view rendered
-npx @modelcontextprotocol/inspector --web
+pnpm dev:http                              # rebuilds views and restarts the server on change
+SUPABASE_ACCESS_TOKEN=<your pat> pnpm inspector
 ```
+
+`pnpm inspector` opens the web UI already pointed at the dev server with `?experimental_apps=true`, your token and the modern protocol, since views are only shown to modern-era clients that advertise MCP Apps. Connect, then open the Apps tab. Inspector caches view HTML per connection, so reconnect after a change.
 
 ## Add a view
 
 1. Create `src/views/<name>/index.html` and its React entry. `pnpm build` picks up every folder in `src/views/`.
 2. In `packages/mcp-server-supabase/src/resources/app-resources.ts`, import `@supabase/mcp-ui/<name>.html` and register it as a resource.
 3. Link the tool to it with `_meta: { ui: { resourceUri } }` in its definition.
-4. Add a fixture in `dev/fixtures.ts`.
 
 Keep views small. The whole HTML is sent on every `resources/read`, so prefer system fonts and SVG icons, and avoid heavy dependencies unless a view really needs them.
