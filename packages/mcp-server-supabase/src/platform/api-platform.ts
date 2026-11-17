@@ -22,6 +22,7 @@ import {
 import type { components as ManagementApiV2Components } from '../management-api-v2/types.js';
 import { generatePassword } from '../password.js';
 import { createFeedbackOperations } from './feedback.js';
+import { getDefaultImportMapPath } from './import-map.js';
 import {
   applyMigrationOptionsSchema,
   createNotebookOptionsSchema,
@@ -1033,27 +1034,6 @@ function getNextNotebooksCursor(next: string | null | undefined) {
 
   const url = new URL(next, 'https://supabase.com');
   return url.searchParams.get('page[after]') ?? undefined;
-}
-
-/**
- * Import map file names detected in an Edge Function's root, in order of
- * precedence: `deno.json` before `deno.jsonc`, as the Supabase CLI does, then
- * the legacy `import_map.json`.
- */
-const DEFAULT_IMPORT_MAP_FILENAMES = [
-  'deno.json',
-  'deno.jsonc',
-  'import_map.json',
-] as const;
-
-/**
- * Picks the import map to deploy with when none was given or previously set,
- * independent of the order the files were passed in.
- */
-function getDefaultImportMapPath(files: { name: string }[]) {
-  return DEFAULT_IMPORT_MAP_FILENAMES.find((filename) =>
-    files.some((file) => file.name === filename)
-  );
 }
 
 function getProjectDomain(apiHostname: string) {
