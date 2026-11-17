@@ -19,6 +19,24 @@ SUPABASE_ACCESS_TOKEN=<your pat> pnpm inspector
 
 `pnpm inspector` opens the web UI already pointed at the dev server with `?experimental_apps=true`, your token and the modern protocol, since views are only shown to modern-era clients that advertise MCP Apps. Connect, then open the Apps tab. Inspector caches view HTML per connection, so reconnect after a change.
 
+### Visually test scenarios with the mock API
+
+To see a view's progress, failure and timeout states without a Supabase account, run the mock Management API and point the dev server at it, in three terminals from the repo root:
+
+```bash
+pnpm mock-api                              # fake Management API on http://localhost:4010
+pnpm dev:http --api-url http://localhost:4010 --secret-url-template 'http://localhost:4010/mcp/secrets?ref={ref}&name={name}'
+SUPABASE_ACCESS_TOKEN=mock pnpm inspector  # any bearer token works with the mock
+```
+
+`pnpm inspector` targets the `pnpm dev:http` server on `127.0.0.1:3111`, and `dev:http` forwards the extra flags to the server, so Inspector connects the same way as against the real API. Switch scenarios at runtime, then call the tool again:
+
+```bash
+curl -X POST localhost:4010/__scenario -d '{"name":"create-project:init-failed"}'
+```
+
+The scenario list and other endpoints are in [`packages/mcp-server-supabase/dev/README.md`](../mcp-server-supabase/dev/README.md).
+
 ## Styling
 
 Views are themed by the host first. `useHostStyles` applies the host's theme and MCP Apps style variables (`--color-text-primary`, `--font-sans`, `--border-radius-md`, …), and every rule reads those variables directly. `src/shared/styles.css` declares a fallback for each one, taken from the Supabase design system, which applies only when the host omits it. Dark mode is `light-dark()` in those fallbacks, following the host's theme.
