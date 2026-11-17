@@ -18,3 +18,7 @@ catalog:
   '@modelcontextprotocol/server': ^2.0.0
   ai: ^6.0.100
   zod: ^3.25.0 || ^4.0.0
+
+# Refuse versions published in the last 7 days (minutes). Keeps the lockfile
+# inside the DepthFirst firewall cooldown used by the preview/release installs.
+minimumReleaseAge: 10080

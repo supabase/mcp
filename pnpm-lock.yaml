@@ -28,9 +28,6 @@ catalogs:
       specifier: ^3.25.0 || ^4.0.0
       version: 4.2.1
 
-overrides:
-  '@modelcontextprotocol/inspector>@hono/node-server': 2.1.8
-
 importers:
 
   .:
