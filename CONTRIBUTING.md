@@ -4,6 +4,7 @@ Before opening an issue or PR, please read this guide.
 
 - **Issues** should describe a bug or feature request with context on why it matters. Issues that promote unaffiliated products or services will be closed.
 - **PRs** should address an accepted issue. Open an issue first for new features or behavior changes so we can agree on the approach before you invest time coding. PRs that promote unaffiliated products or services will be closed.
+- **`@supabase/mcp-server-postgrest`** is deprecated. We no longer accept issues or PRs for it.
 - AI-assisted contributions are welcome, but a human must review and verify the output. Include verification steps and evidence (screenshots, test output, etc.) in the PR description.
 
 ## Development setup
