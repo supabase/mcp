@@ -71,6 +71,11 @@
       var(--color-text-primary) 13.5%,
       transparent
     );
+    --color-border-secondary: color-mix(
+      in oklab,
+      var(--color-text-primary) 8%,
+      transparent
+    );
     --color-border-disabled: color-mix(
       in oklab,
       var(--color-text-primary) 8%,
@@ -106,6 +111,8 @@
     --font-text-xs-line-height: 1.33;
     --font-text-sm-size: 13px;
     --font-text-sm-line-height: 1.43;
+    --font-text-md-size: 14px;
+    --font-text-md-line-height: 1.43;
 
     --border-width-regular: 1px;
     --border-radius-md: 6px;
@@ -117,6 +124,9 @@
     --sb-space-2: 8px;
     --sb-space-3: 12px;
     --sb-space-4: 16px;
+
+    --sb-control-compact-padding-block: 6px;
+    --sb-control-compact-padding-inline: var(--sb-space-2);
 
     /* The host's safe area insets, set by `useHostStyles`. */
     --sb-inset-top: 0px;
@@ -199,17 +209,43 @@
 @layer components {
   /* The card around a long-running operation (see ProgressView). */
   :where(.progress-card) {
+    /* The card's padding, corner radius and border width. Parts styled
+       elsewhere that sit inside the card (the ready-actions connection block)
+       read these to stay aligned with it. */
+    --sb-local-card-padding-block: var(--sb-space-3);
+    --sb-local-card-padding-inline: var(--sb-space-4);
+    --sb-local-card-radius: var(--border-radius-lg);
+    --sb-local-card-border-width: var(--border-width-regular);
+
     display: flex;
     flex-direction: column;
     gap: var(--sb-space-3);
-    padding: var(--sb-space-3) var(--sb-space-4);
+    padding: var(--sb-local-card-padding-block)
+      var(--sb-local-card-padding-inline);
     overflow: hidden;
-    border: var(--border-width-regular) solid var(--color-border-primary);
-    border-radius: var(--border-radius-lg);
+    border: var(--sb-local-card-border-width) solid var(--color-border-primary);
+    border-radius: var(--sb-local-card-radius);
 
+    /* Eyebrow label naming the operation and its state. */
+    :where([data-slot="title"]) {
+      margin: 0;
+      color: var(--color-text-tertiary);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+      font-weight: var(--font-weight-medium);
+    }
+
+    /* The heading row, then the summary. */
     :where([data-slot="header"]) {
       display: flex;
-      align-items: flex-start;
+      flex-direction: column;
+      gap: var(--sb-space-1);
+    }
+
+    /* Eyebrow title on the left, status badge on the right. */
+    :where([data-slot="heading"]) {
+      display: flex;
+      align-items: center;
       justify-content: space-between;
       gap: var(--sb-space-3);
     }
@@ -218,26 +254,46 @@
     :where([data-slot="step"]) {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: var(--sb-space-2);
       color: var(--color-text-primary);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
 
       &:where([data-state="failed"]) {
         color: var(--color-text-danger);
       }
     }
 
-    /* Polling timed out or failed: a message and a retry button. */
+    /* A single-message state: polling timed out or failed, the call was
+       cancelled with a reason, or the tool call itself failed (failure icon and message). */
     :where([data-slot="problem"]) {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: var(--sb-space-2);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+
+      &:where([data-tone="danger"]) {
+        flex-wrap: nowrap;
+        color: var(--color-text-danger);
+      }
+
+      &:where([data-tone="muted"]) {
+        color: var(--color-text-tertiary);
+      }
     }
   }
 
   /* Name, identifier and extra facts (see Summary). */
   :where(.summary) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-space-1);
+
     :where([data-slot="name"]) {
+      font-size: var(--font-text-md-size);
+      line-height: var(--font-text-md-line-height);
       font-weight: var(--font-weight-medium);
     }
 
@@ -256,12 +312,12 @@
     display: inline-flex;
     align-items: center;
     gap: var(--sb-space-1);
-    padding: 3px 10px;
+    padding: 2px var(--sb-space-2);
     border: var(--border-width-regular) solid var(--color-border-primary);
     border-radius: var(--border-radius-full);
     background: var(--color-background-secondary);
     color: var(--color-text-secondary);
-    font-size: var(--font-text-sm-size);
+    font-size: var(--font-text-xs-size);
     font-weight: var(--font-weight-medium);
     line-height: var(--font-text-xs-line-height);
     white-space: nowrap;
@@ -298,6 +354,15 @@
     }
   }
 
+  /* Compact button, as tall as the copy field's controls. */
+  button:where([data-size="sm"]) {
+    gap: var(--sb-space-1);
+    padding: var(--sb-control-compact-padding-block)
+      var(--sb-control-compact-padding-inline);
+    font-size: var(--font-text-xs-size);
+    line-height: var(--font-text-xs-line-height);
+  }
+
   button:where(.primary) {
     border-color: transparent;
     background: var(--color-background-inverse);
@@ -330,17 +395,108 @@
       gap: var(--sb-space-2);
     }
 
-    :where([data-slot="details"]) {
-      display: flex;
-      flex-direction: column;
-      gap: var(--sb-space-3);
+    /*
+     * A native disclosure along the bottom of the card. It relies on being
+     * inside .progress-card: the negative margins cancel the card's inline and
+     * bottom padding (--sb-local-card-padding-inline and
+     * --sb-local-card-padding-block, declared on .progress-card) so
+     * the divider and tinted background run edge to edge (the card clips the
+     * rounded corners). The summary and panel use the same inline padding to
+     * line up with the card's content. While collapsed, the summary is the
+     * card's bottom edge, so it also reads --sb-local-card-radius and
+     * --sb-local-card-border-width to round its bottom corners to the card's
+     * inner curve and keep its focus ring from being clipped. The open panel needs no such rounding: its contents are
+     * padded away from the edge.
+     */
+    :where([data-slot="connection"]) {
+      margin-inline: calc(-1 * var(--sb-local-card-padding-inline));
+      margin-block-end: calc(-1 * var(--sb-local-card-padding-block));
+      background: var(--color-background-secondary);
+      border-block-start: var(--border-width-regular) solid
+        var(--color-border-secondary);
+
+      :where(summary) {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--sb-space-2);
+        padding: var(--sb-space-2) var(--sb-local-card-padding-inline);
+        font-size: var(--font-text-xs-size);
+        font-weight: var(--font-weight-medium);
+        line-height: var(--font-text-xs-line-height);
+        color: var(--color-text-tertiary);
+        cursor: pointer;
+        list-style: none;
+
+        &::-webkit-details-marker {
+          display: none;
+        }
+
+        /* The card clips overflow, so keep the focus ring inside. */
+        &:where(:focus-visible) {
+          outline-offset: -2px;
+        }
+
+        &:where(:hover) {
+          color: var(--color-text-secondary);
+        }
+
+        :where(.icon) {
+          transition: transform 0.15s ease;
+
+          @media (prefers-reduced-motion: reduce) {
+            transition: none;
+          }
+        }
+      }
+
+      /* Inner radius = outer radius minus the border. */
+      &:where(:not([open])) :where(summary) {
+        border-end-start-radius: calc(
+          var(--sb-local-card-radius) -
+          var(--sb-local-card-border-width)
+        );
+        border-end-end-radius: calc(
+          var(--sb-local-card-radius) -
+          var(--sb-local-card-border-width)
+        );
+      }
+
+      &:where([open]) :where(summary .icon) {
+        transform: rotate(180deg);
+      }
+
+      :where([data-slot="panel"]) {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sb-space-3);
+        padding: 0 var(--sb-local-card-padding-inline)
+          var(--sb-local-card-padding-block);
+      }
+
+      :where([data-slot="loading"]) {
+        display: flex;
+        align-items: center;
+        gap: var(--sb-space-2);
+        color: var(--color-text-tertiary);
+      }
     }
 
     :where([data-slot="ping-result"]) {
       color: var(--color-text-secondary);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+
+      /* A long message wraps inside the row instead of overflowing. */
+      min-inline-size: 0;
+      overflow-wrap: anywhere;
 
       :where([data-tone="success"]) {
         color: var(--color-text-success);
+      }
+
+      :where([data-tone="danger"]) {
+        color: var(--color-text-danger);
       }
     }
   }
@@ -369,14 +525,32 @@
 
     :where([data-slot="control"]) {
       display: flex;
-      align-items: center;
+      align-items: stretch;
       gap: var(--sb-space-2);
+    }
+
+    /* Icon-only, square, as tall as the value box beside it. */
+    :where([data-slot="copy"]) {
+      flex: none;
+      justify-content: center;
+      aspect-ratio: 1;
+      padding: var(--sb-control-compact-padding-block)
+        var(--sb-control-compact-padding-inline);
+
+      &:where([data-state="copied"]) {
+        color: var(--color-text-success);
+      }
+
+      &:where([data-state="failed"]) {
+        color: var(--color-text-danger);
+      }
     }
 
     :where([data-slot="value"]) {
       flex: 1;
       min-inline-size: 0;
-      padding: 6px 8px;
+      padding: var(--sb-control-compact-padding-block)
+        var(--sb-control-compact-padding-inline);
       overflow-x: auto;
       white-space: nowrap;
       border: var(--border-width-regular) solid var(--color-border-primary);

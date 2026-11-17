@@ -1,9 +1,10 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { ReactNode } from 'react';
-import { Message } from './Message';
+import { Badge } from './Badge';
 import type { PollState } from './use-poll';
 import { ReadyActions } from './ReadyActions';
 import { useAnnouncement } from './Announcer';
+import { SpinnerIcon, XCircleIcon } from './icons';
 import { type Step, StepBadge, StepLine, stepAnnouncement } from './StepStatus';
 import type { ToolCallState } from './use-mcp-view';
 
@@ -16,6 +17,10 @@ export function ProgressView<T>({
   toolCall,
   app,
   waitingLabel,
+  input,
+  noun,
+  titles,
+  inputSummary,
   summary,
   steps,
   ready,
@@ -27,6 +32,27 @@ export function ProgressView<T>({
   toolCall: ToolCallState<T>;
   app: App | null;
   waitingLabel: string;
+  /** The tool call's arguments, once received. */
+  input?: Record<string, unknown>;
+  /** What is being created, for messages: "project" or "branch". */
+  noun: string;
+  /**
+   * Card heading per state: `created` once ready, `failed` when a step
+   * failed or the tool call returned an error, `cancelled` when the call was
+   * cancelled, otherwise `creating` (including timed out and poll errors,
+   * where the outcome is unknown).
+   */
+  titles: {
+    creating: string;
+    created: string;
+    failed: string;
+    cancelled: string;
+  };
+  /**
+   * Summary for the cards shown when the tool call failed or was cancelled,
+   * built from its arguments. Return nothing if they lack what it needs.
+   */
+  inputSummary: (input: Record<string, unknown>) => ReactNode;
   /**
    * Renders names and identifiers. This and the callbacks below receive the
    * latest known data: the newest polled result, or the tool result until the
@@ -48,6 +74,10 @@ export function ProgressView<T>({
     toolCall,
     app,
     waitingLabel,
+    input,
+    noun,
+    titles,
+    inputSummary,
     summary,
     steps,
     ready,
@@ -67,6 +97,10 @@ function progressBody<T>({
   toolCall,
   app,
   waitingLabel,
+  input,
+  noun,
+  titles,
+  inputSummary,
   summary,
   steps,
   ready,
@@ -80,17 +114,56 @@ function progressBody<T>({
 } {
   if (toolCall.status === 'error') {
     return {
-      content: <Message tone="error">{toolCall.message}</Message>,
-      announce: { assertive: toolCall.message },
+      content: (
+        <div className="progress-card">
+          <CardHeader
+            title={titles.failed}
+            badge={<Badge tone="danger">Failed</Badge>}
+          >
+            {input && inputSummary(input)}
+          </CardHeader>
+          <div data-slot="problem" data-tone="danger">
+            <XCircleIcon />
+            <span>{toolCall.message}</span>
+          </div>
+        </div>
+      ),
+      announce: { assertive: `${titles.failed}: ${toolCall.message}` },
     };
   }
   if (toolCall.status === 'cancelled') {
-    const text = `Cancelled${toolCall.reason ? ` (${toolCall.reason})` : ''}.`;
-    return { content: <Message>{text}</Message>, announce: { polite: text } };
+    const { reason } = toolCall;
+    return {
+      content: (
+        <div className="progress-card">
+          <CardHeader title={titles.cancelled} badge={<Badge>Cancelled</Badge>}>
+            {input && inputSummary(input)}
+          </CardHeader>
+          {reason && (
+            <div data-slot="problem" data-tone="muted">
+              <span>{reason}</span>
+            </div>
+          )}
+        </div>
+      ),
+      announce: {
+        polite: reason ? `Cancelled: ${reason}` : 'Cancelled',
+      },
+    };
   }
   if (toolCall.status === 'loading') {
     return {
-      content: <Message>{waitingLabel}</Message>,
+      content: (
+        <div className="progress-card">
+          <CardHeader title={titles.creating}>
+            {input && inputSummary(input)}
+          </CardHeader>
+          <div data-slot="step" data-state="active">
+            <SpinnerIcon />
+            <span>{waitingLabel}</span>
+          </div>
+        </div>
+      ),
       announce: { polite: waitingLabel },
     };
   }
@@ -103,35 +176,44 @@ function progressBody<T>({
       ? `Can't check progress: ${poll.error.message}. Ask the assistant to check with ${checkWith}.`
       : undefined;
   const timedOut = !isReady && poll.status === 'timeout';
+  const failed = stepList.some((step) => step.state === 'failed');
+  const title = isReady
+    ? titles.created
+    : failed
+      ? titles.failed
+      : titles.creating;
 
   const announce = stepAnnouncement(stepList);
-  if (timedOut) announce.polite = 'Timed out.';
+  const timeoutText = `Timed out while polling for ${noun} status.`;
+  if (timedOut) announce.polite = timeoutText;
   if (pollError) announce.assertive = pollError;
 
   return {
     announce,
     content: (
       <div className="progress-card">
-        <div data-slot="header">
+        <CardHeader
+          title={title}
+          badge={
+            // With a poll error the step count is stale, so show no badge.
+            pollError ? undefined : (
+              <StepBadge steps={stepList} timedOut={timedOut} />
+            )
+          }
+        >
           {summary(data)}
-          <StepBadge steps={stepList} timedOut={timedOut} />
-        </div>
-        <StepLine steps={stepList} running={poll.status === 'running'} />
-        {timedOut && (
-          <div data-slot="problem">
-            <Message>Timed out.</Message>
-            <button type="button" onClick={poll.retry}>
-              Retry
-            </button>
+        </CardHeader>
+        {pollError ? (
+          <div data-slot="problem" data-tone="danger">
+            <XCircleIcon />
+            <span>{pollError}</span>
           </div>
-        )}
-        {pollError && (
-          <div data-slot="problem">
-            <Message tone="error">{pollError}</Message>
-            <button type="button" onClick={poll.retry}>
-              Retry
-            </button>
+        ) : timedOut ? (
+          <div data-slot="problem" data-tone="muted">
+            <span>{timeoutText}</span>
           </div>
+        ) : (
+          <StepLine steps={stepList} />
         )}
         {isReady && app && (
           <ReadyActions
@@ -143,6 +225,28 @@ function progressBody<T>({
       </div>
     ),
   };
+}
+
+/** The card header: the eyebrow title, an optional badge, then the summary. */
+function CardHeader({
+  title,
+  badge,
+  children,
+}: {
+  title: string;
+  badge?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div data-slot="header">
+      <div data-slot="heading">
+        {/* Not announced: the caller announces the state. */}
+        <h2 data-slot="title">{title}</h2>
+        {badge}
+      </div>
+      {children}
+    </div>
+  );
 }
 
 /** Name, identifier and extra facts, e.g. region. */

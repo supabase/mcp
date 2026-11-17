@@ -33,6 +33,12 @@ type Scenario = {
   description: string;
   /** Status returned by each successive `GET /v1/projects/{ref}` poll of a project created while active; the last one repeats. */
   projectStatuses: ProjectStatus[];
+  /** Creating a project fails with a 400 and this message. */
+  projectCreateError?: string;
+  /** Creating a branch fails with a 400 and this message. */
+  branchCreateError?: string;
+  /** The first branch list fails with a 503. */
+  branchFirstPollError?: string;
   /** The first project poll fails with a 503. */
   projectFirstPollError?: string;
   /** Status returned by each successive branch list for a branch created while active; the last one repeats. */
@@ -81,6 +87,12 @@ const scenarios: Record<string, Scenario> = {
     projectFirstPollError: 'Service temporarily unavailable',
     branchStatuses: HAPPY_BRANCH,
   },
+  'create-project:create-failed': {
+    description: 'POST /v1/projects fails, so the tool call returns an error',
+    projectStatuses: HAPPY_PROJECT,
+    projectCreateError: 'Project limit reached for this organization',
+    branchStatuses: HAPPY_BRANCH,
+  },
   'create-branch:happy': {
     description:
       'CREATING_PROJECT, RUNNING_MIGRATIONS, MIGRATIONS_PASSED, FUNCTIONS_DEPLOYED',
@@ -104,6 +116,20 @@ const scenarios: Record<string, Scenario> = {
       'MIGRATIONS_PASSED',
       'FUNCTIONS_FAILED',
     ],
+  },
+  'create-branch:create-failed': {
+    description:
+      'POST /v1/projects/{ref}/branches fails, so the tool call returns an error',
+    projectStatuses: HAPPY_PROJECT,
+    branchCreateError: 'Branching is not enabled for this project',
+    branchStatuses: HAPPY_BRANCH,
+  },
+  'create-branch:polling-error': {
+    description:
+      'First poll fails with "Service temporarily unavailable" (503); retry then follows the happy sequence',
+    projectStatuses: HAPPY_PROJECT,
+    branchFirstPollError: 'Service temporarily unavailable',
+    branchStatuses: HAPPY_BRANCH,
   },
   'create-branch:polling-timeout': {
     description:
@@ -314,6 +340,10 @@ route('GET', '/v1/projects', () => ({
 }));
 
 route('POST', '/v1/projects', ({ body }) => {
+  const { projectCreateError } = active();
+  if (projectCreateError) {
+    return { status: 400, body: { message: projectCreateError } };
+  }
   const ref = randomRef();
   const project = makeProject({
     ref,
@@ -352,11 +382,22 @@ route('GET', '/v1/projects/{ref}', ({ params }) => {
 route('GET', '/v1/projects/{ref}/branches', ({ params }) => {
   const list = branches.get(params.ref!) ?? [];
   const scenario = active();
+  if (scenario.branchFirstPollError) {
+    const fresh = list.filter((state) => !state.seeded && state.polls === 0);
+    if (fresh.length > 0) {
+      for (const state of fresh) state.polls++;
+      return {
+        status: 503,
+        body: { message: scenario.branchFirstPollError },
+      };
+    }
+  }
+  const offset = scenario.branchFirstPollError ? 1 : 0;
   const response: Branch[] = list.map((state) => {
     if (!state.seeded) {
       state.branch = {
         ...state.branch,
-        status: pick(scenario.branchStatuses, state.polls++),
+        status: pick(scenario.branchStatuses, state.polls++ - offset),
         updated_at: new Date().toISOString(),
       };
     }
@@ -366,6 +407,10 @@ route('GET', '/v1/projects/{ref}/branches', ({ params }) => {
 });
 
 route('POST', '/v1/projects/{ref}/branches', ({ params, body }) => {
+  const { branchCreateError } = active();
+  if (branchCreateError) {
+    return { status: 400, body: { message: branchCreateError } };
+  }
   const branch = makeBranch({
     parent: params.ref!,
     name: body?.branch_name ?? 'branch',

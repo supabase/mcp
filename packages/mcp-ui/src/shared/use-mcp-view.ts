@@ -1,13 +1,14 @@
 import type { App, McpUiHostContext } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { useEffect, useState } from 'react';
-import { parseToolResult } from './tool-result';
+import { parseToolError, parseToolResult } from './tool-result';
 import { useHostStyles } from './use-host-styles';
 
 export type ToolCallState<T> =
   | { status: 'loading' }
   | { status: 'ready'; data: T }
   | { status: 'cancelled'; reason?: string }
+  /** The tool call returned an error, or the view couldn't read its result. */
   | { status: 'error'; message: string };
 
 export type McpView<T> = {
@@ -37,6 +38,10 @@ export function useMcpView<T>(name: string): McpView<T> {
     onAppCreated: (app) => {
       app.ontoolinput = ({ arguments: args }) => setInput(args);
       app.ontoolresult = (result) => {
+        if (result.isError) {
+          setToolCall({ status: 'error', message: parseToolError(result) });
+          return;
+        }
         try {
           setToolCall({ status: 'ready', data: parseToolResult<T>(result) });
         } catch (err) {

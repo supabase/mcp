@@ -66,16 +66,9 @@ export function StepBadge({
 
 /**
  * The running step with a spinner, or the step that failed. Nothing once
- * every step is done. `running` false (polling stopped) drops the spinner.
- * Visual only: announce changes with `stepAnnouncement` and `useAnnouncement`.
+ * every step is done. Visual only: announce changes with `stepAnnouncement` and `useAnnouncement`.
  */
-export function StepLine({
-  steps,
-  running = true,
-}: {
-  steps: Step[];
-  running?: boolean;
-}) {
+export function StepLine({ steps }: { steps: Step[] }) {
   const now = current(steps);
   if (!now) return null;
   if (now.step.state === 'failed') {
@@ -88,7 +81,7 @@ export function StepLine({
   }
   return (
     <div data-slot="step" data-state={now.step.state}>
-      {running && <SpinnerIcon />}
+      <SpinnerIcon />
       <span>{now.step.label}…</span>
     </div>
   );

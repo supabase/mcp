@@ -32,7 +32,9 @@ function currentStep(status: string) {
 
 /** View for the `create_project` tool. */
 export function CreateProject() {
-  const { toolCall, app } = useMcpView<Project>('supabase-create-project');
+  const { toolCall, app, input } = useMcpView<Project>(
+    'supabase-create-project'
+  );
   const project = toolCall.status === 'ready' ? toolCall.data : undefined;
 
   const poll = usePoll<Project>({
@@ -49,6 +51,19 @@ export function CreateProject() {
         poll={poll}
         checkWith="get_project"
         waitingLabel="Waiting for confirmation…"
+        input={input}
+        noun="project"
+        titles={{
+          creating: 'Creating project',
+          created: 'Created project',
+          failed: 'Creating project failed',
+          cancelled: 'Creating project cancelled',
+        }}
+        inputSummary={({ name, region }) =>
+          typeof name === 'string' && typeof region === 'string' ? (
+            <Summary name={name} items={[{ label: 'region', value: region }]} />
+          ) : undefined
+        }
         summary={(p) => (
           <Summary
             name={p.name}

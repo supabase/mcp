@@ -30,11 +30,35 @@ export function XCircleIcon() {
   );
 }
 
+export function CheckIcon() {
+  return (
+    <svg {...base}>
+      <path d="m3.5 8.5 3 3 6-7" />
+    </svg>
+  );
+}
+
 export function CopyIcon() {
   return (
     <svg {...base}>
       <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
       <path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
+    </svg>
+  );
+}
+
+export function ChevronIcon() {
+  return (
+    <svg {...base}>
+      <path d="m4 6 4 4 4-4" />
+    </svg>
+  );
+}
+
+export function ActivityIcon() {
+  return (
+    <svg {...base}>
+      <path d="M1.5 8h2.5l2-5 4 10 2-5h2.5" />
     </svg>
   );
 }

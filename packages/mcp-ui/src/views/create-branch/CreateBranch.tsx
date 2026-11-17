@@ -21,7 +21,7 @@ export type Branch = {
 
 const LABELS = [
   'Creating branch',
-  'Creating project',
+  'Provisioning branch database',
   'Running migrations',
   'Deploying functions',
 ];
@@ -40,7 +40,7 @@ function progress(status: string): { step: number; failed: boolean } {
     case 'FUNCTIONS_FAILED':
       return { step: 3, failed: true };
     default:
-      // CREATING_PROJECT and anything unknown.
+      // CREATING_PROJECT (provisioning the branch's database) and anything unknown.
       return { step: 1, failed: false };
   }
 }
@@ -50,7 +50,7 @@ const isTerminal = (status: string) =>
 
 /** View for the `create_branch` tool. */
 export function CreateBranch() {
-  const { toolCall, app } = useMcpView<Branch>('supabase-create-branch');
+  const { toolCall, app, input } = useMcpView<Branch>('supabase-create-branch');
   const branch = toolCall.status === 'ready' ? toolCall.data : undefined;
   // Whether the last poll found the server scoped (to the parent project).
   // Then no tool can target the branch's own project.
@@ -85,6 +85,19 @@ export function CreateBranch() {
         poll={poll}
         checkWith="list_branches"
         waitingLabel="Waiting for confirmation…"
+        input={input}
+        noun="branch"
+        titles={{
+          creating: 'Creating branch',
+          created: 'Created branch',
+          failed: 'Creating branch failed',
+          cancelled: 'Creating branch cancelled',
+        }}
+        inputSummary={({ name }) =>
+          typeof name === 'string' ? (
+            <Summary name={name} items={[]} />
+          ) : undefined
+        }
         summary={(b) => (
           <Summary
             name={b.name}

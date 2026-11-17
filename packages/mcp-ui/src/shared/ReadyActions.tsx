@@ -1,8 +1,9 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
-import type { MouseEvent } from 'react';
+import type { MouseEvent, SyntheticEvent } from 'react';
 import { type Politeness, useAnnounce } from './Announcer';
 import { callProjectTool } from './call-tool';
 import { CopyField } from './CopyField';
+import { ActivityIcon, ChevronIcon, SpinnerIcon } from './icons';
 import { Message } from './Message';
 import { type Transition, useMachine } from './use-machine';
 
@@ -17,7 +18,9 @@ type Key = {
 type Announce = { type: 'announce'; message: string; politeness?: Politeness };
 
 /**
- * Connection details: fetched once requested. If they can't be fetched (the
+ * Connection details: fetched the first time the disclosure opens, then kept
+ * here across collapse and expand (whether it is open is separate state, owned
+ * by the `<details>` element). If they can't be fetched (the
  * development tools are off, the server is scoped to another project, there's
  * no enabled key, or the call failed), a link to the dashboard's Connect
  * dialog is shown instead. Both outcomes are final.
@@ -137,8 +140,8 @@ const errorMessage = (err: unknown) =>
   err instanceof Error ? err.message : String(err);
 
 /**
- * Actions for a project that is ready: show its connection details and ping
- * it. UI-only: nothing here is sent to the model's context.
+ * Actions for a project that is ready: ping it, and a collapsible disclosure
+ * with its connection details. UI-only: nothing here is sent to the model's context.
  *
  * Calls always pass `projectRef` and never fall back to a scoped server's own
  * project, which is never the one this view created: a scoped server makes the
@@ -228,48 +231,66 @@ export function ReadyActions({
     void app.openLink({ url: dashboardUrl });
   }
 
+  // Only opening requests details; the machine ignores requests once it has
+  // left `idle`, so re-opening never refetches.
+  function onToggle(event: SyntheticEvent<HTMLDetailsElement>) {
+    if (event.currentTarget.open) {
+      sendConnection({ type: 'request', canFetch: canReachProject });
+    }
+  }
+
+  const showActions = canReachProject;
+
   return (
     <div className="ready-actions">
-      <div data-slot="actions">
-        <button
-          type="button"
-          className="primary"
-          onClick={() =>
-            sendConnection({ type: 'request', canFetch: canReachProject })
-          }
-          disabled={connection.status !== 'idle'}
-        >
-          Connection details
-        </button>
-        {canReachProject && (
+      {showActions && (
+        <div data-slot="actions">
           <button
             type="button"
+            data-size="sm"
             onClick={() => sendPing({ type: 'start' })}
             disabled={ping.status === 'running'}
           >
+            {ping.status === 'running' ? <SpinnerIcon /> : <ActivityIcon />}
             {ping.status === 'running' ? 'Pinging…' : 'Ping project'}
           </button>
-        )}
-        {ping.status === 'ok' && (
-          <span data-slot="ping-result">
-            <span data-tone="success">Reachable</span>, {ping.ms} ms
-          </span>
-        )}
-      </div>
-      {ping.status === 'error' && (
-        <Message tone="error">{ping.message}</Message>
-      )}
-      {connection.status === 'dashboard' && (
-        <a href={dashboardUrl} onClick={openDashboard}>
-          Open connection details in the dashboard
-        </a>
-      )}
-      {connection.status === 'details' && (
-        <div data-slot="details">
-          <CopyField label="Project URL" value={connection.url} />
-          <CopyField label="Publishable key" value={connection.key} />
+          {ping.status === 'ok' && (
+            <span data-slot="ping-result">
+              <span data-tone="success">Reachable</span>, {ping.ms} ms
+            </span>
+          )}
+          {ping.status === 'error' && (
+            <span data-slot="ping-result">
+              <span data-tone="danger">Failed</span>, {ping.message}
+            </span>
+          )}
         </div>
       )}
+      <details data-slot="connection" onToggle={onToggle}>
+        <summary>
+          Connection details
+          <ChevronIcon />
+        </summary>
+        <div data-slot="panel">
+          {connection.status === 'loading' && (
+            <div data-slot="loading">
+              <SpinnerIcon />
+              <Message>Loading connection details…</Message>
+            </div>
+          )}
+          {connection.status === 'dashboard' && (
+            <a href={dashboardUrl} onClick={openDashboard}>
+              Open connection details in the dashboard
+            </a>
+          )}
+          {connection.status === 'details' && (
+            <>
+              <CopyField label="Project URL" value={connection.url} />
+              <CopyField label="Publishable key" value={connection.key} />
+            </>
+          )}
+        </div>
+      </details>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export const POLL_INTERVAL_MS = 5000;
 export const POLL_TIMEOUT_MS = 10 * 60 * 1000;
@@ -8,16 +8,11 @@ export const POLL_TIMEOUT_MS = 10 * 60 * 1000;
  * done, and there in the other states once any poll has succeeded (after an
  * error, it's the result from before the error).
  */
-export type PollStatus<T> =
+export type PollState<T> =
   | { status: 'running'; data?: T }
   | { status: 'done'; data: T }
   | { status: 'timeout'; data?: T }
   | { status: 'error'; error: Error; data?: T };
-
-export type PollState<T> = PollStatus<T> & {
-  /** Restarts polling with a fresh timeout. */
-  retry: () => void;
-};
 
 /**
  * Calls `fetcher` immediately and then every `intervalMs` (default
@@ -39,8 +34,7 @@ export function usePoll<T>({
   intervalMs?: number;
   timeoutMs?: number;
 }): PollState<T> {
-  const [state, setState] = useState<PollStatus<T>>({ status: 'running' });
-  const [run, setRun] = useState(0);
+  const [state, setState] = useState<PollState<T>>({ status: 'running' });
 
   const callbacks = useRef({ fetcher, isTerminal });
   useEffect(() => {
@@ -52,9 +46,6 @@ export function usePoll<T>({
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const startedAt = Date.now();
-
-    // Keep the last result on a retry, so progress doesn't jump back.
-    setState((current) => ({ status: 'running', data: current.data }));
 
     const tick = async () => {
       let next: T;
@@ -87,9 +78,7 @@ export function usePoll<T>({
       stopped = true;
       clearTimeout(timer);
     };
-  }, [enabled, intervalMs, timeoutMs, run]);
+  }, [enabled, intervalMs, timeoutMs]);
 
-  const retry = useCallback(() => setRun((n) => n + 1), []);
-
-  return { ...state, retry };
+  return state;
 }

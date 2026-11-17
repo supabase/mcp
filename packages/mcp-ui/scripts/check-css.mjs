@@ -2,11 +2,16 @@
  * Checks every `src/**\/*.css` against the rules in
  * `.agents/skills/mcp-ui-css/SKILL.md`: rules live in layers declared in a
  * fixed order, specificity stays under each layer's cap, no `!important` or
- * ids, and `var()` fallbacks only in `base`. Run with `pnpm lint:css`.
+ * ids, and `var()` fallbacks only in `base`. Custom properties named
+ * `--sb-local-*` belong to one component: they may be declared in any layer
+ * and read anywhere, but must be declared somewhere. Run with `pnpm lint:css`.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { transform } from 'lightningcss';
+
+/** Component-scoped custom properties; exempt from the base-declaration rule. */
+const LOCAL_PREFIX = '--sb-local-';
 
 const LAYERS = ['base', 'native', 'components', 'view', 'utilities'];
 
@@ -115,9 +120,11 @@ for (const file of files) {
     );
   }
 
-  // A pass to collect the custom properties `base` declares, then one to check.
+  // A pass to collect the custom properties `base` declares (and every
+  // `--sb-local-*` declared in any layer), then one to check.
   const checks = [];
   const declaredInBase = new Set();
+  const declaredLocal = new Set();
 
   for (const rule of rules) {
     if (rule.type === 'layer-block') {
@@ -129,6 +136,9 @@ for (const file of files) {
       for (const child of rule.value.rules) {
         if (layer === 'base') {
           for (const prop of customProps(child)) declaredInBase.add(prop);
+        }
+        for (const prop of customProps(child)) {
+          if (prop.startsWith(LOCAL_PREFIX)) declaredLocal.add(prop);
         }
         checks.push({ rule: child, layer });
       }
@@ -195,7 +205,11 @@ for (const file of files) {
         if (ref.fallback && layer !== 'base') {
           errors.push(`${at(loc)}: var(${prop}, …) fallback outside base`);
         }
-        if (!declaredInBase.has(prop) && !ownProps.has(prop)) {
+        if (prop.startsWith(LOCAL_PREFIX)) {
+          if (!declaredLocal.has(prop)) {
+            errors.push(`${at(loc)}: var(${prop}) is not declared anywhere`);
+          }
+        } else if (!declaredInBase.has(prop) && !ownProps.has(prop)) {
           errors.push(
             `${at(loc)}: var(${prop}) has no fallback declared in base`
           );

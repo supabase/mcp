@@ -115,6 +115,8 @@ Where the host standard has no variable, use a local token prefixed `--sb-`. The
 - `--sb-space-1` to `--sb-space-4` (4px, 8px, 12px, 16px): the host standard has no spacing scale. Use these for gaps and padding; a one-off size may stay literal.
 - `--sb-inset-top`, `-right`, `-bottom`, `-left`: the host's safe-area insets, set from JS in `src/shared/use-host-styles.ts`.
 
+- `--sb-local-*`: a custom property scoped to one component, not a global token. Declare it on the owning component's rule (for example `--sb-local-card-padding-inline` on `.progress-card`), in any layer; it needs no fallback in `base`. Rules that style parts of that component from elsewhere, such as a part that only ever renders inside the card, may read it, because they are its descendants in the DOM. The linter does not require a base declaration for these, but does fail if a `--sb-local-*` variable is read and declared nowhere in the stylesheet, which catches typos. Use it to share a value between a component and its descendants' rules; use plain `--sb-*` for a token any rule may use.
+
 Add a local token when a value is reused or carries meaning. Do not add one for a single use.
 
 ## Markup
