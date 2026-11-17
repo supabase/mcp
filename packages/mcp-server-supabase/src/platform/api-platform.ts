@@ -5,6 +5,7 @@ import {
 import type { InitData } from '@supabase/mcp-utils';
 import packageJson from '../../package.json' with { type: 'json' };
 import {
+  getDefaultImportMapPath,
   getDeploymentId,
   getFilenameFromUrlOrPath,
   normalizeFilename,
@@ -22,7 +23,6 @@ import {
 import type { components as ManagementApiV2Components } from '../management-api-v2/types.js';
 import { generatePassword } from '../password.js';
 import { createFeedbackOperations } from './feedback.js';
-import { getDefaultImportMapPath } from './import-map.js';
 import {
   applyMigrationOptionsSchema,
   createNotebookOptionsSchema,
