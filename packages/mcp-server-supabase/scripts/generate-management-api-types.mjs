@@ -19,9 +19,54 @@ function replaceRecursiveJsonValueWithUnknown(_, options) {
   return undefined;
 }
 
+// openapi-typescript marks any property with a `default` as required
+// (`defaultNonNullable`). That is right for responses but wrong for request
+// bodies, where a default means the client may omit the field. Turn the option
+// off, and mark defaulted properties required explicitly everywhere except in
+// request schemas. Request fields keep their `@default` tag and stay optional.
+const REQUEST_SCHEMA_NAME = /(Body|Request|RequestOpenApi)$/;
+
+function requireDefaulted(node, isPropertyMap = false) {
+  if (Array.isArray(node)) {
+    node.forEach((item) => requireDefaulted(item));
+    return;
+  }
+  if (node === null || typeof node !== 'object') return;
+  // Keys of a `properties` map are property names, not keywords, so a
+  // property that happens to be called `properties` must not be treated as one.
+  if (
+    !isPropertyMap &&
+    node.properties &&
+    typeof node.properties === 'object'
+  ) {
+    for (const [name, property] of Object.entries(node.properties)) {
+      if (property && typeof property === 'object' && 'default' in property) {
+        node.required ??= [];
+        if (!node.required.includes(name)) node.required.push(name);
+      }
+    }
+  }
+  for (const [key, value] of Object.entries(node)) {
+    requireDefaulted(value, key === 'properties' && !isPropertyMap);
+  }
+}
+
+async function loadSpec(specUrl) {
+  const response = await fetch(specUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${specUrl}: ${response.status}`);
+  }
+  const spec = await response.json();
+  for (const [name, schema] of Object.entries(spec.components?.schemas ?? {})) {
+    if (!REQUEST_SCHEMA_NAME.test(name)) requireDefaulted(schema);
+  }
+  return spec;
+}
+
 for (const { specUrl, outputPath } of apiTypes) {
-  const ast = await openapiTS(specUrl, {
+  const ast = await openapiTS(await loadSpec(specUrl), {
     transform: replaceRecursiveJsonValueWithUnknown,
+    defaultNonNullable: false,
   });
 
   const output = `/**

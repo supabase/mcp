@@ -1,7 +1,7 @@
 {
   "name": "@supabase/mcp-server-supabase",
   "mcpName": "com.supabase/mcp",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "MCP server for interacting with Supabase",
   "license": "Apache-2.0",
   "repository": {
@@ -69,7 +69,9 @@
     "@ai-sdk/mcp": "catalog:",
     "@electric-sql/pglite": "^0.2.17",
     "@modelcontextprotocol/client": "catalog:",
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
     "@modelcontextprotocol/server": "catalog:",
+    "@supabase/mcp-ui": "workspace:*",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/common-tags": "^1.8.4",
     "@types/node": "^22.8.6",

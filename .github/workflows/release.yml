@@ -110,7 +110,7 @@ jobs:
 
       - name: Build packages
         if: ${{ steps.release.outputs.releases_created || inputs.force_publish == true }}
-        run: pnpm --filter @supabase/mcp-utils --filter @supabase/mcp-server-supabase --filter @supabase/mcp-server-postgrest build
+        run: pnpm run build
 
       - name: Publish @supabase/mcp-utils to npm
         if: ${{ steps.release.outputs['packages/mcp-utils--release_created'] || inputs.force_publish == true }}
@@ -140,26 +140,6 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           NPM_VIEW_STDERR=$(mktemp)
           EXISTING=$(npm view "@supabase/mcp-server-supabase@$VERSION" version 2>"$NPM_VIEW_STDERR") || STATUS=$?
-          if [ -n "$EXISTING" ]; then
-            echo "Version $VERSION already published, skipping."
-            rm -f "$NPM_VIEW_STDERR"
-            exit 0
-          elif [ "${STATUS:-0}" -ne 0 ] && ! grep -qiE 'E404|not found' "$NPM_VIEW_STDERR"; then
-            cat "$NPM_VIEW_STDERR"
-            rm -f "$NPM_VIEW_STDERR"
-            exit 1
-          fi
-          rm -f "$NPM_VIEW_STDERR"
-          pnpm publish --no-git-checks --ignore-scripts --access public --provenance
-
-      - name: Publish @supabase/mcp-server-postgrest to npm
-        if: ${{ steps.release.outputs['packages/mcp-server-postgrest--release_created'] || inputs.force_publish == true }}
-        working-directory: packages/mcp-server-postgrest
-        run: |
-          set -euo pipefail
-          VERSION=$(node -p "require('./package.json').version")
-          NPM_VIEW_STDERR=$(mktemp)
-          EXISTING=$(npm view "@supabase/mcp-server-postgrest@$VERSION" version 2>"$NPM_VIEW_STDERR") || STATUS=$?
           if [ -n "$EXISTING" ]; then
             echo "Version $VERSION already published, skipping."
             rm -f "$NPM_VIEW_STDERR"

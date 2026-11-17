@@ -1,5 +1,9 @@
 # @supabase/mcp-server-postgrest
 
+> **Deprecated:** this package is no longer maintained, and we no longer accept issues or PRs for it. Existing installs keep working, but expect no fixes or new features.
+>
+> To give your own app's users an MCP server, build your own with Supabase instead: see [Deploy MCP servers](https://supabase.com/docs/guides/ai-tools/byo-mcp).
+
 This is an MCP server for [PostgREST](https://postgrest.org). It allows LLMs to perform CRUD operations on your app via REST API.
 
 This server works with Supabase projects (which run PostgREST) and any standalone PostgREST server.
