@@ -1040,10 +1040,13 @@ export const mockManagementApi = [
       description,
       content: {
         schema_version: 1,
-        cells: content.cells.map((cell) => ({
-          ...cell,
-          id: crypto.randomUUID(),
-        })),
+        cells: content.cells.map((cell) => {
+          const id = crypto.randomUUID();
+          // The API applies this default when `row_limit` is omitted.
+          return cell.type === 'database'
+            ? { ...cell, id, row_limit: cell.row_limit ?? 100 }
+            : { ...cell, id };
+        }),
       },
     });
 

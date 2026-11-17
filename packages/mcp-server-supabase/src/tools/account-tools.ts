@@ -25,6 +25,7 @@ import {
 } from './confirmation.js';
 import type { AccountOperations } from '../platform/types.js';
 import { organizationSchema, projectSchema } from '../platform/types.js';
+import { LIST_PROJECTS_UI_URI } from '../resources/app-resources.js';
 import { getBranchCost, getNextProjectCost } from '../pricing.js';
 import { AWS_REGION_CODES } from '../regions.js';
 import { hashObject } from '../util.js';
@@ -168,6 +169,7 @@ export const accountToolDefs = {
       'Lists all Supabase projects for the user. Use this to help discover the project ID of the project that the user is working on.',
     parameters: listProjectsInputSchema,
     outputSchema: listProjectsOutputSchema,
+    _meta: { ui: { resourceUri: LIST_PROJECTS_UI_URI } },
     annotations: {
       title: 'List projects',
       readOnlyHint: true,
@@ -177,7 +179,8 @@ export const accountToolDefs = {
     },
   },
   get_project: {
-    description: 'Gets details for a Supabase project.',
+    description:
+      'Gets details for a Supabase project. `status` is `ACTIVE_HEALTHY` when the project is ready for database tools; other values such as `COMING_UP`, `RESTORING`, or `INACTIVE` (paused) mean database calls will fail or time out.',
     parameters: getProjectInputSchema,
     outputSchema: getProjectOutputSchema,
     annotations: {
@@ -215,7 +218,7 @@ export const accountToolDefs = {
     },
   },
   create_project: {
-    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to any nonzero quoted cost before the project is created. ${callBeforeConfirmingDescription} A project quoted at $0 may be created without a cost-confirmation form. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use \`get_project\` to check the status.`,
+    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to any nonzero quoted cost before the project is created. ${callBeforeConfirmingDescription} A project quoted at $0 may be created without a cost-confirmation form. Always ask the user which organization to create the project in. The project can take a few minutes to initialize. Call \`get_project\`, waiting a few seconds between checks, until \`status\` is \`ACTIVE_HEALTHY\` before running SQL, migrations, or other database tools against it. If \`status\` becomes \`INIT_FAILED\` or \`REMOVED\`, stop and tell the user.`,
     parameters: createProjectInputSchema,
     outputSchema: createProjectOutputSchema,
     annotations: {

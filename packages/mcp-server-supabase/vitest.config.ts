@@ -2,7 +2,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
 import { textLoaderPlugin } from './test/plugins/text-loader.js';
 
 export default defineConfig({
-  plugins: [textLoaderPlugin('.sql')],
+  plugins: [textLoaderPlugin('.sql'), textLoaderPlugin('.html')],
   test: {
     setupFiles: ['./vitest.setup.ts'],
     testTimeout: 30_000, // PGlite can take a while to initialize

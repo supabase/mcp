@@ -1,0 +1,35 @@
+{
+  "name": "@supabase/mcp-ui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MCP Apps views for the Supabase MCP server, built into self-contained HTML files",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./*.html": "./dist/src/views/*/index.html"
+  },
+  "scripts": {
+    "build": "vite build --app",
+    "build:watch": "vite build --app --watch",
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "prebuild": "pnpm typecheck"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "catalog:",
+    "@modelcontextprotocol/core": "^2.0.0",
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "@total-typescript/tsconfig": "^1.0.4",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "^5.6.3",
+    "vite": "^8.0.0",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}

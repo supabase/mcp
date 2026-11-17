@@ -25,13 +25,13 @@ const getLogsInputSchema = z.object({
     .datetime({ offset: true })
     .optional()
     .describe(
-      'The start of the log window as an ISO 8601 timestamp, including a UTC "Z" suffix or explicit offset. Defaults to 24 hours before the end of the window. The API caps the requested range at 24 hours.'
+      'The start of the log window as an ISO 8601 timestamp, including a UTC "Z" suffix or explicit offset. Defaults to 24 hours before the end of the window. Must be before iso_timestamp_end and at most 24 hours before it (the end defaults to now).'
     ),
   iso_timestamp_end: z.iso
     .datetime({ offset: true })
     .optional()
     .describe(
-      'The end of the log window as an ISO 8601 timestamp, including a UTC "Z" suffix or explicit offset. Defaults to the current time. The API caps the requested range at 24 hours.'
+      'The end of the log window as an ISO 8601 timestamp, including a UTC "Z" suffix or explicit offset. Defaults to the current time. Must be after iso_timestamp_start and at most 24 hours after it.'
     ),
 });
 
@@ -47,13 +47,13 @@ function buildQueryLogsInputSchema(sqlDescription: string) {
       .datetime({ offset: true })
       .optional()
       .describe(
-        'The start of the log window as an ISO 8601 timestamp, including a UTC "Z" suffix or explicit offset. Defaults to 24 hours before the end of the window. The API caps the requested range at 24 hours.'
+        'The start of the log window as an ISO 8601 timestamp, including a UTC "Z" suffix or explicit offset. Defaults to 24 hours before the end of the window. Must be before iso_timestamp_end and at most 24 hours before it (the end defaults to now).'
       ),
     iso_timestamp_end: z.iso
       .datetime({ offset: true })
       .optional()
       .describe(
-        'The end of the log window as an ISO 8601 timestamp, including a UTC "Z" suffix or explicit offset. Defaults to the current time. The API caps the requested range at 24 hours.'
+        'The end of the log window as an ISO 8601 timestamp, including a UTC "Z" suffix or explicit offset. Defaults to the current time. Must be after iso_timestamp_start and at most 24 hours after it.'
       ),
   });
 }
@@ -75,7 +75,7 @@ function buildQueryLogsCopy({
 }) {
   return {
     schemaHint,
-    description: `Runs a custom read-only ${name} SQL query against a Supabase project's ${logsNoun}, for filtering, aggregating, or joining across log fields more precisely than a simple per-service log dump. When the user asks about a specific time range, always pass iso_timestamp_start and iso_timestamp_end to match it; otherwise the query defaults to the last 24 hours and will return results from a wider window than intended. The window can be up to 24 hours. Do not poll this tool in a loop.`,
+    description: `Runs a custom read-only ${name} SQL query against a Supabase project's ${logsNoun}, for filtering, aggregating, or joining across log fields more precisely than a simple per-service log dump. When the user asks about a specific time range, always pass iso_timestamp_start and iso_timestamp_end to match it; otherwise the query defaults to the last 24 hours and will return results from a wider window than intended. The window must be 24 hours or less and iso_timestamp_start must be before iso_timestamp_end; other windows are rejected. If you pass only iso_timestamp_start, the end defaults to now, so for a past time range pass both timestamps. For a longer range, make one call per 24-hour slice. Do not poll this tool in a loop.`,
     parameters: buildQueryLogsInputSchema(
       `A read-only ${name} SQL query to run against the project's ${logsNoun}. ${schemaHint}`
     ),
@@ -227,7 +227,7 @@ export function groupAdvisorsResult(result: unknown): unknown {
 export const debuggingToolDefs = {
   get_logs: {
     description:
-      'Gets logs for a Supabase project by service type. When the user asks about a specific time range, always pass iso_timestamp_start and iso_timestamp_end to match it; otherwise each call defaults to the last 24 hours and will return logs from a wider window than intended. The window can be up to 24 hours. Edge Function logs are split by kind: `edge-function` returns invocation/request logs, while `edge-function-runtime` returns console output from inside the function. Query one service first, then correlate with other services by timestamp or error anchors. Do not poll get_logs in a loop.',
+      'Gets logs for a Supabase project by service type. When the user asks about a specific time range, always pass iso_timestamp_start and iso_timestamp_end to match it; otherwise each call defaults to the last 24 hours and will return logs from a wider window than intended. The window must be 24 hours or less and iso_timestamp_start must be before iso_timestamp_end; other windows are rejected. If you pass only iso_timestamp_start, the end defaults to now, so for a past time range pass both timestamps. For a longer range, make one call per 24-hour slice. Edge Function logs are split by kind: `edge-function` returns invocation/request logs, while `edge-function-runtime` returns console output from inside the function. Query one service first, then correlate with other services by timestamp or error anchors. Do not poll get_logs in a loop.',
     parameters: getLogsInputSchema,
     outputSchema: getLogsOutputSchema,
     annotations: {

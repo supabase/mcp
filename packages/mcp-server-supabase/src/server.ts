@@ -17,11 +17,13 @@ import type {
   ObservedTool,
   RequestObserver,
 } from './observation.js';
+import { APPS_EXTENSIONS, appsEnabled } from './apps/index.js';
 import {
   CONTENT_API_SCHEMA_TTL_MS,
   createContentApiClient,
 } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
+import { getResources } from './resources/index.js';
 import { getAccountTools } from './tools/account-tools.js';
 import { getBranchingTools } from './tools/branching-tools.js';
 import {
@@ -86,6 +88,12 @@ export type SupabaseMcpServerOptions = {
    * Executes database queries in read-only mode if true.
    */
   readOnly?: boolean;
+
+  /**
+   * Enables MCP Apps: interactive views for supported tools. Experimental, off
+   * by default.
+   */
+  experimentalApps?: boolean;
 
   /**
    * Features to enable.
@@ -193,6 +201,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     projectId,
     readOnly,
     features,
+    experimentalApps = false,
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
     dashboardUrl,
     onToolCall,
@@ -258,6 +267,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     title: 'Supabase',
     version,
     instructions,
+    resources: experimentalApps
+      ? (ctx) => getResources({ apps: appsEnabled(experimentalApps, ctx) })
+      : undefined,
+    extensions: experimentalApps ? APPS_EXTENSIONS : undefined,
     async onInitialize(info) {
       handshakeClientInfo = info.clientInfo;
       // Note: in stateless HTTP mode, `onInitialize` will not always be called
@@ -507,6 +520,18 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
                 }),
               }
             : { ...tool, hidden: true };
+        }
+      }
+
+      if (!appsEnabled(experimentalApps, ctx)) {
+        for (const [name, tool] of Object.entries(tools)) {
+          if (tool._meta?.ui) {
+            const { ui: _, ...meta } = tool._meta;
+            tools[name] = {
+              ...tool,
+              _meta: Object.keys(meta).length > 0 ? meta : undefined,
+            };
+          }
         }
       }
 
