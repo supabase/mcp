@@ -3045,8 +3045,10 @@ export interface components {
         RemoveNetworkBanRequest: {
             /** @description List of IP addresses to unban. */
             ipv4_addresses: string[];
-            /** @description Include requester's public IP in the list of addresses to unban.
-             *     Default: false. */
+            /**
+             * @description Include requester's public IP in the list of addresses to unban.
+             * @default false
+             */
             requester_ip?: boolean;
             identifier?: string;
         };
@@ -4337,9 +4339,11 @@ export interface components {
             query: string;
             parameters?: unknown[];
             read_only?: boolean;
-            /** @description Disable statement timeout for the query. Role-based or global timeout
+            /**
+             * @description Disable statement timeout for the query. Role-based or global timeout
              *             still apply https://supabase.com/docs/guides/database/postgres/timeouts
-             *     Default: true. */
+             * @default true
+             */
             disable_statement_timeout?: boolean;
         };
         /** @example {
@@ -4349,9 +4353,11 @@ export interface components {
         V1ReadOnlyQueryBody: {
             query: string;
             parameters?: unknown[];
-            /** @description Disable statement timeout for the query. Role-based or global timeout
+            /**
+             * @description Disable statement timeout for the query. Role-based or global timeout
              *             still apply https://supabase.com/docs/guides/database/postgres/timeouts
-             *     Default: true. */
+             * @default true
+             */
             disable_statement_timeout?: boolean;
         };
         GetProjectDbMetadataResponse_Output: {

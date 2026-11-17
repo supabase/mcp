@@ -19,31 +19,35 @@ function replaceRecursiveJsonValueWithUnknown(_, options) {
   return undefined;
 }
 
-// openapi-typescript treats any property with a `default` as always present
-// (`defaultNonNullable`), which is right for responses but wrong for request
-// bodies, where a default means the client may omit the field. Drop defaults
-// from request schemas so optional request fields stay optional, and keep the
-// value in the description so the documentation isn't lost.
+// openapi-typescript marks any property with a `default` as required
+// (`defaultNonNullable`). That is right for responses but wrong for request
+// bodies, where a default means the client may omit the field. Turn the option
+// off, and mark defaulted properties required explicitly everywhere except in
+// request schemas. Request fields keep their `@default` tag and stay optional.
 const REQUEST_SCHEMA_NAME = /(Body|Request|RequestOpenApi)$/;
 
-function stripDefaults(schema, isPropertyMap = false) {
-  if (Array.isArray(schema)) {
-    schema.forEach((item) => stripDefaults(item));
+function requireDefaulted(node, isPropertyMap = false) {
+  if (Array.isArray(node)) {
+    node.forEach((item) => requireDefaulted(item));
     return;
   }
-  if (schema === null || typeof schema !== 'object') return;
-  for (const [key, value] of Object.entries(schema)) {
-    // Keys of a `properties` map are property names, not keywords, so a
-    // property that happens to be called `default` must be kept.
-    if (key === 'default' && !isPropertyMap) {
-      const note = `Default: ${JSON.stringify(value)}.`;
-      schema.description = schema.description
-        ? `${schema.description.trimEnd()}\n${note}`
-        : note;
-      delete schema[key];
-    } else {
-      stripDefaults(value, key === 'properties' && !isPropertyMap);
+  if (node === null || typeof node !== 'object') return;
+  // Keys of a `properties` map are property names, not keywords, so a
+  // property that happens to be called `properties` must not be treated as one.
+  if (
+    !isPropertyMap &&
+    node.properties &&
+    typeof node.properties === 'object'
+  ) {
+    for (const [name, property] of Object.entries(node.properties)) {
+      if (property && typeof property === 'object' && 'default' in property) {
+        node.required ??= [];
+        if (!node.required.includes(name)) node.required.push(name);
+      }
     }
+  }
+  for (const [key, value] of Object.entries(node)) {
+    requireDefaulted(value, key === 'properties' && !isPropertyMap);
   }
 }
 
@@ -54,7 +58,7 @@ async function loadSpec(specUrl) {
   }
   const spec = await response.json();
   for (const [name, schema] of Object.entries(spec.components?.schemas ?? {})) {
-    if (REQUEST_SCHEMA_NAME.test(name)) stripDefaults(schema);
+    if (!REQUEST_SCHEMA_NAME.test(name)) requireDefaulted(schema);
   }
   return spec;
 }
@@ -62,6 +66,7 @@ async function loadSpec(specUrl) {
 for (const { specUrl, outputPath } of apiTypes) {
   const ast = await openapiTS(await loadSpec(specUrl), {
     transform: replaceRecursiveJsonValueWithUnknown,
+    defaultNonNullable: false,
   });
 
   const output = `/**

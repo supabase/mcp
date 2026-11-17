@@ -987,7 +987,7 @@ export interface components {
                     } | {
                         host?: string;
                         port?: number;
-                        /** @description Default: false. */
+                        /** @default false */
                         tls?: boolean;
                         structured_data?: string;
                         cipher_key?: string;
@@ -1006,11 +1006,11 @@ export interface components {
                         password?: string;
                     } | {
                         endpoint?: string;
-                        /** @description Default: "http/protobuf". */
+                        /** @default http/protobuf */
                         protocol?: string;
-                        /** @description Default: true. */
+                        /** @default true */
                         gzip?: boolean;
-                        /** @description Default: {}. */
+                        /** @default {} */
                         headers?: {
                             [key: string]: string;
                         };
@@ -1130,7 +1130,7 @@ export interface components {
                     } | {
                         host?: string;
                         port?: number;
-                        /** @description Default: false. */
+                        /** @default false */
                         tls?: boolean;
                         structured_data?: string;
                         cipher_key?: string;
@@ -1149,11 +1149,11 @@ export interface components {
                         password?: string;
                     } | {
                         endpoint?: string;
-                        /** @description Default: "http/protobuf". */
+                        /** @default http/protobuf */
                         protocol?: string;
-                        /** @description Default: true. */
+                        /** @default true */
                         gzip?: boolean;
-                        /** @description Default: {}. */
+                        /** @default {} */
                         headers?: {
                             [key: string]: string;
                         };
@@ -1685,7 +1685,7 @@ export interface components {
                             type: "database";
                             /** @description SQL run against the project database. */
                             sql: string;
-                            /** @description Default: 100. */
+                            /** @default 100 */
                             row_limit?: number;
                             /** @description Read replica to run against. Omit to use the primary database. */
                             database_identifier?: string;
@@ -1792,7 +1792,7 @@ export interface components {
                             type: "database";
                             /** @description SQL run against the project database. */
                             sql: string;
-                            /** @description Default: 100. */
+                            /** @default 100 */
                             row_limit?: number;
                             /** @description Read replica to run against. Omit to use the primary database. */
                             database_identifier?: string;
