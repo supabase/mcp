@@ -169,7 +169,9 @@ The server does not automatically forward request or response payloads to the ob
 
 ## Other MCP servers
 
-### `@supabase/mcp-server-postgrest`
+### `@supabase/mcp-server-postgrest` (deprecated)
+
+> **Deprecated:** `@supabase/mcp-server-postgrest` is no longer maintained, and we no longer accept issues or PRs for it. Existing installs keep working. To give your own app's users an MCP server, build your own with Supabase instead: see [Deploy MCP servers](https://supabase.com/docs/guides/ai-tools/byo-mcp).
 
 The PostgREST MCP server allows you to connect your own users to your app via REST API. See more details on its [project README](./packages/mcp-server-postgrest).
 
