@@ -87,6 +87,12 @@ The stdio transport is available without `--http`. Configure your MCP client to 
 }
 ```
 
+### MCP Apps views
+
+Some tools have an interactive [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) view, built from `packages/mcp-ui` (Vite and React) into self-contained HTML that the server bundle inlines (HTML is not committed). `pnpm build` builds the views before the server and `pnpm dev:http` rebuilds them on change. Like the other workspace packages, they must be built before running the server's tests. See [`packages/mcp-ui/README.md`](packages/mcp-ui/README.md) for developing views with the mock host and testing them in MCP Inspector.
+
+MCP Apps are off by default: add `?experimental_apps=true` to the `--http` dev URL to turn them on. Clients will need to advertise the MCP Apps extension to access these views.Legacy-era clients deliberately never qualify because their capabilities arrive only at `initialize` + not every client sends the session back, so results aren't reliable.
+
 ## Testing
 
 Run the commands below from the repository root. Outside CI, the Supabase package's `vitest.setup.ts` calls `statSync` on `packages/mcp-server-supabase/.env.local` before loading it. Create that file if it is missing; an empty file is sufficient for mocked unit tests. Do not set `CI=1` to bypass this prerequisite.
@@ -111,18 +117,18 @@ These select all unit tests, the database suite, its composite-FK cases, and all
 
 Start in the existing test file closest to the behavior. Keep pure-helper tests colocated with their implementation; do not automatically add a file for each tool or case. For MCP behavior, use these suites under `packages/mcp-server-supabase/`:
 
-| File | Responsibility |
-| --- | --- |
-| `src/server.test.ts` | Initialization, tool surface/schema contracts, feature groups, project scoping, docs and registry regressions |
-| `src/server.account.test.ts` | Organizations, pricing, project creation/lifecycle and project cost confirmation |
-| `src/server.database.test.ts` | SQL, migrations, tables/FKs/extensions, database permissions and destructive SQL confirmation for `execute_sql`/`apply_migration` |
-| `src/server.debugging.test.ts` | Logs, query windows and advisors |
-| `src/server.development.test.ts` | Project URLs and API keys |
-| `src/server.functions.test.ts` | Edge functions and URL-mode secret collection |
-| `src/server.branching.test.ts` | Branch creation/lifecycle, listing, merge, reset, rebase and branch cost confirmation |
-| `src/server.storage.test.ts` | Storage buckets and configuration |
-| `src/observation-*.test.ts` | Observer lifecycle and bounded confirmation/operation facts |
-| `src/server.notebooks.test.ts` | Notebook listing, retrieval, creation, running and notebook confirmation |
+| File                             | Responsibility                                                                                                                    |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `src/server.test.ts`             | Initialization, tool surface/schema contracts, feature groups, project scoping, docs and registry regressions                     |
+| `src/server.account.test.ts`     | Organizations, pricing, project creation/lifecycle and project cost confirmation                                                  |
+| `src/server.database.test.ts`    | SQL, migrations, tables/FKs/extensions, database permissions and destructive SQL confirmation for `execute_sql`/`apply_migration` |
+| `src/server.debugging.test.ts`   | Logs, query windows and advisors                                                                                                  |
+| `src/server.development.test.ts` | Project URLs and API keys                                                                                                         |
+| `src/server.functions.test.ts`   | Edge functions and URL-mode secret collection                                                                                     |
+| `src/server.branching.test.ts`   | Branch creation/lifecycle, listing, merge, reset, rebase and branch cost confirmation                                             |
+| `src/server.storage.test.ts`     | Storage buckets and configuration                                                                                                 |
+| `src/observation-*.test.ts`      | Observer lifecycle and bounded confirmation/operation facts                                                                       |
+| `src/server.notebooks.test.ts`   | Notebook listing, retrieval, creation, running and notebook confirmation                                                          |
 
 Keep project and branch cost-confirmation flows with their respective feature groups, including legacy fallback, modern elicitation, approval, token, retry and tamper cases. General server contracts, feature-surface checks and docs stay in core. HTTP transport behavior belongs in `src/transports/http.test.ts`. Keep integration/e2e tests in their existing locations and projects.
 

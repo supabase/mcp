@@ -35,6 +35,8 @@ export type Resource<Uri extends string = string, Result = unknown> = {
   name: string;
   description?: string;
   mimeType?: string;
+  /** MCP `_meta`, passed through verbatim in list results. */
+  _meta?: Record<string, unknown>;
   read(uri: `${Scheme}://${Uri}`): Promise<Result>;
 };
 
@@ -43,6 +45,8 @@ export type ResourceTemplate<Uri extends string = string, Result = unknown> = {
   name: string;
   description?: string;
   mimeType?: string;
+  /** MCP `_meta`, passed through verbatim in list results. */
+  _meta?: Record<string, unknown>;
   read(
     uri: `${Scheme}://${Uri}`,
     params: {
@@ -64,6 +68,11 @@ export type Tool<
   outputSchema: OutputSchema;
   /** If true, excludes the tool from `tools/list` while keeping it callable via `tools/call`. */
   hidden?: boolean;
+  /**
+   * MCP `_meta`, passed through verbatim in `tools/list`. Extensions such as
+   * MCP Apps (`_meta.ui.resourceUri`) live here.
+   */
+  _meta?: Record<string, unknown>;
   /**
    * Executes the tool. `ctx` is the SDK's per-request `ServerContext`
    * (elicitation, multi-round-trip `requestState`, HTTP info, etc.) — most
@@ -278,9 +287,15 @@ export type McpServerOptions<Bucket extends string = never, Fact = never> = {
    * asks for the list of resources or reads a resource. This allows for dynamic
    * resources that can change after the server has started.
    */
-  resources?: Prop<
-    (Resource<string, unknown> | ResourceTemplate<string, unknown>)[]
-  >;
+  resources?:
+    | (Resource<string, unknown> | ResourceTemplate<string, unknown>)[]
+    | ((
+        ctx?: ServerContext
+      ) =>
+        | (Resource<string, unknown> | ResourceTemplate<string, unknown>)[]
+        | Promise<
+            (Resource<string, unknown> | ResourceTemplate<string, unknown>)[]
+          >);
 
   /**
    * Tools to be served by the server. These can be defined as a static object
@@ -313,6 +328,12 @@ export type McpServerOptions<Bucket extends string = never, Fact = never> = {
     verify?: (state: string, ctx: ServerContext) => unknown | Promise<unknown>;
   };
 
+  /**
+   * Extensions to declare in `capabilities.extensions`, keyed by extension ID
+   * (for example MCP Apps' `io.modelcontextprotocol/ui`).
+   */
+  extensions?: ServerCapabilities['extensions'];
+
   /** Optional per-request observer; see ObservedMethod for covered handlers. */
   observer?: RequestObserver<Bucket, Fact>;
   classifyTool?: (name: string) => Bucket | 'other';
@@ -337,6 +358,10 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
     capabilities.tools = {};
   }
 
+  if (options.extensions) {
+    capabilities.extensions = options.extensions;
+  }
+
   const server = new Server(
     {
       name: options.name,
@@ -350,13 +375,13 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
     }
   );
 
-  async function getResources() {
+  async function getResources(ctx?: ServerContext) {
     if (!options.resources) {
       throw new Error('resources not available');
     }
 
     return typeof options.resources === 'function'
-      ? await options.resources()
+      ? await options.resources(ctx)
       : options.resources;
   }
 
@@ -411,18 +436,19 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
   if (options.resources) {
     server.setRequestHandler(
       'resources/list',
-      (): Promise<ListResourcesResult> =>
+      (_request, ctx): Promise<ListResourcesResult> =>
         observed('resources/list', async () => {
-          const allResources = await getResources();
+          const allResources = await getResources(ctx);
           return {
             resources: allResources
               .filter((resource) => 'uri' in resource)
-              .map(({ uri, name, description, mimeType }) => {
+              .map(({ uri, name, description, mimeType, _meta }) => {
                 return {
                   uri,
                   name,
                   description,
                   mimeType,
+                  _meta,
                 };
               }),
           };
@@ -431,18 +457,19 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
 
     server.setRequestHandler(
       'resources/templates/list',
-      (): Promise<ListResourceTemplatesResult> =>
+      (_request, ctx): Promise<ListResourceTemplatesResult> =>
         observed('resources/templates/list', async () => {
-          const allResources = await getResources();
+          const allResources = await getResources(ctx);
           return {
             resourceTemplates: allResources
               .filter((resource) => 'uriTemplate' in resource)
-              .map(({ uriTemplate, name, description, mimeType }) => {
+              .map(({ uriTemplate, name, description, mimeType, _meta }) => {
                 return {
                   uriTemplate,
                   name,
                   description,
                   mimeType,
+                  _meta,
                 };
               }),
           };
@@ -451,10 +478,10 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
 
     server.setRequestHandler(
       'resources/read',
-      (request): Promise<ReadResourceResult> =>
+      (request, ctx): Promise<ReadResourceResult> =>
         observed('resources/read', async () => {
           try {
-            const allResources = await getResources();
+            const allResources = await getResources(ctx);
             const { uri } = request.params;
 
             const resources = allResources.filter(
@@ -535,7 +562,10 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
               Object.entries(tools)
                 .filter(([, tool]) => !tool.hidden)
                 .map(
-                  async ([name, { description, annotations, parameters }]) => {
+                  async ([
+                    name,
+                    { description, annotations, parameters, _meta },
+                  ]) => {
                     const inputSchema = z.toJSONSchema(parameters, {
                       target: 'draft-7',
                     });
@@ -550,6 +580,7 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
                       // Casting the same as the SDK does:
                       // https://github.com/modelcontextprotocol/typescript-sdk/blob/fb07af810b51003c338dc4885a9e42f54519f9af/src/server/mcp.ts#L154
                       inputSchema: inputSchema as McpTool['inputSchema'],
+                      _meta,
                     };
                   }
                 )
