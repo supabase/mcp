@@ -987,8 +987,8 @@ export interface components {
                     } | {
                         host?: string;
                         port?: number;
-                        /** @default false */
-                        tls: boolean;
+                        /** @description Default: false. */
+                        tls?: boolean;
                         structured_data?: string;
                         cipher_key?: string;
                         ca_cert?: string;
@@ -1006,12 +1006,12 @@ export interface components {
                         password?: string;
                     } | {
                         endpoint?: string;
-                        /** @default http/protobuf */
-                        protocol: string;
-                        /** @default true */
-                        gzip: boolean;
-                        /** @default {} */
-                        headers: {
+                        /** @description Default: "http/protobuf". */
+                        protocol?: string;
+                        /** @description Default: true. */
+                        gzip?: boolean;
+                        /** @description Default: {}. */
+                        headers?: {
                             [key: string]: string;
                         };
                     };
@@ -1130,8 +1130,8 @@ export interface components {
                     } | {
                         host?: string;
                         port?: number;
-                        /** @default false */
-                        tls: boolean;
+                        /** @description Default: false. */
+                        tls?: boolean;
                         structured_data?: string;
                         cipher_key?: string;
                         ca_cert?: string;
@@ -1149,12 +1149,12 @@ export interface components {
                         password?: string;
                     } | {
                         endpoint?: string;
-                        /** @default http/protobuf */
-                        protocol: string;
-                        /** @default true */
-                        gzip: boolean;
-                        /** @default {} */
-                        headers: {
+                        /** @description Default: "http/protobuf". */
+                        protocol?: string;
+                        /** @description Default: true. */
+                        gzip?: boolean;
+                        /** @description Default: {}. */
+                        headers?: {
                             [key: string]: string;
                         };
                     };
@@ -1685,8 +1685,8 @@ export interface components {
                             type: "database";
                             /** @description SQL run against the project database. */
                             sql: string;
-                            /** @default 100 */
-                            row_limit: number;
+                            /** @description Default: 100. */
+                            row_limit?: number;
                             /** @description Read replica to run against. Omit to use the primary database. */
                             database_identifier?: string;
                             title?: string;
@@ -1792,8 +1792,8 @@ export interface components {
                             type: "database";
                             /** @description SQL run against the project database. */
                             sql: string;
-                            /** @default 100 */
-                            row_limit: number;
+                            /** @description Default: 100. */
+                            row_limit?: number;
                             /** @description Read replica to run against. Omit to use the primary database. */
                             database_identifier?: string;
                             title?: string;

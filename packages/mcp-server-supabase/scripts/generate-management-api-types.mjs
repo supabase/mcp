@@ -19,8 +19,48 @@ function replaceRecursiveJsonValueWithUnknown(_, options) {
   return undefined;
 }
 
+// openapi-typescript treats any property with a `default` as always present
+// (`defaultNonNullable`), which is right for responses but wrong for request
+// bodies, where a default means the client may omit the field. Drop defaults
+// from request schemas so optional request fields stay optional, and keep the
+// value in the description so the documentation isn't lost.
+const REQUEST_SCHEMA_NAME = /(Body|Request|RequestOpenApi)$/;
+
+function stripDefaults(schema, isPropertyMap = false) {
+  if (Array.isArray(schema)) {
+    schema.forEach((item) => stripDefaults(item));
+    return;
+  }
+  if (schema === null || typeof schema !== 'object') return;
+  for (const [key, value] of Object.entries(schema)) {
+    // Keys of a `properties` map are property names, not keywords, so a
+    // property that happens to be called `default` must be kept.
+    if (key === 'default' && !isPropertyMap) {
+      const note = `Default: ${JSON.stringify(value)}.`;
+      schema.description = schema.description
+        ? `${schema.description.trimEnd()}\n${note}`
+        : note;
+      delete schema[key];
+    } else {
+      stripDefaults(value, key === 'properties' && !isPropertyMap);
+    }
+  }
+}
+
+async function loadSpec(specUrl) {
+  const response = await fetch(specUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${specUrl}: ${response.status}`);
+  }
+  const spec = await response.json();
+  for (const [name, schema] of Object.entries(spec.components?.schemas ?? {})) {
+    if (REQUEST_SCHEMA_NAME.test(name)) stripDefaults(schema);
+  }
+  return spec;
+}
+
 for (const { specUrl, outputPath } of apiTypes) {
-  const ast = await openapiTS(specUrl, {
+  const ast = await openapiTS(await loadSpec(specUrl), {
     transform: replaceRecursiveJsonValueWithUnknown,
   });
 
