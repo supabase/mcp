@@ -7,17 +7,14 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
  * `vite build --app` builds each folder in `src/views/` into
  * `dist/src/views/<view>/index.html`. Each view is its own build environment, because
  * `vite-plugin-singlefile` only supports one entry per build.
- *
- * `vite` (dev) serves the mock host at `/dev/` and every view with HMR.
  */
 const views = existsSync('src/views') ? readdirSync('src/views') : [];
 
 // Environment names can't contain `-`.
 const envName = (view: string) => view.replaceAll('-', '_');
 
-export default defineConfig(({ command }) => ({
-  plugins: [react(), ...(command === 'build' ? [viteSingleFile()] : [])],
-  server: { open: '/dev/' },
+export default defineConfig({
+  plugins: [react(), viteSingleFile()],
   environments: Object.fromEntries(
     views.map((view) => [
       envName(view),
@@ -42,4 +39,4 @@ export default defineConfig(({ command }) => ({
       if (views.length === 0) builder.environments.client!.isBuilt = true;
     },
   },
-}));
+});

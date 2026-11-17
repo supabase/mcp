@@ -2,6 +2,7 @@ packages:
   - packages/*
 
 ignoredBuiltDependencies:
+  - '@modelcontextprotocol/inspector'
   - '@biomejs/biome'
   - esbuild
   - msw
