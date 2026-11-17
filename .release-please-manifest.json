@@ -1,5 +1,4 @@
 {
   "packages/mcp-utils": "0.11.0",
-  "packages/mcp-server-supabase": "0.18.0",
-  "packages/mcp-server-postgrest": "0.2.1"
+  "packages/mcp-server-supabase": "0.18.0"
 }

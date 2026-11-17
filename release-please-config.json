@@ -26,13 +26,6 @@
           "jsonpath": "$.packages[0].version"
         }
       ]
-    },
-    "packages/mcp-server-postgrest": {
-      "release-type": "node",
-      "package-name": "@supabase/mcp-server-postgrest",
-      "changelog-path": "CHANGELOG.md",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false
     }
   }
 }
