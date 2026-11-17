@@ -26,6 +26,8 @@
     "test:e2e": "vitest --project e2e",
     "test:integration": "vitest --project integration",
     "test:coverage": "vitest --coverage",
+    "mock-api": "tsx dev/mock-api.ts",
+    "typecheck:dev": "tsc --noEmit -p dev/tsconfig.json",
     "generate:management-api-types": "node scripts/generate-management-api-types.mjs"
   },
   "files": [
