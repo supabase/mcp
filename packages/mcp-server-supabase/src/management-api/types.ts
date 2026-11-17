@@ -2611,6 +2611,23 @@ export interface components {
             postgres_engine?: null;
             /** @description [Experimental] Whether to enable high availability for the project. */
             high_availability?: boolean;
+            /** @description Initial SQL to run on the database. Limited to 1024 characters (1 KiB). For complex database changes, please use migrations https://supabase.com/docs/guides/deployment/database-migrations */
+            db_sql?: string;
+            /**
+             * Format: uri
+             * @description URL of the authentication site.
+             */
+            auth_site_url?: string;
+            /** @description Schemas exposed by the data API. */
+            data_api_exposed_schemas?: string[];
+            /** @description Whether to use the API schema for the data API. */
+            data_api_use_api_schema?: boolean;
+            /** @description Force revoke default privileges for the data API. This flag will be ignored if the organization enforces `true` by default, and cannot be overridden. */
+            data_api_revoke_default_privileges?: boolean;
+            /** @description GitHub installation ID for linkage. Must first grant access to the repository on the Dashboard. */
+            github_installation_id?: number;
+            /** @description GitHub repository ID for linkage. Must first grant access to the repository on the Dashboard. */
+            github_repository_id?: number;
         };
         V1ProjectResponse_Output: {
             /**
@@ -4315,19 +4332,33 @@ export interface components {
         };
         /** @example {
          *       "query": "select * from pg_stat_activity limit 1;",
-         *       "read_only": true
+         *       "read_only": true,
+         *       "disable_statement_timeout": false
          *     } */
         V1RunQueryBody: {
             query: string;
             parameters?: unknown[];
             read_only?: boolean;
+            /**
+             * @description Disable statement timeout for the query. Role-based or global timeout
+             *             still apply https://supabase.com/docs/guides/database/postgres/timeouts
+             * @default true
+             */
+            disable_statement_timeout: boolean;
         };
         /** @example {
-         *       "query": "select * from pg_stat_activity limit 1;"
+         *       "query": "select * from pg_stat_activity limit 1;",
+         *       "disable_statement_timeout": false
          *     } */
         V1ReadOnlyQueryBody: {
             query: string;
             parameters?: unknown[];
+            /**
+             * @description Disable statement timeout for the query. Role-based or global timeout
+             *             still apply https://supabase.com/docs/guides/database/postgres/timeouts
+             * @default true
+             */
+            disable_statement_timeout: boolean;
         };
         GetProjectDbMetadataResponse_Output: {
             databases: {
