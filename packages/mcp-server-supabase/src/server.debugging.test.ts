@@ -1,6 +1,7 @@
 import { API_URL, createProjectFixture } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
 import type { SupabasePlatform } from './platform/types.js';
+import type { WarehouseContext } from './platform/warehouse.js';
 import { HttpResponse, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
@@ -9,6 +10,196 @@ const setup = harness.setup;
 
 beforeEach(() => harness.reset());
 afterEach(() => harness.close());
+
+const warehouseContext: WarehouseContext = {
+  project_ref: 'abcdefghijklmnopqrst',
+  observed_at: '2026-11-05T00:00:00.000Z',
+  status: 'starting',
+  lifecycle: null,
+  compute: {
+    status: 'available',
+    region: 'ap-southeast-1',
+    routing_status: 'pending',
+    observed_at: '2026-11-05T00:00:00.000Z',
+  },
+  pipeline: {
+    id: 'pipeline-1',
+    status: 'starting',
+    observed_at: '2026-11-05T00:00:00.000Z',
+  },
+  replication: { status: 'not_started', observed_at: null, apply_lag: null },
+  tables: {
+    status: 'available',
+    observed_at: '2026-11-05T00:00:00.000Z',
+    items: [
+      {
+        id: 16408,
+        schema: 'public',
+        name: 'orders',
+        replication_state: null,
+        sync_lag: null,
+      },
+    ],
+  },
+  capabilities: {
+    context: true,
+    workload_metrics: false,
+    query_explain: false,
+    table_layout_read: false,
+    table_layout_update: false,
+  },
+};
+
+describe('Warehouse context', () => {
+  test('is opt-in and remains available in read-only, project-scoped sessions', async () => {
+    const defaults = await setup();
+    expect(
+      (await defaults.client.listTools()).tools.map((t) => t.name)
+    ).not.toContain('get_warehouse_context');
+    const scoped = await setup({
+      features: ['warehouse'],
+      projectId: warehouseContext.project_ref,
+      readOnly: true,
+    });
+    const { tools } = await scoped.client.listTools();
+    expect(tools.map((t) => t.name)).toEqual(['get_warehouse_context']);
+    expect(tools[0]?.annotations?.readOnlyHint).toBe(true);
+    expect(tools[0]?.inputSchema.properties).not.toHaveProperty('project_id');
+  });
+
+  test('uses the authenticated Platform API and cannot override the session project', async () => {
+    const refs: string[] = [];
+    harness.mockServer?.use(
+      http.get(
+        `${API_URL}/platform/warehouse/:ref/context`,
+        ({ params, request }) => {
+          refs.push(String(params.ref));
+          expect(request.headers.get('authorization')).toMatch(/^Bearer /);
+          expect(request.headers.get('user-agent')).toContain('supabase-mcp/');
+          return HttpResponse.json({
+            ...warehouseContext,
+            credential: 'must-not-leak',
+            compute: { ...warehouseContext.compute, backend: 'must-not-leak' },
+          });
+        }
+      )
+    );
+    const { callTool } = await setup({
+      features: ['warehouse'],
+      projectId: warehouseContext.project_ref,
+      readOnly: true,
+    });
+    await expect(
+      callTool({
+        name: 'get_warehouse_context',
+        arguments: { project_id: 'zzzzzzzzzzzzzzzzzzzz' },
+      })
+    ).rejects.toThrow('project_id');
+    expect(refs).toEqual([]);
+    const result = await callTool({
+      name: 'get_warehouse_context',
+      arguments: {},
+    });
+    expect(refs).toEqual([warehouseContext.project_ref]);
+    expect(result).toEqual(warehouseContext);
+  });
+
+  test('preserves an explicit unavailable response without inventing healthy state', async () => {
+    const unavailable = {
+      ...warehouseContext,
+      status: 'unavailable',
+      pipeline: null,
+      replication: {
+        status: 'unavailable',
+        observed_at: null,
+        apply_lag: null,
+      },
+      tables: { status: 'unavailable', observed_at: null, items: [] },
+    };
+    harness.mockServer?.use(
+      http.get(`${API_URL}/platform/warehouse/:ref/context`, () =>
+        HttpResponse.json(unavailable)
+      )
+    );
+    const { callTool } = await setup({ features: ['warehouse'] });
+    expect(
+      await callTool({
+        name: 'get_warehouse_context',
+        arguments: { project_id: warehouseContext.project_ref },
+      })
+    ).toEqual(unavailable);
+  });
+
+  test.each([401, 403, 404, 503])(
+    'propagates HTTP %s as a tool error, not an absent Warehouse',
+    async (status) => {
+      harness.mockServer?.use(
+        http.get(`${API_URL}/platform/warehouse/:ref/context`, () =>
+          HttpResponse.json(
+            { message: 'Warehouse context denied or unavailable' },
+            { status }
+          )
+        )
+      );
+      const { client } = await setup({ features: ['warehouse'] });
+      const result = await client.callTool({
+        name: 'get_warehouse_context',
+        arguments: { project_id: warehouseContext.project_ref },
+      });
+      expect(result.isError).toBe(true);
+    }
+  );
+
+  test('rejects malformed project references before making an API call', async () => {
+    const { client } = await setup({ features: ['warehouse'] });
+    const result = await client.callTool({
+      name: 'get_warehouse_context',
+      arguments: { project_id: '../another-project' },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  test('rejects a response for a different project', async () => {
+    harness.mockServer?.use(
+      http.get(`${API_URL}/platform/warehouse/:ref/context`, () =>
+        HttpResponse.json({
+          ...warehouseContext,
+          project_ref: 'zzzzzzzzzzzzzzzzzzzz',
+        })
+      )
+    );
+    const { client } = await setup({ features: ['warehouse'] });
+    expect(
+      (
+        await client.callTool({
+          name: 'get_warehouse_context',
+          arguments: { project_id: warehouseContext.project_ref },
+        })
+      ).isError
+    ).toBe(true);
+  });
+
+  test('returns typed context over the modern HTTP transport', async () => {
+    harness.mockServer?.use(
+      http.get(`${API_URL}/platform/warehouse/:ref/context`, () =>
+        HttpResponse.json(warehouseContext)
+      )
+    );
+    const { client } = await harness.setupModern({
+      features: ['warehouse'],
+      projectId: warehouseContext.project_ref,
+      readOnly: true,
+    });
+    const result = await client.callTool({
+      name: 'get_warehouse_context',
+      arguments: {},
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.content).toEqual([
+      { type: 'text', text: JSON.stringify(warehouseContext) },
+    ]);
+  });
+});
 
 describe('tools', () => {
   test('get logs for each service type', async () => {

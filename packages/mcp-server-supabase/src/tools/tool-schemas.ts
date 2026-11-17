@@ -11,6 +11,7 @@ import { feedbackToolDefs } from './feedback-tools.js';
 import { notebookToolDefs } from './notebook-tools.js';
 import { secretToolDefs } from './secret-tools.js';
 import { storageToolDefs } from './storage-tools.js';
+import { warehouseToolDefs } from './warehouse-tools.js';
 import type { ToolDefs } from './util.js';
 
 type DefsToSchemas<T extends ToolDefs> = {
@@ -76,6 +77,7 @@ export const supabaseMcpToolSchemas = {
   ...defsToSchemas(edgeFunctionToolDefs),
   ...defsToSchemas(secretToolDefs),
   ...defsToSchemas(storageToolDefs),
+  ...defsToSchemas(warehouseToolDefs),
   ...defsToSchemas(notebookToolDefs),
   ...defsToSchemas(feedbackToolDefs),
 } satisfies Record<string, SchemaEntry>;
@@ -88,6 +90,9 @@ export const supabaseMcpToolSchemas = {
  * Used by {@link createToolSchemas} to filter tools by feature.
  */
 const FEATURE_TOOL_MAP = {
+  warehouse: Object.keys(
+    warehouseToolDefs
+  ) as readonly (keyof typeof warehouseToolDefs)[],
   docs: Object.keys(docsToolDefs) as readonly (keyof typeof docsToolDefs)[],
   account: Object.keys(
     accountToolDefs
