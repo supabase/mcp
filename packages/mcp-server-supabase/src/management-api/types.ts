@@ -2396,7 +2396,7 @@ export interface components {
             postgres_engine: string;
             release_channel: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
             db_host: string;
             db_port: number;
             db_user?: string;
@@ -2462,7 +2462,7 @@ export interface components {
             /** Format: date-time */
             deletion_scheduled_at?: string;
             /** @enum {string} */
-            preview_project_status?: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+            preview_project_status?: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
         };
         PlanGateErrorBody: {
             /** @description Human-readable explanation of the plan gate */
@@ -2527,7 +2527,7 @@ export interface components {
             /** @description Creation timestamp */
             created_at: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
             database: {
                 /** @description Database host */
                 host: string;
@@ -2611,6 +2611,23 @@ export interface components {
             postgres_engine?: null;
             /** @description [Experimental] Whether to enable high availability for the project. */
             high_availability?: boolean;
+            /** @description Initial SQL to run on the database. Limited to 1024 characters (1 KiB). For complex database changes, please use migrations https://supabase.com/docs/guides/deployment/database-migrations */
+            db_sql?: string;
+            /**
+             * Format: uri
+             * @description URL of the authentication site.
+             */
+            auth_site_url?: string;
+            /** @description Schemas exposed by the data API. */
+            data_api_exposed_schemas?: string[];
+            /** @description Whether to use the API schema for the data API. */
+            data_api_use_api_schema?: boolean;
+            /** @description Force revoke default privileges for the data API. This flag will be ignored if the organization enforces `true` by default, and cannot be overridden. */
+            data_api_revoke_default_privileges?: boolean;
+            /** @description GitHub installation ID for linkage. Must first grant access to the repository on the Dashboard. */
+            github_installation_id?: number;
+            /** @description GitHub repository ID for linkage. Must first grant access to the repository on the Dashboard. */
+            github_repository_id?: number;
         };
         V1ProjectResponse_Output: {
             /**
@@ -2640,7 +2657,7 @@ export interface components {
             /** @description Creation timestamp */
             created_at: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
         };
         RegionsInfoV1_Output: {
             recommendations: {
@@ -3032,7 +3049,7 @@ export interface components {
              * @description Include requester's public IP in the list of addresses to unban.
              * @default false
              */
-            requester_ip: boolean;
+            requester_ip?: boolean;
             identifier?: string;
         };
         NetworkRestrictionsResponse_Output: {
@@ -4315,19 +4332,33 @@ export interface components {
         };
         /** @example {
          *       "query": "select * from pg_stat_activity limit 1;",
-         *       "read_only": true
+         *       "read_only": true,
+         *       "disable_statement_timeout": false
          *     } */
         V1RunQueryBody: {
             query: string;
             parameters?: unknown[];
             read_only?: boolean;
+            /**
+             * @description Disable statement timeout for the query. Role-based or global timeout
+             *             still apply https://supabase.com/docs/guides/database/postgres/timeouts
+             * @default true
+             */
+            disable_statement_timeout?: boolean;
         };
         /** @example {
-         *       "query": "select * from pg_stat_activity limit 1;"
+         *       "query": "select * from pg_stat_activity limit 1;",
+         *       "disable_statement_timeout": false
          *     } */
         V1ReadOnlyQueryBody: {
             query: string;
             parameters?: unknown[];
+            /**
+             * @description Disable statement timeout for the query. Role-based or global timeout
+             *             still apply https://supabase.com/docs/guides/database/postgres/timeouts
+             * @default true
+             */
+            disable_statement_timeout?: boolean;
         };
         GetProjectDbMetadataResponse_Output: {
             databases: {
@@ -5416,7 +5447,7 @@ export interface components {
                 region: string;
                 is_branch: boolean;
                 /** @enum {string} */
-                status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+                status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
                 inserted_at: string;
                 databases: {
                     /** @enum {string} */
