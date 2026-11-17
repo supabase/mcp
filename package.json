@@ -14,5 +14,10 @@
     "@modelcontextprotocol/inspector": "^2.15.0",
     "pkg-pr-new": "^0.0.68",
     "supabase": "^2.1.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "@modelcontextprotocol/inspector>@hono/node-server": "2.1.8"
+    }
   }
 }
