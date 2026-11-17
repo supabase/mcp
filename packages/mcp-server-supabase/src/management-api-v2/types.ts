@@ -4,6 +4,72 @@
  */
 
 export interface paths {
+    "/v2/projects/{ref}/warehouse/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable Warehouse replication
+         * @description Enables replication for the currently eligible tables in a schema, or the named tables in that schema. Resolves source identities under the mutation lock without a preview or revision. Repeating the same selection is safe; a different existing selection is rejected. Schema selection excludes future tables; selected partition roots include future partitions. Acceptance does not imply completed synchronization.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        post: operations["v2-enable-warehouse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/warehouse/setups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set up Warehouse or replace its replication selection
+         * @description Replaces the full selection, preserving existing placement and destination settings. Resolves source identities under the mutation lock. Empty selections asynchronously disable Warehouse while retaining data. FDW installation is opt-in. Acceptance does not imply completed synchronization.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        post: operations["v2-create-warehouse-setup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/warehouse/setups/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Warehouse initial synchronization status
+         * @description Returns setup phases, linked tables, pipeline and routing state, cleanup errors, and optional FDW inspection. Set inspect_fdw=false to skip database FDW inspection. A null table replication_state means no observation is available. Status succeeded requires initial copy, a running pipeline and ready routing; it does not verify query connectivity. Pass the selection_id returned by enable to reject a changed selection while waiting.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        get: operations["v2-get-warehouse-setup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/projects/{ref}/analytics/log-drains": {
         parameters: {
             query?: never;
@@ -833,6 +899,400 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        V2WarehouseEnableRequest: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_setup";
+                attributes: {
+                    /**
+                     * @description Optional Warehouse compute region, independent of the source and catalog regions. Defaults to the existing assignment, or ap-southeast-1 in staging and eu-west-1 in production for a new assignment. DNS routing requires a registered cluster in that environment. Unsupported regions and changes to an existing assignment are rejected. Ignored when targets is empty.
+                     * @example ap-southeast-1
+                     */
+                    warehouse_region?: string;
+                    /**
+                     * @description Supabase project to use for both the DuckLake PostgreSQL catalog and Supabase Storage. Defaults to this project on first setup and to the configured destination on later requests. The destination must be active and healthy, and another project requires SQL and Storage admin write permissions. An existing destination cannot be changed through setup. Ignored when targets is empty.
+                     * @example zyxwvutsrqponmlkjihg
+                     */
+                    destination_project_ref?: string;
+                    /**
+                     * @description Whether to configure and install the Warehouse FDW in the project database. Defaults to false. Ignored when targets is empty.
+                     * @example false
+                     */
+                    install_fdw?: boolean;
+                    /**
+                     * @description Source PostgreSQL schema. Without tables, selects its currently eligible tables only.
+                     * @example public
+                     */
+                    schema: string;
+                    /** @description Table names in schema. Omit to select the currently eligible tables in that schema. */
+                    tables?: string[];
+                };
+            };
+        };
+        V2WarehouseEnableAcceptedResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_setup";
+                id: string;
+                attributes: {
+                    /** @description Tables with Warehouse copies */
+                    tables: {
+                        /**
+                         * @description Postgres schema name
+                         * @example public
+                         */
+                        schema: string;
+                        /**
+                         * @description Postgres table name
+                         * @example orders
+                         */
+                        name: string;
+                        /**
+                         * @description Warehouse copy sync state derived from replication status
+                         * @example live
+                         * @enum {string}
+                         */
+                        state: "syncing" | "live" | "error";
+                        /**
+                         * @description Replication lag in milliseconds, when available
+                         * @example 12000
+                         */
+                        lag_ms?: number;
+                        /**
+                         * Format: date-time
+                         * @description Last sync timestamp, when available
+                         * @example 2026-06-23T17:48:00Z
+                         */
+                        last_synced_at?: string;
+                        /**
+                         * @description DuckLake table path with individually quoted identifiers, including the configured project namespace when present
+                         * @example "abcjuqabhgwjjutfvtpa"."public"."orders"
+                         */
+                        copy_name: string;
+                        /**
+                         * @description Warehouse table size in bytes, when available
+                         * @example 197912092672
+                         */
+                        warehouse_size_bytes?: number;
+                    }[];
+                    /**
+                     * @description Warehouse replication pipeline ID, or null when Warehouse disable has been requested
+                     * @example 03dg2o5teb2eucxr9ggh3uie6
+                     */
+                    pipeline_id: string | null;
+                    /** @enum {boolean} */
+                    accepted: true;
+                    selected_tables: {
+                        id: number;
+                        schema: string;
+                        name: string;
+                    }[];
+                    /** @description Identity of the accepted selection. Pass to the current setup read to reject a changed selection while waiting. */
+                    selection_id: string;
+                };
+            };
+        };
+        APIErrorObject: {
+            id?: string;
+            /** @enum {string} */
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+            message: string;
+            description?: string;
+            links?: {
+                [key: string]: {
+                    href: string;
+                    rel?: string;
+                    title?: string;
+                    type?: string;
+                    describedby?: string;
+                    meta?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            meta?: {
+                [key: string]: unknown;
+            };
+            issues?: {
+                id?: string;
+                code: string;
+                message: string;
+                description?: string;
+                links?: {
+                    [key: string]: {
+                        href: string;
+                        rel?: string;
+                        title?: string;
+                        type?: string;
+                        describedby?: string;
+                        meta?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                meta?: {
+                    [key: string]: unknown;
+                };
+            }[];
+        };
+        ErrorResponseBody: {
+            error: components["schemas"]["APIErrorObject"];
+        };
+        V2WarehouseSetupRequest: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_setup";
+                attributes: {
+                    /**
+                     * @description Optional Warehouse compute region, independent of the source and catalog regions. Defaults to the existing assignment, or ap-southeast-1 in staging and eu-west-1 in production for a new assignment. DNS routing requires a registered cluster in that environment. Unsupported regions and changes to an existing assignment are rejected. Ignored when targets is empty.
+                     * @example ap-southeast-1
+                     */
+                    warehouse_region?: string;
+                    /**
+                     * @description Supabase project to use for both the DuckLake PostgreSQL catalog and Supabase Storage. Defaults to this project on first setup and to the configured destination on later requests. The destination must be active and healthy, and another project requires SQL and Storage admin write permissions. An existing destination cannot be changed through setup. Ignored when targets is empty.
+                     * @example zyxwvutsrqponmlkjihg
+                     */
+                    destination_project_ref?: string;
+                    /** @description Complete selection of schemas and individual tables to copy, replacing the previous selection. Schema targets expand to the eligible tables present when the request is processed. An empty array asynchronously disables Warehouse while retaining its data. Prefer DELETE to disable Warehouse; poll setup-status for completion. */
+                    targets: ({
+                        /** @enum {string} */
+                        type: "schema";
+                        /**
+                         * @description Postgres schema whose currently eligible tables should be copied
+                         * @example public
+                         */
+                        schema: string;
+                    } | {
+                        /** @enum {string} */
+                        type: "table";
+                        /**
+                         * @description Postgres schema name
+                         * @example public
+                         */
+                        schema: string;
+                        /**
+                         * @description Postgres table name
+                         * @example orders
+                         */
+                        name: string;
+                    })[];
+                    /**
+                     * @description Whether to configure and install the Warehouse FDW in the project database. Defaults to false. Ignored when targets is empty.
+                     * @example false
+                     */
+                    install_fdw?: boolean;
+                };
+            };
+        };
+        V2WarehouseSetupAcceptedResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_setup";
+                id: string;
+                attributes: {
+                    /** @description Tables with Warehouse copies */
+                    tables: {
+                        /**
+                         * @description Postgres schema name
+                         * @example public
+                         */
+                        schema: string;
+                        /**
+                         * @description Postgres table name
+                         * @example orders
+                         */
+                        name: string;
+                        /**
+                         * @description Warehouse copy sync state derived from replication status
+                         * @example live
+                         * @enum {string}
+                         */
+                        state: "syncing" | "live" | "error";
+                        /**
+                         * @description Replication lag in milliseconds, when available
+                         * @example 12000
+                         */
+                        lag_ms?: number;
+                        /**
+                         * Format: date-time
+                         * @description Last sync timestamp, when available
+                         * @example 2026-06-23T17:48:00Z
+                         */
+                        last_synced_at?: string;
+                        /**
+                         * @description DuckLake table path with individually quoted identifiers, including the configured project namespace when present
+                         * @example "abcjuqabhgwjjutfvtpa"."public"."orders"
+                         */
+                        copy_name: string;
+                        /**
+                         * @description Warehouse table size in bytes, when available
+                         * @example 197912092672
+                         */
+                        warehouse_size_bytes?: number;
+                    }[];
+                    /**
+                     * @description Warehouse replication pipeline ID, or null when Warehouse disable has been requested
+                     * @example 03dg2o5teb2eucxr9ggh3uie6
+                     */
+                    pipeline_id: string | null;
+                    /** @enum {boolean} */
+                    accepted: true;
+                    selected_tables: {
+                        id: number;
+                        schema: string;
+                        name: string;
+                    }[];
+                };
+            };
+        };
+        V2WarehouseSetupStatusResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_setup";
+                id: string;
+                attributes: {
+                    /** @description Warehouse DNS delivery status. Ready means the DNS API accepted the route; client DNS caches may still be updating. */
+                    dns?: {
+                        hostname: string;
+                        region: string;
+                        /** @enum {string} */
+                        status: "pending" | "ready" | "error" | "removed";
+                    };
+                    /** @description Whether the current disable request deletes DuckLake data. */
+                    delete_data?: boolean;
+                    /** @description Warehouse cleanup failure, when present. */
+                    error?: string;
+                    /**
+                     * @description Overall Warehouse lifecycle status, using persisted state during teardown and replication state during setup
+                     * @example copying
+                     * @enum {string}
+                     */
+                    setup_status: "not_started" | "setting_up" | "copying" | "complete" | "error" | "disabling" | "disabled" | "deletion_failed";
+                    /**
+                     * @description Warehouse replication pipeline ID when it exists
+                     * @example 03dg2o5teb2eucxr9ggh3uie6
+                     */
+                    pipeline_id?: string;
+                    /** @description Warehouse setup phases in execution order */
+                    steps: {
+                        /**
+                         * @description Observable Warehouse setup phase
+                         * @example warehouse_copy
+                         * @enum {string}
+                         */
+                        name: "warehouse_pipeline" | "warehouse_copy" | "warehouse_fdw";
+                        /**
+                         * @description Derived Warehouse setup step status
+                         * @example running
+                         * @enum {string}
+                         */
+                        status: "waiting" | "running" | "completed" | "skipped" | "error";
+                        /**
+                         * @description Best-effort progress or error message derived from Warehouse state
+                         * @example Pending initial copy: public.orders:copying_table
+                         */
+                        message?: string;
+                    }[];
+                    tables: {
+                        /**
+                         * @description Postgres schema name
+                         * @example public
+                         */
+                        schema: string;
+                        /**
+                         * @description Postgres table name
+                         * @example orders
+                         */
+                        name: string;
+                        /**
+                         * @description Warehouse copy sync state derived from replication status
+                         * @example live
+                         * @enum {string}
+                         */
+                        state: "syncing" | "live" | "error";
+                        /**
+                         * @description Replication lag in milliseconds, when available
+                         * @example 12000
+                         */
+                        lag_ms?: number;
+                        /**
+                         * Format: date-time
+                         * @description Last sync timestamp, when available
+                         * @example 2026-06-23T17:48:00Z
+                         */
+                        last_synced_at?: string;
+                        /**
+                         * @description DuckLake table path with individually quoted identifiers, including the configured project namespace when present
+                         * @example "abcjuqabhgwjjutfvtpa"."public"."orders"
+                         */
+                        copy_name: string;
+                        /**
+                         * @description Warehouse table size in bytes, when available
+                         * @example 197912092672
+                         */
+                        warehouse_size_bytes?: number;
+                        id: number;
+                        replication_state: string | null;
+                    }[];
+                    /** @description Project database FDW setup markers; null during or after teardown, when setup inspection is inapplicable. */
+                    fdw_status: {
+                        /**
+                         * @description Whether fdw_warehouse is available to install on the project database instance
+                         * @example true
+                         */
+                        extension_available: boolean;
+                        /**
+                         * @description Whether the fdw_warehouse extension exists in the project database
+                         * @example true
+                         */
+                        extension_installed: boolean;
+                        /**
+                         * @description Whether the Warehouse foreign data wrapper exists in the project database
+                         * @example true
+                         */
+                        wrapper_installed: boolean;
+                        /**
+                         * @description Whether the Warehouse foreign server exists in the project database
+                         * @example true
+                         */
+                        server_configured: boolean;
+                        /**
+                         * @description Whether the local Warehouse schema exists in the project database
+                         * @example true
+                         */
+                        schema_created: boolean;
+                        /**
+                         * @description Whether the Warehouse foreign schema import has exposed the Warehouse snapshots table
+                         * @example true
+                         */
+                        foreign_schema_imported: boolean;
+                    } | null;
+                    /**
+                     * @description Current enablement readiness. Success requires initial copy, a running pipeline and ready routing; this is not a historical operation result or a query connectivity check.
+                     * @enum {string}
+                     */
+                    status: "running" | "succeeded" | "failed";
+                    /** @description Reason current enablement readiness failed. Separate from Studio setup or cleanup errors. */
+                    status_error?: string;
+                    replication_state: string;
+                };
+            };
+        };
         ListLogDrainsResponse_Output: {
             data: {
                 /**
@@ -903,52 +1363,6 @@ export interface components {
                     backend_type: "postgres" | "bigquery" | "clickhouse" | "webhook" | "datadog" | "loki" | "sentry" | "s3" | "axiom" | "last9" | "otlp" | "syslog";
                 };
             }[];
-        };
-        APIErrorObject: {
-            id?: string;
-            /** @enum {string} */
-            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
-            message: string;
-            description?: string;
-            links?: {
-                [key: string]: {
-                    href: string;
-                    rel?: string;
-                    title?: string;
-                    type?: string;
-                    describedby?: string;
-                    meta?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            meta?: {
-                [key: string]: unknown;
-            };
-            issues?: {
-                id?: string;
-                code: string;
-                message: string;
-                description?: string;
-                links?: {
-                    [key: string]: {
-                        href: string;
-                        rel?: string;
-                        title?: string;
-                        type?: string;
-                        describedby?: string;
-                        meta?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                meta?: {
-                    [key: string]: unknown;
-                };
-            }[];
-        };
-        ErrorResponseBody: {
-            error: components["schemas"]["APIErrorObject"];
         };
         CreateLogDrainRequestOpenApi: {
             data: {
@@ -2203,7 +2617,7 @@ export interface components {
             error?: {
                 id?: string;
                 /** @enum {string} */
-                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
                 message: string;
                 description?: string;
                 links?: {
@@ -2431,7 +2845,7 @@ export interface components {
                      * @description Project status
                      * @enum {string}
                      */
-                    status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+                    status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
                     /** @description Cloud provider hosting the project */
                     cloud_provider: string;
                     /** @description Region the project is hosted in */
@@ -2618,6 +3032,256 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "v2-enable-warehouse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2WarehouseEnableRequest"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WarehouseEnableAcceptedResponse_Output"];
+                };
+            };
+            /** @description Empty or unsupported selection */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Existing selection or lifecycle conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Warehouse setup unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-create-warehouse-setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2WarehouseSetupRequest"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WarehouseSetupAcceptedResponse_Output"];
+                };
+            };
+            /** @description Empty or unsupported selection */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Source identity or lifecycle conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Warehouse setup unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-get-warehouse-setup": {
+        parameters: {
+            query?: {
+                /** @description Inspect database FDW state. Defaults to true for current-status reads and false when selection_id is supplied. */
+                inspect_fdw?: "true" | "false";
+                /** @description Accepted selection identity returned by enable. A different current nonempty selection returns a conflict. */
+                selection_id?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WarehouseSetupStatusResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description The accepted selection changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Warehouse status unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
     "v2-list-log-drains": {
         parameters: {
             query?: never;
