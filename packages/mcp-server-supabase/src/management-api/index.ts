@@ -41,6 +41,9 @@ const errorSchema = z.object({
   message: z.string(),
 });
 
+// The API prefixes validation errors with the field name, e.g. `ref: ref must be exactly 20 characters long`.
+const malformedRefMessagePattern = /^ref: /;
+
 export function assertSuccess<
   T extends Record<string | number, any>,
   Options,
@@ -59,6 +62,15 @@ export function assertSuccess<
     const { data: errorContent } = errorSchema.safeParse(response.error);
 
     if (errorContent) {
+      if (
+        response.response.status === 400 &&
+        malformedRefMessagePattern.test(errorContent.message)
+      ) {
+        throw new Error(
+          `${errorContent.message.replace(/\.$/, '')}. Copy the ref exactly as returned by list_projects (id) or list_branches (project_ref), depending on whether you're working with the main project or a branch; do not retype or shorten it.`
+        );
+      }
+
       throw new Error(errorContent.message);
     }
 

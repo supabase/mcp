@@ -1,7 +1,7 @@
 {
   "name": "@supabase/mcp-server-supabase",
   "mcpName": "com.supabase/mcp",
-  "version": "0.15.0",
+  "version": "0.17.0",
   "description": "MCP server for interacting with Supabase",
   "license": "Apache-2.0",
   "repository": {
@@ -53,7 +53,7 @@
   },
   "dependencies": {
     "@mjackson/multipart-parser": "^0.10.1",
-    "@modelcontextprotocol/core": "https://pkg.pr.new/@modelcontextprotocol/core@b0091060d73d08211c6766990aa15656d4e03271",
+    "@modelcontextprotocol/core": "catalog:",
     "@modelcontextprotocol/node": "catalog:",
     "@supabase/mcp-utils": "workspace:^",
     "common-tags": "^1.8.2",
@@ -70,8 +70,10 @@
     "@ai-sdk/anthropic": "catalog:",
     "@ai-sdk/mcp": "catalog:",
     "@electric-sql/pglite": "^0.2.17",
-    "@modelcontextprotocol/client": "https://pkg.pr.new/@modelcontextprotocol/client@b0091060d73d08211c6766990aa15656d4e03271",
-    "@modelcontextprotocol/server": "https://pkg.pr.new/@modelcontextprotocol/server@b0091060d73d08211c6766990aa15656d4e03271",
+    "@modelcontextprotocol/client": "catalog:",
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
+    "@modelcontextprotocol/server": "catalog:",
+    "@supabase/mcp-ui": "workspace:*",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/common-tags": "^1.8.4",
     "@types/node": "^22.8.6",

@@ -121,6 +121,27 @@ describe('isUpdateWithoutWhere', () => {
   ])('UPDATE without WHERE still matches: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(true);
   });
+
+  test.each([
+    '-- reset ids\nUPDATE films SET id = 2;',
+    '/* reset ids */ UPDATE films SET id = 2;',
+    'SELECT 1; -- reset ids\nUPDATE films SET id = 2;',
+    'UPDATE ONLY films SET id = 2;',
+    'UPDATE films AS f SET id = 2;',
+    'UPDATE films f SET id = 2;',
+    'UPDATE ONLY public.films AS f SET id = 2;',
+  ])('UPDATE without WHERE matches: %s', (sql) => {
+    expect(isUpdateWithoutWhere(sql)).toBe(true);
+  });
+
+  test.each([
+    '-- reset ids\nUPDATE films SET id = 2 WHERE id = 1;',
+    '/* reset ids */ UPDATE films SET id = 2 WHERE id = 1;',
+    'UPDATE ONLY films SET id = 2 WHERE id = 1;',
+    'UPDATE films AS f SET id = 2 WHERE f.id = 1;',
+  ])('UPDATE with WHERE does not match: %s', (sql) => {
+    expect(isUpdateWithoutWhere(sql)).toBe(false);
+  });
 });
 
 describe('isDestructiveSql', () => {
@@ -132,6 +153,12 @@ describe('isDestructiveSql', () => {
     expect(
       isDestructiveSql('select * from films; UPDATE films SET title = null;')
     ).toBe(true);
+  });
+
+  test('UPDATE without WHERE after a leading comment matches', () => {
+    expect(isDestructiveSql('-- reset ids\nUPDATE films SET id = 2;')).toBe(
+      true
+    );
   });
 
   test.each([
@@ -189,5 +216,101 @@ describe('isDestructiveSql', () => {
     "DO $$ BEGIN EXECUTE 'ALTER TABLE films DROP COLUMN title'; END $$;",
   ])('existing explicit-column detection is preserved: %s', (sql) => {
     expect(isDestructiveSql(sql)).toBe(true);
+  });
+
+  test.each([
+    // AI-1424 probe. The DELETE is inside the '...'::text literal, so nothing runs after the plan.
+    "EXPLAIN (ANALYZE FALSE, FORMAT JSON) SELECT '...; DELETE FROM fictional_table_only_in_literal;'::text",
+    'EXPLAIN DELETE FROM films;',
+    'EXPLAIN UPDATE films SET title = null;',
+    'explain verbose delete from films',
+    'EXPLAIN (ANALYZE FALSE) DELETE FROM films;',
+    'EXPLAIN (ANALYZE OFF) DELETE FROM films;',
+    'EXPLAIN (analyse 0) DELETE FROM films;',
+    'EXPLAIN (VERBOSE, COSTS OFF, FORMAT JSON) DELETE FROM films;',
+    'EXPLAIN(FORMAT JSON)DELETE FROM films',
+    "EXPLAIN SELECT 'DROP TABLE films';",
+    "EXPLAIN SELECT E'it\\'s; DROP TABLE films';",
+    'EXPLAIN SELECT $t$a; DROP TABLE films$t$;',
+    'EXPLAIN SELECT 1 -- ; DROP TABLE films\n;',
+    'EXPLAIN /* ; TRUNCATE films */ SELECT 1;',
+    'EXPLAIN SELECT 1; EXPLAIN (ANALYZE FALSE) DELETE FROM films;',
+    'EXPLAIN SELECT 1;\n-- trailing comment\n',
+  ])('planner-only EXPLAIN does not match: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(false);
+  });
+
+  test.each([
+    'EXPLAIN ANALYZE DELETE FROM films;',
+    'EXPLAIN ANALYSE DELETE FROM films;',
+    'EXPLAIN ANALYZE VERBOSE DELETE FROM films;',
+    'EXPLAIN (ANALYZE) DELETE FROM films;',
+    'EXPLAIN (ANALYZE TRUE) DELETE FROM films;',
+    'EXPLAIN (ANALYZE ON, FORMAT JSON) DELETE FROM films;',
+    'EXPLAIN (FORMAT JSON, ANALYZE 1) DELETE FROM films;',
+    'EXPLAIN /**/ ANALYZE UPDATE films SET title = null;',
+    'EXPLAIN SELECT 1; DROP TABLE films;',
+    'DROP TABLE films; EXPLAIN SELECT 1;',
+    'EXPLAIN SELECT 1; UPDATE films SET title = null;',
+    "EXPLAIN SELECT 1; EXECUTE 'DROP TABLE films';",
+    // Same probe with the DELETE outside the literal, so it runs after the plan.
+    "EXPLAIN (ANALYZE FALSE, FORMAT JSON) SELECT '...'::text; DELETE FROM films;",
+  ])('EXPLAIN that executes, or with other statements, matches: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+
+  test.each([
+    "EXPLAIN (ANALYZE 'false') DELETE FROM films;",
+    'EXPLAIN ("analyze" false) DELETE FROM films;',
+    'EXPLAIN (ANALYZE maybe) DELETE FROM films;',
+    'EXPLAIN (ANALYZE FALSE FALSE) DELETE FROM films;',
+    'EXPLAIN (ANALYZE FALSE DELETE FROM films;',
+  ])('unparseable EXPLAIN options keep the warning: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+
+  test.each([
+    "insert into notes (body) values ('Moved the list to 11/3; drop the two duplicates');",
+    'insert into notes (body) values ($b$Kept the deck; delete the old one$b$);',
+    "update notes set body = 'x; drop y' where id = 1;",
+    "select 'a; truncate b';",
+    String.raw`select E'it\'s; delete later';`,
+    "select f('ok; alter table t drop column c');",
+    `insert into asks (proposal, options) values ('Execute the outreach plan', '[{"proposed": "drop"}]');`,
+    "insert into execute_log (note) values ('a; drop b');",
+    "do 'select 1'; insert into notes (body) values ('a; drop b');",
+    "execute 'select 1'; insert into notes (body) values ('a; drop b');",
+  ])('data literal does not match: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(false);
+  });
+
+  test.each([
+    "do 'begin perform 1; drop table t; end'",
+    "DO E'begin perform 1; truncate t; end'",
+    "do $$ begin execute 'drop table t'; end $$",
+    'do language plpgsql $f$ begin perform 1; delete from t; end $f$',
+    "/* note */ do 'begin perform 1; drop table t; end'",
+    "insert into t values ('a'); do 'begin perform 1; drop table t; end'",
+    "create function f() returns void as 'begin perform 1; delete from t; end' language plpgsql",
+    "create function f() returns void as E'begin perform 1; delete from t; end' language plpgsql",
+    'create procedure p() as /* body */ $$ begin perform 1; drop table t; end $$ language plpgsql',
+    'drop table t',
+    'select 1; delete from t',
+    "select 'a'; truncate t",
+    'delete/**/from t',
+    "select 'unterminated; drop table t",
+  ])('code body or real statement still matches: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
+  });
+
+  test('EXPLAIN ANALYZE of a read keeps its existing classification', () => {
+    expect(isDestructiveSql('EXPLAIN ANALYZE SELECT * FROM films;')).toBe(
+      false
+    );
+    expect(
+      isDestructiveSql(
+        'EXPLAIN ANALYZE UPDATE films SET title = null WHERE id = 1;'
+      )
+    ).toBe(false);
   });
 });

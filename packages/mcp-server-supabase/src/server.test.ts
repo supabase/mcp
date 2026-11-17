@@ -1,4 +1,6 @@
 import {
+  ACCESS_TOKEN,
+  API_URL,
   contentApiMockSchema,
   createOrganization,
   createProject,
@@ -8,7 +10,8 @@ import {
   mockContentApiSchemaLoadCount,
 } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
-import { isToolCallerError } from './errors.js';
+import { isToolCallerError } from '@supabase/mcp-utils';
+import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { createSupabaseMcpServer, instructions } from './server.js';
@@ -16,7 +19,7 @@ import { supabaseMcpToolSchemas } from './tools/tool-schemas.js';
 import { stripIndent } from 'common-tags';
 import gqlmin from 'gqlmin';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { globalRegistry } from 'zod/v4';
+import { globalRegistry, ZodError } from 'zod/v4';
 
 const harness = createServerHarness();
 const setup = harness.setup;
@@ -476,18 +479,52 @@ describe('feature groups', () => {
       'list_notebooks',
       'get_notebook',
       'run_notebook',
+      'delete_notebook',
     ]);
   });
 
   test('platforms without notebook creation keep their existing notebook tools', async () => {
     const { client } = await setup({
       features: ['notebooks'],
-      platform: { notebooks: { listNotebooks: vi.fn(), getNotebook: vi.fn() } },
+      platform: {
+        notebooks: {
+          listNotebooks: vi.fn(),
+          getNotebook: vi.fn(),
+          deleteNotebook: vi.fn(),
+        },
+      },
     });
     expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
       'list_notebooks',
       'get_notebook',
+      'delete_notebook',
     ]);
+  });
+
+  test('notebook tools are enabled by default when the platform supports them', async () => {
+    const listDefaultToolNames = async (platform?: SupabasePlatform) => {
+      const { client } = await setup({ platform });
+      return (await client.listTools()).tools.map((tool) => tool.name);
+    };
+    const { notebooks: _, ...platformWithoutNotebooks } =
+      createSupabaseApiPlatform({ accessToken: ACCESS_TOKEN, apiUrl: API_URL });
+    const notebookTools = [
+      'create_notebook',
+      'list_notebooks',
+      'get_notebook',
+      'run_notebook',
+      'delete_notebook',
+    ];
+
+    expect(await listDefaultToolNames()).toEqual(
+      expect.arrayContaining(notebookTools)
+    );
+    const toolsWithoutAdapter = await listDefaultToolNames(
+      platformWithoutNotebooks
+    );
+    for (const name of notebookTools) {
+      expect(toolsWithoutAdapter).not.toContain(name);
+    }
   });
 
   test('feedback tools', async () => {
@@ -499,6 +536,78 @@ describe('feature groups', () => {
     const toolNames = tools.map((tool) => tool.name);
 
     expect(toolNames).toEqual(['submit_feedback', 'delete_feedback']);
+  });
+
+  test('submit_feedback advertises the feedback length limit', async () => {
+    const { client } = await setup({ features: ['feedback'] });
+
+    const { tools } = await client.listTools();
+    const submitFeedback = tools.find(({ name }) => name === 'submit_feedback');
+
+    expect(submitFeedback?.description).toContain('1000 characters');
+    expect(submitFeedback?.inputSchema.properties?.feedback).toMatchObject({
+      maxLength: 1000,
+      description: expect.stringContaining('1000 characters'),
+    });
+  });
+
+  test('feedback tools treat a null project_id as omitted', async () => {
+    const feedback = {
+      submit: vi.fn().mockResolvedValue({ deleteToken: 'tok' }),
+      delete: vi.fn().mockResolvedValue({ deleted: true }),
+    };
+    const { callTool } = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+    });
+
+    await expect(
+      callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi', project_id: null },
+      })
+    ).resolves.toEqual({ delete_token: 'tok' });
+    await expect(
+      callTool({
+        name: 'delete_feedback',
+        arguments: {
+          delete_token: '5d6d3b3e-4b2f-4a52-9b77-0f0e6a4f6a11',
+          project_id: null,
+        },
+      })
+    ).resolves.toEqual({ deleted: true });
+    expect(feedback.submit.mock.calls[0]![0].projectId).toBeUndefined();
+    expect(feedback.delete.mock.calls[0]![0].projectId).toBeUndefined();
+  });
+
+  // An empty project_ref is stored but never matches a delete header.
+  test('feedback tools reject an empty project_id', async () => {
+    const feedback = {
+      submit: vi.fn().mockResolvedValue({ deleteToken: 'tok' }),
+      delete: vi.fn().mockResolvedValue({ deleted: true }),
+    };
+    const { callTool } = await setup({
+      platform: { feedback },
+      features: ['feedback'],
+    });
+
+    await expect(
+      callTool({
+        name: 'submit_feedback',
+        arguments: { feedback: 'hi', project_id: '' },
+      })
+    ).rejects.toThrow('project_id');
+    await expect(
+      callTool({
+        name: 'delete_feedback',
+        arguments: {
+          delete_token: '5d6d3b3e-4b2f-4a52-9b77-0f0e6a4f6a11',
+          project_id: '',
+        },
+      })
+    ).rejects.toThrow('project_id');
+    expect(feedback.submit).not.toHaveBeenCalled();
+    expect(feedback.delete).not.toHaveBeenCalled();
   });
 
   test('submit_feedback passes the request client info', async () => {
@@ -636,6 +745,73 @@ describe('feature groups', () => {
     ).rejects.toThrow('upstream down');
 
     expect(errors.map(isToolCallerError)).toEqual([true, false]);
+  });
+
+  test('argument and unknown-tool failures reach onToolCall as caller errors and keep their client result', async () => {
+    const failures: Array<{
+      name: string;
+      arguments: unknown;
+      error: unknown;
+    }> = [];
+    const { client } = await setup({
+      onToolCall: (details) => {
+        if (!details.success) {
+          failures.push({
+            name: details.name,
+            arguments: details.arguments,
+            error: details.error,
+          });
+        }
+      },
+    });
+
+    const parseResult = await client.callTool({
+      name: 'list_organizations',
+      arguments: { extra: true },
+    });
+    const unknownToolResult = await client.callTool({
+      name: 'no_such_tool',
+      arguments: { foo: 'bar' },
+    });
+
+    // zod's issue for `.strict()` rejecting the extra key, as JSON text.
+    const extraKeyIssue = 'Unrecognized key: \\"extra\\"';
+    expect(failures).toMatchObject([
+      {
+        name: 'list_organizations',
+        arguments: { extra: true },
+        error: {
+          name: 'ToolCallerError',
+          message: expect.stringContaining(extraKeyIssue),
+          cause: expect.any(ZodError),
+        },
+      },
+      {
+        name: 'no_such_tool',
+        arguments: { foo: 'bar' },
+        error: { name: 'ToolCallerError', message: 'tool not found' },
+      },
+    ]);
+    expect(failures[1]?.error).not.toHaveProperty('cause');
+
+    const clientErrors = [parseResult, unknownToolResult].map((result) => {
+      const content = result.content.at(0);
+      return {
+        isError: result.isError,
+        error:
+          content?.type === 'text' ? JSON.parse(content.text).error : content,
+      };
+    });
+    expect(clientErrors).toMatchObject([
+      {
+        isError: true,
+        error: {
+          name: 'ZodError',
+          message: expect.stringContaining(extraKeyIssue),
+        },
+      },
+      { isError: true, error: { name: 'Error', message: 'tool not found' } },
+    ]);
   });
 
   test('feedback tools are hidden in read-only mode', async () => {

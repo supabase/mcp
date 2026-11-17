@@ -35,6 +35,7 @@ export type LocalHttpEntryOptions = {
 const querySchema = z.object({
   project_ref: z.string().optional(),
   read_only: z.stringbool().default(false),
+  experimental_apps: z.stringbool().default(false),
   features: z
     .string()
     .transform((value) => parseList(value))
@@ -165,6 +166,7 @@ export async function startLocalHttpEntry({
           const {
             project_ref: projectId,
             read_only: readOnly,
+            experimental_apps: experimentalApps,
             features,
             skip_elicitations: skipElicitations,
           } = query.data;
@@ -187,12 +189,12 @@ export async function startLocalHttpEntry({
                 projectId,
                 readOnly,
                 features,
+                experimentalApps,
                 contentApiUrl,
                 dashboardUrl,
                 elicitation: {
                   requestState: {
                     key: requestStateKey,
-                    ttlSeconds: 120,
                     // One process can serve several PATs, so the principal is the token's hash.
                     principal: createHash('sha256')
                       .update(accessToken)
@@ -202,8 +204,12 @@ export async function startLocalHttpEntry({
                     enabledTools: CURRENT_ELICITATION_TOOLS.filter(
                       (tool) => !skipElicitations?.includes(tool)
                     ),
+                    ttlSeconds: 600,
                   },
-                  secretCollection,
+                  secretCollection: secretCollection && {
+                    ...secretCollection,
+                    ttlSeconds: 120,
+                  },
                 },
               }),
             { legacy: 'stateless', onerror: console.error }

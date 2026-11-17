@@ -1040,10 +1040,13 @@ export const mockManagementApi = [
       description,
       content: {
         schema_version: 1,
-        cells: content.cells.map((cell) => ({
-          ...cell,
-          id: crypto.randomUUID(),
-        })),
+        cells: content.cells.map((cell) => {
+          const id = crypto.randomUUID();
+          // The API applies this default when `row_limit` is omitted.
+          return cell.type === 'database'
+            ? { ...cell, id, row_limit: cell.row_limit ?? 100 }
+            : { ...cell, id };
+        }),
       },
     });
 
@@ -1134,6 +1137,31 @@ export const mockManagementApi = [
           attributes: { ...notebook.attributes, content: notebook.content },
         },
       });
+    }
+  ),
+
+  /**
+   * Delete notebook
+   */
+  http.delete<{ ref: string; id: string }>(
+    `${API_URL}/v2/projects/:ref/notebooks/:id`,
+    ({ params }) => {
+      const project = mockProjects.get(params.ref);
+      if (!project) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Project not found' } },
+          { status: 404 }
+        );
+      }
+
+      if (!project.notebooks.delete(params.id)) {
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Notebook not found' } },
+          { status: 404 }
+        );
+      }
+
+      return new HttpResponse(null, { status: 204 });
     }
   ),
 ];

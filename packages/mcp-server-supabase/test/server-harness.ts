@@ -33,6 +33,7 @@ type SetupOptions = {
   clientInfo?: SupabaseMcpServerOptions['clientInfo'];
   readOnly?: boolean;
   features?: string[];
+  experimentalApps?: boolean;
   elicitation?: SupabaseMcpServerOptions['elicitation'];
   observer?: SupabaseMcpServerOptions['observer'];
   onToolCall?: SupabaseMcpServerOptions['onToolCall'];
@@ -42,6 +43,7 @@ type SetupOptions = {
 type ModernSetupOptions = {
   platform?: SupabasePlatform;
   features?: string[];
+  experimentalApps?: boolean;
   observer?: SupabaseMcpServerOptions['observer'];
   onToolCall?: SupabaseMcpServerOptions['onToolCall'];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
@@ -147,6 +149,7 @@ export function createServerHarness() {
       projectId,
       readOnly,
       features,
+      experimentalApps: options.experimentalApps,
       elicitation,
       clientInfo: options.clientInfo,
       observer: options.observer,
@@ -191,6 +194,7 @@ export function createServerHarness() {
             'execute_sql',
             'apply_migration',
             'run_notebook',
+            'delete_notebook',
           ],
         },
       },
@@ -219,6 +223,7 @@ export function createServerHarness() {
       projectId,
       readOnly,
       features,
+      experimentalApps: options.experimentalApps,
       observer: options.observer,
       onToolCall: options.onToolCall,
       elicitation: secretCollection
@@ -316,4 +321,18 @@ export function createServerHarness() {
       return mockServer;
     },
   };
+}
+
+/**
+ * Collects the raw errors the server's `onToolCall` hook receives, which is
+ * what a host sees before the error is serialized for the client.
+ */
+export function captureToolErrors() {
+  const errors: unknown[] = [];
+  const onToolCall: NonNullable<SupabaseMcpServerOptions['onToolCall']> = (
+    details
+  ) => {
+    if (!details.success) errors.push(details.error);
+  };
+  return { errors, onToolCall };
 }

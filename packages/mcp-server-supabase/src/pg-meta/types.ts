@@ -60,6 +60,7 @@ export const postgresTableSchema = z.object({
   live_rows_estimate: z.number().int(),
   dead_rows_estimate: z.number().int(),
   comment: z.string().nullable(),
+  partition_of: z.string().nullable(),
   columns: z.array(postgresColumnSchema).optional(),
   primary_keys: z.array(postgresPrimaryKeySchema),
   relationships: z.array(postgresRelationshipSchema),

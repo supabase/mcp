@@ -760,6 +760,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{ref}/network-restrictions/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Applies or rejects the change in review in a project's network restrictions
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        post: operations["v1-review-network-restrictions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{ref}/pgsodium": {
         parameters: {
             query?: never;
@@ -2087,7 +2109,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Partially updates project's Postgres config */
+        patch: operations["v1-patch-postgres-config"];
         trace?: never;
     };
     "/v1/projects/{ref}/config/realtime": {
@@ -2373,7 +2396,7 @@ export interface components {
             postgres_engine: string;
             release_channel: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
             db_host: string;
             db_port: number;
             db_user?: string;
@@ -2439,7 +2462,23 @@ export interface components {
             /** Format: date-time */
             deletion_scheduled_at?: string;
             /** @enum {string} */
-            preview_project_status?: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+            preview_project_status?: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
+        };
+        PlanGateErrorBody: {
+            /** @description Human-readable explanation of the plan gate */
+            message: string;
+            /** @description Present on entitlement denials. Other errors with this status code (validation, billing state) carry only message. */
+            error?: {
+                /**
+                 * @description Machine-readable marker for plan-gated denials
+                 * @enum {string}
+                 */
+                code: "entitlement_required";
+                /** @description Entitlement feature key that failed the check */
+                feature: string;
+                /** @description Billing page URL for the organization, present when the org is resolvable */
+                upgrade_url?: string;
+            };
         };
         BranchDeleteResponse_Output: {
             /** @enum {string} */
@@ -2488,7 +2527,7 @@ export interface components {
             /** @description Creation timestamp */
             created_at: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
             database: {
                 /** @description Database host */
                 host: string;
@@ -2572,6 +2611,23 @@ export interface components {
             postgres_engine?: null;
             /** @description [Experimental] Whether to enable high availability for the project. */
             high_availability?: boolean;
+            /** @description Initial SQL to run on the database. Limited to 1024 characters (1 KiB). For complex database changes, please use migrations https://supabase.com/docs/guides/deployment/database-migrations */
+            db_sql?: string;
+            /**
+             * Format: uri
+             * @description URL of the authentication site.
+             */
+            auth_site_url?: string;
+            /** @description Schemas exposed by the data API. */
+            data_api_exposed_schemas?: string[];
+            /** @description Whether to use the API schema for the data API. */
+            data_api_use_api_schema?: boolean;
+            /** @description Force revoke default privileges for the data API. This flag will be ignored if the organization enforces `true` by default, and cannot be overridden. */
+            data_api_revoke_default_privileges?: boolean;
+            /** @description GitHub installation ID for linkage. Must first grant access to the repository on the Dashboard. */
+            github_installation_id?: number;
+            /** @description GitHub repository ID for linkage. Must first grant access to the repository on the Dashboard. */
+            github_repository_id?: number;
         };
         V1ProjectResponse_Output: {
             /**
@@ -2601,7 +2657,7 @@ export interface components {
             /** @description Creation timestamp */
             created_at: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
         };
         RegionsInfoV1_Output: {
             recommendations: {
@@ -2699,6 +2755,13 @@ export interface components {
             expires_in: number;
             /** @enum {string} */
             token_type: "Bearer";
+            /**
+             * @description Space-delimited scopes granted to the token. Omitted when no scopes were granted.
+             * @example projects:read projects:write
+             */
+            scope?: string;
+            /** @description Project refs the token is limited to. `null` means all projects. */
+            project_refs: string[] | null;
         };
         /** @example {
          *       "client_id": "66666666-6666-4666-8666-666666666666",
@@ -2986,7 +3049,7 @@ export interface components {
              * @description Include requester's public IP in the list of addresses to unban.
              * @default false
              */
-            requester_ip: boolean;
+            requester_ip?: boolean;
             identifier?: string;
         };
         NetworkRestrictionsResponse_Output: {
@@ -3022,6 +3085,26 @@ export interface components {
                 dbAllowedCidrs?: string[];
                 dbAllowedCidrsV6?: string[];
             };
+            /**
+             * @description Present when a change that was never applied is waiting for review. `config` is the list the project enforces. Apply or reject the change with `POST /v1/projects/{ref}/network-restrictions/review`; submitting a new config also replaces it.
+             * @example {
+             *       "dbAllowedCidrs": [
+             *         "203.0.113.0/24"
+             *       ],
+             *       "dbAllowedCidrsV6": [
+             *         "2001:db8::/32"
+             *       ]
+             *     }
+             */
+            pending_config?: {
+                dbAllowedCidrs?: string[];
+                dbAllowedCidrsV6?: string[];
+            };
+            /**
+             * Format: date-time
+             * @description When the change in `pending_config` was requested. Send it as `requested_at` to the review endpoint.
+             */
+            pending_requested_at?: string;
             /** @enum {string} */
             status: "stored" | "applied";
             /** Format: date-time */
@@ -3088,6 +3171,22 @@ export interface components {
             applied_at?: string;
             /** @enum {string} */
             status: "stored" | "applied";
+        };
+        /** @example {
+         *       "action": "apply",
+         *       "requested_at": "2026-10-21T20:31:51.116+00:00"
+         *     } */
+        NetworkRestrictionsReviewRequest: {
+            /**
+             * @description `apply` replaces the enforced list with the pending one and applies it. `reject` discards the pending one and keeps the enforced list.
+             * @enum {string}
+             */
+            action: "apply" | "reject";
+            /**
+             * Format: date-time
+             * @description The `pending_requested_at` of the change being reviewed. Only that change is resolved: if another one has replaced it, the request gets a 409.
+             */
+            requested_at: string;
         };
         /** @example {
          *       "root_key": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -3203,22 +3302,6 @@ export interface components {
             status: "not-used" | "custom-domain-used" | "active";
             custom_domain?: string;
         };
-        PlanGateErrorBody: {
-            /** @description Human-readable explanation of the plan gate */
-            message: string;
-            /** @description Present on entitlement denials. Other errors with this status code (validation, billing state) carry only message. */
-            error?: {
-                /**
-                 * @description Machine-readable marker for plan-gated denials
-                 * @enum {string}
-                 */
-                code: "entitlement_required";
-                /** @description Entitlement feature key that failed the check */
-                feature: string;
-                /** @description Billing page URL for the organization, present when the org is resolvable */
-                upgrade_url?: string;
-            };
-        };
         /** @example {
          *       "vanity_subdomain": "acme-prod"
          *     } */
@@ -3316,6 +3399,13 @@ export interface components {
                 slot_name: string;
             } | {
                 /** @enum {string} */
+                type: "table_using_reg_type";
+                schema_name: string;
+                table_name: string;
+                column_name: string;
+                type_name: string;
+            } | {
+                /** @enum {string} */
                 type: "x86_architecture";
             } | {
                 /** @enum {string} */
@@ -3333,6 +3423,9 @@ export interface components {
             } | {
                 /** @enum {string} */
                 type: "btree_gist_nan_reindex";
+            } | {
+                /** @enum {string} */
+                type: "collation_reindex_required";
             })[];
         };
         DatabaseUpgradeStatusResponse_Output: {
@@ -3704,6 +3797,7 @@ export interface components {
             saml_external_url: string | null;
             saml_allow_encrypted_assertions: boolean | null;
             security_sb_forwarded_for_enabled: boolean | null;
+            external_email_magic_link_disabled: boolean | null;
             security_captcha_enabled: boolean | null;
             /** @enum {string|null} */
             security_captcha_provider: "turnstile" | "hcaptcha" | null;
@@ -3816,6 +3910,7 @@ export interface components {
             saml_enabled?: boolean | null;
             saml_external_url?: string | null;
             security_sb_forwarded_for_enabled?: boolean | null;
+            external_email_magic_link_disabled?: boolean;
             security_captcha_enabled?: boolean | null;
             /** @enum {string|null} */
             security_captcha_provider?: "turnstile" | "hcaptcha" | null;
@@ -4143,7 +4238,6 @@ export interface components {
         };
         V1GetUsageApiCountResponse_Output: {
             result?: {
-                /** Format: date-time */
                 timestamp: string;
                 total_auth_requests: number;
                 total_realtime_requests: number;
@@ -4238,19 +4332,33 @@ export interface components {
         };
         /** @example {
          *       "query": "select * from pg_stat_activity limit 1;",
-         *       "read_only": true
+         *       "read_only": true,
+         *       "disable_statement_timeout": false
          *     } */
         V1RunQueryBody: {
             query: string;
             parameters?: unknown[];
             read_only?: boolean;
+            /**
+             * @description Disable statement timeout for the query. Role-based or global timeout
+             *             still apply https://supabase.com/docs/guides/database/postgres/timeouts
+             * @default true
+             */
+            disable_statement_timeout?: boolean;
         };
         /** @example {
-         *       "query": "select * from pg_stat_activity limit 1;"
+         *       "query": "select * from pg_stat_activity limit 1;",
+         *       "disable_statement_timeout": false
          *     } */
         V1ReadOnlyQueryBody: {
             query: string;
             parameters?: unknown[];
+            /**
+             * @description Disable statement timeout for the query. Role-based or global timeout
+             *             still apply https://supabase.com/docs/guides/database/postgres/timeouts
+             * @default true
+             */
+            disable_statement_timeout?: boolean;
         };
         GetProjectDbMetadataResponse_Output: {
             databases: {
@@ -5339,7 +5447,7 @@ export interface components {
                 region: string;
                 is_branch: boolean;
                 /** @enum {string} */
-                status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING";
+                status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
                 inserted_at: string;
                 databases: {
                     /** @enum {string} */
@@ -5509,6 +5617,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Persistent branches are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -5872,6 +5989,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description The instance size is not available on the organization plan, or the organization has overdue invoices */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -5996,6 +6122,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Rate limit exceeded */
             429: {
                 headers: {
@@ -6025,6 +6158,8 @@ export interface operations {
                 code_challenge_method?: "plain" | "sha256" | "S256";
                 /** @description Organization slug */
                 organization_slug?: string;
+                /** @description Project ref */
+                project_ref?: string;
                 target_flow?: string;
                 /** @description Resource indicator for MCP (Model Context Protocol) clients */
                 resource?: string;
@@ -6671,6 +6806,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Custom JWT templates for secret API keys are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -6934,6 +7078,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Custom JWT templates for secret API keys are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -7037,6 +7190,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Branching or persistent branches are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -7839,6 +8001,60 @@ export interface operations {
                 content?: never;
             };
             /** @description Failed to update project network restrictions */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "v1-review-network-restrictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetworkRestrictionsReviewRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkRestrictionsResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Failed to resolve the network restrictions review */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -9559,6 +9775,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description An auth setting in the request is not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -9909,6 +10134,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description The restore is not available on the organization plan, or the organization has overdue invoices or a service restriction */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -11844,7 +12078,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -11914,7 +12150,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -11978,7 +12216,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -12351,6 +12591,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Disk modifications are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -12552,6 +12801,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description A storage feature or file size limit in the request is not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -12781,6 +13039,60 @@ export interface operations {
         };
     };
     "v1-update-postgres-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePostgresConfigBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostgresConfigResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Failed to update project's Postgres config */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "v1-patch-postgres-config": {
         parameters: {
             query?: never;
             header?: never;

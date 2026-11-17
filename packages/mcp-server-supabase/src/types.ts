@@ -6,6 +6,7 @@ export const CURRENT_ELICITATION_TOOLS = [
   'execute_sql',
   'apply_migration',
   'run_notebook',
+  'delete_notebook',
 ] as const;
 
 export type ElicitationToolName = (typeof CURRENT_ELICITATION_TOOLS)[number];

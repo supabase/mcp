@@ -11,6 +11,22 @@ export type ObservedTool = ElicitationToolName | 'other';
 
 export type ConfirmationFeature = 'cost' | 'destructive_sql' | 'notebook';
 
+/** One payload-free summary of a run that reached the notebook cell cap check. */
+type NotebookRunFact =
+  | Readonly<{
+      kind: 'notebook_run';
+      outcome: 'refused';
+      reason: 'too_many_cells';
+    }>
+  | Readonly<{
+      kind: 'notebook_run';
+      outcome: 'completed';
+      executed: number;
+      skipped: number;
+      errored: number;
+      budget_exhausted: boolean;
+    }>;
+
 /** Payload-free facts recorded by Supabase tools. */
 export type ObservationFact =
   | Readonly<{
@@ -62,7 +78,8 @@ export type ObservationFact =
       feature: ConfirmationFeature;
       disposition: 'returned' | 'threw';
       durationMs: number;
-    }>;
+    }>
+  | NotebookRunFact;
 
 export type ObservationContext = CoreObservationContext<ObservedTool>;
 export type RequestObservation = CoreRequestObservation<ObservationFact>;

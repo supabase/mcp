@@ -314,6 +314,45 @@ describe('tools', () => {
     ]);
   });
 
+  test('list tables returns the check expression for NOT VALID and NO INHERIT constraints', async () => {
+    const { callTool } = await setup();
+
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    await project.db.exec(`
+      create table checks (a integer, b integer, c integer);
+      alter table checks add constraint a_positive check (a > 0) not valid;
+      alter table checks add constraint b_positive check (b > 0) no inherit;
+      alter table checks add constraint c_positive check (c > 0);
+    `);
+
+    const result = await callTool({
+      name: 'list_tables',
+      arguments: {
+        project_id: project.id,
+        schemas: ['public'],
+        verbose: true,
+      },
+    });
+
+    const checksTable = result.tables.find(
+      (t: { name: string }) => t.name === 'public.checks'
+    );
+    expect(
+      checksTable.columns.map((c: { name: string; check?: string }) => [
+        c.name,
+        c.check,
+      ])
+    ).toEqual([
+      ['a', 'a > 0'],
+      ['b', 'b > 0'],
+      ['c', 'c > 0'],
+    ]);
+  });
+
   test('composite FK is grouped as one constraint with positionally ordered columns', async () => {
     const { callTool } = await setup();
 
@@ -738,6 +777,144 @@ describe('tools', () => {
     ).toHaveLength(1);
   });
 
+  test('partition clones of an FK are not reported as separate constraints', async () => {
+    const { callTool } = await setup();
+
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    await project.db.exec(`
+      create table orders (
+        id int primary key
+      ) partition by hash (id);
+      create table orders_p0 partition of orders
+        for values with (modulus 2, remainder 0);
+      create table orders_p1 partition of orders
+        for values with (modulus 2, remainder 1);
+      create table order_items (
+        order_id int references orders (id)
+      );
+
+      create table users (
+        id int primary key
+      );
+      create table tags (
+        id int primary key
+      );
+      create table events (
+        user_id int references users (id),
+        tag_id int,
+        created_at date
+      ) partition by range (created_at);
+      create table events_2025 partition of events
+        for values from ('2025-01-01') to ('2026-01-01');
+      create table events_2026 partition of events
+        for values from ('2026-01-01') to ('2027-01-01');
+      alter table events_2025
+        add constraint events_2025_tag_fk
+          foreign key (tag_id) references tags (id);
+    `);
+
+    const result = await callTool({
+      name: 'list_tables',
+      arguments: {
+        project_id: project.id,
+        schemas: ['public'],
+        verbose: true,
+      },
+    });
+
+    const fks = (name: string) =>
+      result.tables.find((t: { name: string }) => t.name === name)
+        .foreign_key_constraints;
+
+    const orderItemsFk = {
+      name: 'order_items_order_id_fkey',
+      source_table: 'public.order_items',
+      source_columns: ['order_id'],
+      target_table: 'public.orders',
+      target_columns: ['id'],
+    };
+    const eventsFk = {
+      name: 'events_user_id_fkey',
+      source_table: 'public.events',
+      source_columns: ['user_id'],
+      target_table: 'public.users',
+      target_columns: ['id'],
+    };
+    const partitionFk = {
+      name: 'events_2025_tag_fk',
+      source_table: 'public.events_2025',
+      source_columns: ['tag_id'],
+      target_table: 'public.tags',
+      target_columns: ['id'],
+    };
+
+    expect(fks('public.order_items')).toEqual([orderItemsFk]);
+    expect(fks('public.orders')).toEqual([orderItemsFk]);
+    expect(fks('public.orders_p0')).toBeUndefined();
+    expect(fks('public.orders_p1')).toBeUndefined();
+
+    expect(fks('public.events')).toEqual([eventsFk]);
+    expect(fks('public.users')).toEqual([eventsFk]);
+    expect(fks('public.events_2025')).toEqual([partitionFk]);
+    expect(fks('public.tags')).toEqual([partitionFk]);
+    expect(fks('public.events_2026')).toBeUndefined();
+  });
+
+  test('partitions are marked with their immediate parent', async () => {
+    const { callTool } = await setup();
+
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    await project.db.exec(`
+      create table events (
+        region text,
+        created_at date
+      ) partition by range (created_at);
+      create table events_2025 partition of events
+        for values from ('2025-01-01') to ('2026-01-01')
+        partition by list (region);
+      create table events_2025_eu partition of events_2025
+        for values in ('eu');
+      create schema archive;
+      create table archive.events_2024 partition of events
+        for values from ('2024-01-01') to ('2025-01-01');
+
+      create table logs (
+        id int
+      );
+      create table logs_2025 () inherits (logs);
+    `);
+
+    for (const verbose of [false, true]) {
+      const result = await callTool({
+        name: 'list_tables',
+        arguments: {
+          project_id: project.id,
+          schemas: ['public', 'archive'],
+          verbose,
+        },
+      });
+
+      const partitionOf = (name: string) =>
+        result.tables.find((t: { name: string }) => t.name === name)
+          .partition_of;
+
+      expect(partitionOf('public.events')).toBeUndefined();
+      expect(partitionOf('public.events_2025')).toBe('public.events');
+      expect(partitionOf('public.events_2025_eu')).toBe('public.events_2025');
+      expect(partitionOf('archive.events_2024')).toBe('public.events');
+      expect(partitionOf('public.logs')).toBeUndefined();
+      expect(partitionOf('public.logs_2025')).toBeUndefined();
+    }
+  });
+
   test('list_tables omits advisory when all tables have RLS enabled', async () => {
     const { callTool } = await setup();
 
@@ -1004,6 +1181,64 @@ describe('tools', () => {
     await expect(executeSqlPromise).rejects.toThrow(
       `Failed to execute SQL query. Access to project '${project.id}' was denied. If this project exists, your access token may be scoped to a different organization: re-authenticate with the MCP server and select the organization that owns this project.`
     );
+  });
+
+  // Real Management API body for a ref that fails zProjectRef (AI-1425).
+  const malformedRefMessage = 'ref: ref must be exactly 20 characters long';
+  const malformedRefHint =
+    "Copy the ref exactly as returned by list_projects (id) or list_branches (project_ref), depending on whether you're working with the main project or a branch; do not retype or shorten it.";
+
+  test.each([
+    ...projectScopedDbTools.filter(({ tool }) =>
+      ['execute_sql', 'apply_migration'].includes(tool)
+    ),
+    {
+      tool: 'get_project',
+      method: 'get',
+      endpoint: '/v1/projects/:projectId',
+      args: (projectId: string) => ({ id: projectId }),
+    },
+  ] as const)(
+    'malformed ref for $tool tells the agent to re-copy it',
+    async ({ tool, method, endpoint, args }) => {
+      const { callTool } = await setup();
+
+      harness.mockServer?.use(
+        http[method](`${API_URL}${endpoint}`, () =>
+          HttpResponse.json({ message: malformedRefMessage }, { status: 400 })
+        )
+      );
+
+      await expect(
+        callTool({ name: tool, arguments: args('abcdefghijklmnopqrs') })
+      ).rejects.toThrow(`${malformedRefMessage}. ${malformedRefHint}`);
+    }
+  );
+
+  test('other 400 errors are not given the ref hint', async () => {
+    const { callTool } = await setup();
+
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    harness.mockServer?.use(
+      http.post(`${API_URL}/v1/projects/:projectId/database/query`, () =>
+        HttpResponse.json(
+          { message: 'query: Invalid input: expected string' },
+          { status: 400 }
+        )
+      )
+    );
+
+    const error = await callTool({
+      name: 'execute_sql',
+      arguments: { project_id: project.id, query: 'select 1;' },
+    }).catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain(malformedRefHint);
   });
 
   test('invalid sql for apply_migration', async () => {
@@ -1274,6 +1509,38 @@ describe('tools', () => {
       // Regression: the decline message is missing from either result channel.
       expectTerminalResult(result, 'declined', 'SQL execution was declined.');
       expect(executeSql).not.toHaveBeenCalled();
+    });
+
+    test('form-capable client: only EXPLAIN ANALYZE elicits', async () => {
+      const { client, platform } = await setupModern({
+        clientCapabilities: FORM_CAPABLE,
+        elicitationAction: 'decline',
+      });
+      const project = await createActiveProject();
+      await project.db.exec('create table films (id int)');
+      const executeSql = vi.spyOn(platform.database!, 'executeSql');
+
+      // A declined elicitation would end the call before execution.
+      const explain = await client.callTool({
+        name: 'execute_sql',
+        arguments: {
+          project_id: project.id,
+          query:
+            "EXPLAIN (ANALYZE FALSE, FORMAT JSON) SELECT '...; DELETE FROM fictional_table_only_in_literal;'::text",
+        },
+      });
+      expect(explain.isError).toBeFalsy();
+      expect(executeSql).toHaveBeenCalledOnce();
+
+      const analyze = await client.callTool({
+        name: 'execute_sql',
+        arguments: {
+          project_id: project.id,
+          query: 'EXPLAIN ANALYZE DELETE FROM films;',
+        },
+      });
+      expectTerminalResult(analyze, 'declined', 'SQL execution was declined.');
+      expect(executeSql).toHaveBeenCalledOnce();
     });
 
     test('form-capable client: declining bare-column DROP preserves the column and its data', async () => {
