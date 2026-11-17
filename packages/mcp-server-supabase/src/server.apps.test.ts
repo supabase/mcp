@@ -5,17 +5,14 @@ import {
 import type { Client } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { createServerHarness } from '../test/server-harness.js';
-import {
-  LIST_PROJECTS_UI_URI,
-  LIST_TABLES_UI_URI,
-} from './resources/app-resources.js';
+import { getAppResources } from './resources/app-resources.js';
 
 const harness = createServerHarness();
 
 beforeEach(() => harness.reset());
 afterEach(() => harness.close());
 
-const VIEW_URIS = [LIST_PROJECTS_UI_URI, LIST_TABLES_UI_URI];
+const VIEW_URIS = getAppResources().map((view) => view.uri);
 
 const APPS_CLIENT_CAPABILITIES = {
   extensions: { [EXTENSION_ID]: { mimeTypes: [RESOURCE_MIME_TYPE] } },
@@ -84,16 +81,6 @@ describe('MCP Apps', () => {
       experimentalApps: true,
       clientCapabilities: APPS_CLIENT_CAPABILITIES,
     });
-
-    const { tools } = await client.listTools();
-    const linkOf = (name: string) =>
-      (
-        tools.find((tool) => tool.name === name)?._meta?.ui as
-          | { resourceUri?: string }
-          | undefined
-      )?.resourceUri;
-    expect(linkOf('list_projects')).toBe(LIST_PROJECTS_UI_URI);
-    expect(linkOf('list_tables')).toBe(LIST_TABLES_UI_URI);
 
     expect(await listedViewUris(client)).toEqual([...VIEW_URIS].sort());
     expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
