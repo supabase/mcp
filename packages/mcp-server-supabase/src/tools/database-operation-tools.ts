@@ -15,6 +15,7 @@ import {
 import { ToolCallerError } from '../errors.js';
 import type { ObservationFact } from '../observation.js';
 import {
+  isCatalogGap,
   listExtensionsFallback,
   listTablesFallback,
 } from '../pg-meta/catalog-fallback.js';
@@ -304,9 +305,10 @@ export function getDatabaseTools({
             parameters,
             read_only: true,
           })
-          // TEMPORARY workaround: see pg-meta/catalog-fallback.ts.
-          .catch((error) =>
-            listTablesFallback(
+          // TEMPORARY workaround for Spark's partial pg_catalog; removed with pg-meta/catalog-fallback.ts.
+          .catch((error) => {
+            if (!isCatalogGap(error)) throw error;
+            return listTablesFallback(
               (query, parameters) =>
                 database.executeSql(project_id, {
                   query,
@@ -316,8 +318,8 @@ export function getDatabaseTools({
               schemas
             ).catch(() => {
               throw error;
-            })
-          );
+            });
+          });
         const parsedTables = data.map((table) =>
           postgresTableSchema.parse(table)
         );
@@ -467,14 +469,15 @@ export function getDatabaseTools({
             query,
             read_only: true,
           })
-          // TEMPORARY workaround: see pg-meta/catalog-fallback.ts.
-          .catch((error) =>
-            listExtensionsFallback((query) =>
+          // TEMPORARY workaround for Spark's partial pg_catalog; removed with pg-meta/catalog-fallback.ts.
+          .catch((error) => {
+            if (!isCatalogGap(error)) throw error;
+            return listExtensionsFallback((query) =>
               database.executeSql(project_id, { query, read_only: true })
             ).catch(() => {
               throw error;
-            })
-          );
+            });
+          });
         const extensions = data.map((extension) =>
           postgresExtensionSchema.parse(extension)
         );

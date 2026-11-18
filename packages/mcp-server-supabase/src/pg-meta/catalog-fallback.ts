@@ -1,13 +1,12 @@
 /**
  * TEMPORARY WORKAROUND. Delete this file and its two call sites in
- * `tools/database-operation-tools.ts` once the databases it serves run `tables.sql`, `columns.sql` and
- * `extensions.sql`.
+ * `tools/database-operation-tools.ts` once Spark (turso) runs `tables.sql`, `columns.sql` and `extensions.sql`.
  *
- * Used only after the pg-meta query fails. It reads the same facts with plain catalog queries and assembles
+ * Used only after the pg-meta query fails with a missing-feature error (`isCatalogGap`). It reads the same facts with plain catalog queries and assembles
  * pg-meta's output shape in TypeScript, for databases whose `pg_catalog` is partial: today Spark on turso, which
  * lacks `unnest ... WITH ORDINALITY`, `DISTINCT ON`, the jsonb aggregates, `pg_enum`, `pg_stat_*` and
  * `pg_available_extensions()`. Row estimates and sizes read as 0, privilege filters are not applied, and enums and
- * comments are left empty when their catalogs are missing.
+ * comments and partitions are left empty when their catalogs are missing.
  */
 import { SYSTEM_SCHEMAS } from './index.js';
 import type {
@@ -54,7 +53,7 @@ select co.oid::int8 as id, co.conname as name, co.contype as type,
   co.conkey::text as columns, co.confkey::text as target_columns,
   case when co.contype = 'c' then pg_get_expr(co.conbin, co.conrelid, true) end as definition
 from pg_catalog.pg_constraint co
-where co.contype in ('p', 'u', 'f', 'c') and co.conparentid = 0
+where co.contype in ('p', 'u', 'c') or (co.contype = 'f' and co.conparentid = 0)
 order by co.oid`;
 
 const ENUMS_SQL = `
@@ -71,6 +70,13 @@ where d.classoid = (
   where c.relname = 'pg_class' and n.nspname = 'pg_catalog'
 )`;
 
+const PARTITIONS_SQL = `
+select i.inhrelid::int8 as table_id, pn.nspname || '.' || pc.relname as parent
+from pg_catalog.pg_inherits i
+join pg_catalog.pg_class pc on pc.oid = i.inhparent
+join pg_catalog.pg_namespace pn on pn.oid = pc.relnamespace
+where pc.relkind = 'p'`;
+
 const EXTENSIONS_SQL = `
 select x.extname as name, n.nspname as schema, x.extversion as default_version,
   x.extversion as installed_version, null as comment
@@ -84,7 +90,7 @@ const int = (value: unknown) => Number(value ?? 0);
 const text = (value: unknown) =>
   value === null || value === undefined ? null : String(value);
 
-// Postgres prints an int2vector as `{1,2}`, turso as `1 2`.
+// Postgres prints a smallint[] as `{1,2}`, turso as `1 2`.
 const attnums = (value: unknown) =>
   value === null || value === undefined
     ? []
@@ -94,8 +100,18 @@ const attnums = (value: unknown) =>
         .filter(Boolean)
         .map(Number);
 
+/** True when a query failed because the database lacks a Postgres feature or catalog, not for other errors. */
+export function isCatalogGap(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\bnot supported\b|\bno such (table|function|column)\b/i.test(message);
+}
+
+// A catalog the database lacks reads as empty; any other failure propagates.
 const optional = (run: Promise<Record<string, unknown>[]>) =>
-  run.catch(() => [] as Record<string, unknown>[]);
+  run.catch((error) => {
+    if (isCatalogGap(error)) return [] as Record<string, unknown>[];
+    throw error;
+  });
 
 function dataType(
   type: string | null,
@@ -109,18 +125,20 @@ function dataType(
   return 'USER-DEFINED';
 }
 
-/** Lists tables in pg-meta's shape with plain catalog queries. TEMPORARY: see the file comment. */
+/** Lists tables in pg-meta's shape with plain catalog queries. */
 export async function listTablesFallback(
   query: CatalogQuery,
   schemas: string[] = []
 ): Promise<PostgresTable[]> {
-  const [tables, columns, constraints, enums, comments] = await Promise.all([
-    query(TABLES_SQL),
-    query(COLUMNS_SQL),
-    query(CONSTRAINTS_SQL),
-    optional(query(ENUMS_SQL)),
-    optional(query(COMMENTS_SQL)),
-  ]);
+  const [tables, columns, constraints, enums, comments, partitions] =
+    await Promise.all([
+      query(TABLES_SQL),
+      query(COLUMNS_SQL),
+      query(CONSTRAINTS_SQL),
+      optional(query(ENUMS_SQL)),
+      optional(query(COMMENTS_SQL)),
+      optional(query(PARTITIONS_SQL)),
+    ]);
 
   const wanted = (schema: string) =>
     schemas.length > 0
@@ -149,6 +167,10 @@ export async function listTablesFallback(
       `${int(row.object_id)}.${int(row.column)}`,
       text(row.description),
     ])
+  );
+
+  const parentOf = new Map(
+    partitions.map((row) => [int(row.table_id), String(row.parent)])
   );
 
   const unique = new Set<string>();
@@ -259,7 +281,7 @@ export async function listTablesFallback(
         live_rows_estimate: 0,
         dead_rows_estimate: 0,
         comment: comment.get(`${id}.0`) ?? null,
-        partition_of: null,
+        partition_of: parentOf.get(id) ?? null,
         columns: (columnsByTable.get(id) ?? []).sort(
           (a, b) => a.ordinal_position - b.ordinal_position
         ),
@@ -280,7 +302,7 @@ export async function listTablesFallback(
     });
 }
 
-/** Lists installed extensions with `pg_extension` alone. TEMPORARY: see the file comment. */
+/** Lists installed extensions with `pg_extension` alone. */
 export async function listExtensionsFallback(
   query: CatalogQuery
 ): Promise<PostgresExtension[]> {
