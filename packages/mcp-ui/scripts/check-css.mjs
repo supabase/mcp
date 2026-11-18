@@ -8,6 +8,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { transform } from 'lightningcss';
 
 /** Component-scoped custom properties; exempt from the base-declaration rule. */
@@ -24,7 +25,8 @@ const CAPS = {
   utilities: [0, 0, 0],
 };
 
-const root = new URL('..', import.meta.url).pathname;
+// Not `.pathname`: that stays percent-encoded and is `/C:/…` on Windows.
+const root = fileURLToPath(new URL('..', import.meta.url));
 const files = readdirSync(join(root, 'src'), {
   recursive: true,
   withFileTypes: true,
