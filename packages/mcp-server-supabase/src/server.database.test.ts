@@ -1812,7 +1812,9 @@ describe('catalog fallback on a partial pg_catalog (temporary workaround)', () =
     refuseQueries((query) =>
       /with ordinality/i.test(query)
         ? 'WITH ORDINALITY is not supported'
-        : undefined
+        : /pg_enum/.test(query)
+          ? 'no such table: main.pg_enum'
+          : undefined
     );
 
     const result = await callTool({
