@@ -70,7 +70,7 @@
           color: var(--color-text-secondary);
         }
 
-        :where(.icon) {
+        :where([data-slot="disclosure-indicator"]) {
           transition: transform 0.15s ease;
 
           @media (prefers-reduced-motion: reduce) {
@@ -97,7 +97,7 @@
         );
       }
 
-      &:where([open]) :where(summary .icon) {
+      &:where([open]) :where(summary [data-slot="disclosure-indicator"]) {
         transform: rotate(180deg);
       }
 

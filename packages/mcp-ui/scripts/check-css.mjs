@@ -161,6 +161,12 @@ function* styleRules(rule) {
   else for (const child of rule.value?.rules ?? []) yield* styleRules(child);
 }
 
+/** Style rules in a rule at any depth, including those nested in style rules. */
+function* allStyleRules(rule) {
+  if (rule.type === 'style') yield rule;
+  for (const child of rule.value?.rules ?? []) yield* allStyleRules(child);
+}
+
 /** Class names in a selector, at any depth. */
 function* classes(selector) {
   for (const part of selector) {
@@ -174,7 +180,9 @@ const parsed = [];
 const declaredInBase = new Set();
 /** File -> every custom property it declares, in any layer. */
 const declaredByFile = new Map();
-/** Class -> file that styles it at the top level of `components`. */
+/**
+ * Class -> file that styles it in `components`, at any depth
+ */
 const classOwner = new Map();
 
 for (const file of files) {
@@ -246,7 +254,7 @@ for (const file of files) {
           if (layer === 'base') declaredInBase.add(prop);
         }
         if (layer === 'components') {
-          for (const style of styleRules(child)) {
+          for (const style of allStyleRules(child)) {
             for (const selector of style.value.selectors ?? []) {
               for (const cls of classes(selector)) {
                 const owner = classOwner.get(cls);

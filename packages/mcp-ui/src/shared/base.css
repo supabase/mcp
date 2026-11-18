@@ -207,6 +207,25 @@
     }
   }
 
+  /*
+   * Icons (see icons.tsx). Here rather than in `components` so a component
+   * that styles an icon inside it (by `data-slot`) always wins, whatever the
+   * import order. Like the link rules above, a class in `native` bends the
+   * layer rules; see SKILL.md.
+   */
+  svg:where(.icon) {
+    flex: none;
+
+    &:where([data-state="spinning"]) {
+      transform-origin: center;
+      animation: spin 0.9s linear infinite;
+
+      @media (prefers-reduced-motion: reduce) {
+        animation-duration: 3s;
+      }
+    }
+  }
+
   code {
     font-family: var(--font-mono);
   }

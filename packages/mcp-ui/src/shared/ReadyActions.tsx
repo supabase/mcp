@@ -184,7 +184,7 @@ export function ReadyActions({
       <details data-slot="connection" onToggle={onToggle}>
         <summary>
           Connection details
-          <ChevronIcon />
+          <ChevronIcon slot="disclosure-indicator" />
         </summary>
         <div data-slot="panel">
           {connection.status === 'loading' && (
