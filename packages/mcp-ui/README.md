@@ -25,6 +25,7 @@ To see a view's progress, failure and timeout states without a Supabase account,
 
 ```bash
 pnpm dev:mock   # Ctrl-C stops all three; MOCK_API_PORT / MOCK_TOKEN override the defaults, extra args go to dev:http
+MCP_QUERY='project_ref=abcdefghijklmnopqrst' pnpm dev:mock   # extra query params for the MCP URL Inspector connects to
 ```
 
 Or run them yourself in three terminals:

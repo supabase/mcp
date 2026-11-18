@@ -48,12 +48,15 @@ also starts its own sequence, advancing one step per poll.
 ## Server-flag scenarios
 
 These are server configuration, not API behavior. In HTTP mode they are query
-parameters on the MCP URL:
+parameters on the MCP URL (CLI flags like `--features` don't apply). Set
+`MCP_QUERY` to append them to the URL that `pnpm inspector` (and so
+`pnpm dev:mock`) connects to:
 
-- No development tools: `?experimental_apps=true&features=account,database,branching`
+- No development tools: `MCP_QUERY='features=account,database,branching' pnpm dev:mock`
   (anything without `development`). `get_project_url` / `get_publishable_keys` are then unknown tools.
-- Project-scoped server: `?experimental_apps=true&project_ref=abcdefghijklmnopqrst`
-  (the seeded parent project) so `project_id` is injected/rejected.
+- Project-scoped server: `MCP_QUERY='project_ref=abcdefghijklmnopqrst' pnpm dev:mock`
+  (the seeded parent project), so `project_id` is injected and dropped from
+  tool inputs.
 
 ## Seed data
 
