@@ -76,6 +76,17 @@ describe('isUpdateWithoutWhere', () => {
     ).toBe(true);
   });
 
+  test.each([
+    'UPDATE films SET title = 1;',
+    'UPDATE public.films* SET title = 1;',
+    'UPDATE films * AS f SET title = 1;',
+    'UPDATE ONLY films SET title = 1;',
+    'UPDATE ONLY (films) SET title = 1;',
+    'UPDATE ONLY (public.films) f SET title = 1;',
+  ])('update target spelling without WHERE matches: %s', (sql) => {
+    expect(isUpdateWithoutWhere(sql)).toBe(true);
+  });
+
   test('quoted identifier containing where without WHERE matches', () => {
     expect(isUpdateWithoutWhere('UPDATE "where table" SET id = 1;')).toBe(true);
   });

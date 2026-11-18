@@ -34,8 +34,12 @@ function hasDestructiveStart(sql: string, starts: RegExp): boolean {
   );
 }
 
-const updateWithoutWhereRegex =
-  /(?:^|;)\s*update\s+(?:only\s+)?(?:"(?:[^"]|"")*"|[\w]+)(?:\.(?:"(?:[^"]|"")*"|[\w]+))?(?:\s+(?:as\s+)?(?:"(?:[^"]|"")*"|[\w]+))?\s+set\s+[\w\W]+?(?!\s*where\s)/is;
+// UPDATE target: `t`, `t *`, `ONLY t` or `ONLY (t)`, where `t` may be schema-qualified.
+const updateTarget = String.raw`(?:"(?:[^"]|"")*"|[\w]+)(?:\.(?:"(?:[^"]|"")*"|[\w]+))?`;
+const updateWithoutWhereRegex = new RegExp(
+  String.raw`(?:^|;)\s*update\s+(?:only\s*\(\s*${updateTarget}\s*\)|(?:only\s+)?${updateTarget}(?:\s*\*)?)(?:\s+(?:as\s+)?(?:"(?:[^"]|"")*"|[\w]+))?\s+set\s+[\w\W]+?(?!\s*where\s)`,
+  'is'
+);
 
 function removeComments(sql: string, scan: SqlScan): string {
   let parts: string[] | undefined;
