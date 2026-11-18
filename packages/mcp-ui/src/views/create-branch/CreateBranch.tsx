@@ -1,74 +1,27 @@
-import { useState } from 'react';
-import { callProjectTool } from '../../shared/call-tool';
+import type { Branch } from '@supabase/mcp-server-supabase/platform';
+import { callTool } from '../../shared/call-tool';
 import { ProgressView, Summary } from '../../shared/ProgressView';
 import { stepsAt } from '../../shared/StepStatus';
 import { usePoll } from '../../shared/use-poll';
 import { useMcpView } from '../../shared/use-mcp-view';
-
-export type Branch = {
-  id: string;
-  name: string;
-  /** The branch's own project. */
-  project_ref: string;
-  parent_project_ref: string;
-  status: string;
-  is_default?: boolean;
-  git_branch?: string;
-  persistent?: boolean;
-  created_at?: string;
-  updated_at?: string;
-};
-
-const LABELS = [
-  'Creating branch',
-  'Provisioning branch database',
-  'Running migrations',
-  'Deploying functions',
-];
-
-/** Index of the current step and whether it failed, per branch status. */
-function progress(status: string): { step: number; failed: boolean } {
-  switch (status) {
-    case 'FUNCTIONS_DEPLOYED':
-      return { step: LABELS.length, failed: false };
-    case 'MIGRATIONS_PASSED':
-      return { step: 3, failed: false };
-    case 'RUNNING_MIGRATIONS':
-      return { step: 2, failed: false };
-    case 'MIGRATIONS_FAILED':
-      return { step: 2, failed: true };
-    case 'FUNCTIONS_FAILED':
-      return { step: 3, failed: true };
-    default:
-      // CREATING_PROJECT (provisioning the branch's database) and anything unknown.
-      return { step: 1, failed: false };
-  }
-}
-
-const isTerminal = (status: string) =>
-  status === 'FUNCTIONS_DEPLOYED' || progress(status).failed;
+import { isTerminal, LABELS, progress } from './status';
 
 /** View for the `create_branch` tool. */
 export function CreateBranch() {
-  const { toolCall, app, input } = useMcpView<Branch>('supabase-create-branch');
+  const { toolCall, app, input, hostCapabilities } = useMcpView<Branch>(
+    'supabase-create-branch'
+  );
   const branch = toolCall.status === 'ready' ? toolCall.data : undefined;
-  // Whether the last poll found the server scoped (to the parent project).
-  // Then no tool can target the branch's own project.
-  const [serverScoped, setServerScoped] = useState(false);
+  const canPoll = !!hostCapabilities.serverTools;
+  const serverScoped = input !== undefined && input.project_id === undefined;
 
   const poll = usePoll<Branch>({
-    enabled: !!app && !!branch,
+    enabled: !!app && !!branch && !!input && canPoll,
     fetcher: async () => {
-      // `project_id` is the parent. It is not in the tool input in
-      // project-scoped mode, so use the one from the result.
-      // In scoped mode the server's project is the parent, so retrying
-      // without `project_id` is correct here.
-      const { branches } = await callProjectTool<{ branches: Branch[] }>(
+      const { branches } = await callTool<{ branches: Branch[] }>(
         app!,
         'list_branches',
-        branch!.parent_project_ref,
-        {},
-        { targetsScopedProject: true, onScope: setServerScoped }
+        serverScoped ? {} : { project_id: branch!.parent_project_ref }
       );
       const found = branches.find((b) => b.id === branch!.id);
       if (!found) throw new Error('Branch not found in list_branches');
@@ -84,6 +37,8 @@ export function CreateBranch() {
         app={app}
         poll={poll}
         checkWith="list_branches"
+        canPoll={canPoll}
+        canOpenLinks={!!hostCapabilities.openLinks}
         waitingLabel="Waiting for confirmation…"
         input={input}
         noun="branch"

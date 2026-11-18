@@ -389,7 +389,7 @@
     }
   }
 
-  /* Open in Studio, ping and connection details, once the project is ready. */
+  /* Open in Studio and connection details, once the project is ready. */
   :where(.ready-actions) {
     display: flex;
     flex-direction: column;
@@ -494,24 +494,6 @@
         align-items: center;
         gap: var(--sb-space-2);
         color: var(--color-text-tertiary);
-      }
-    }
-
-    :where([data-slot="ping-result"]) {
-      color: var(--color-text-secondary);
-      font-size: var(--font-text-xs-size);
-      line-height: var(--font-text-xs-line-height);
-
-      /* A long message wraps inside the row instead of overflowing. */
-      min-inline-size: 0;
-      overflow-wrap: anywhere;
-
-      :where([data-tone="success"]) {
-        color: var(--color-text-success);
-      }
-
-      :where([data-tone="danger"]) {
-        color: var(--color-text-danger);
       }
     }
   }

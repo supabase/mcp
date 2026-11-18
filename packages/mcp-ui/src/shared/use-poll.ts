@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 export const POLL_INTERVAL_MS = 5000;
 export const POLL_TIMEOUT_MS = 10 * 60 * 1000;
+/** Consecutive failed polls tolerated before giving up with `error`. */
+export const POLL_MAX_RETRIES = 2;
 
 /**
  * Where polling is. `data` is the latest successful result: always there once
@@ -16,8 +18,17 @@ export type PollState<T> =
 
 /**
  * Calls `fetcher` immediately and then every `intervalMs` (default
- * `POLL_INTERVAL_MS`) until `isTerminal` returns true, the fetcher throws,
- * `timeoutMs` (default `POLL_TIMEOUT_MS`) passes, or the component unmounts. `enabled` false pauses everything (e.g. before the app connects).
+ * `POLL_INTERVAL_MS`) until `isTerminal` returns true, `timeoutMs` (default
+ * `POLL_TIMEOUT_MS`) passes, or the component unmounts. A poll that fails
+ * (`fetcher` or `isTerminal` throws) is retried on the next tick, up to
+ * `maxRetries` (default `POLL_MAX_RETRIES`) times in a row, so one blip doesn't
+ * end live progress; after that, polling stops with `error`. `enabled` false
+ * pauses everything (e.g. before the app connects).
+ *
+ * `done` is final. Otherwise, changing `enabled`, `intervalMs`, `timeoutMs` or
+ * `maxRetries` starts a new polling session: back to `running` (keeping
+ * `data`), with a fresh timeout and retry count, including after `timeout` or
+ * `error`, which only mean polling stopped.
  *
  * `fetcher` and `isTerminal` may change identity every render.
  */
@@ -27,14 +38,17 @@ export function usePoll<T>({
   enabled = true,
   intervalMs = POLL_INTERVAL_MS,
   timeoutMs = POLL_TIMEOUT_MS,
+  maxRetries = POLL_MAX_RETRIES,
 }: {
   fetcher: () => Promise<T>;
   isTerminal: (data: T) => boolean;
   enabled?: boolean;
   intervalMs?: number;
   timeoutMs?: number;
+  maxRetries?: number;
 }): PollState<T> {
   const [state, setState] = useState<PollState<T>>({ status: 'running' });
+  const done = useRef(false);
 
   const callbacks = useRef({ fetcher, isTerminal });
   useEffect(() => {
@@ -42,34 +56,52 @@ export function usePoll<T>({
   });
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || done.current) return;
+    // A new session: leave `timeout` or `error` from the previous one.
+    setState((current) =>
+      current.status === 'running'
+        ? current
+        : { status: 'running', data: current.data }
+    );
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
     const startedAt = Date.now();
 
+    const outOfTime = () => Date.now() - startedAt + intervalMs >= timeoutMs;
+
     const tick = async () => {
-      let next: T;
       try {
-        next = await callbacks.current.fetcher();
+        const next = await callbacks.current.fetcher();
+        if (stopped) return;
+        const terminal = callbacks.current.isTerminal(next);
+        failures = 0;
+        if (terminal) {
+          done.current = true;
+          setState({ status: 'done', data: next });
+          return;
+        }
+        if (outOfTime()) {
+          setState({ status: 'timeout', data: next });
+          return;
+        }
+        setState({ status: 'running', data: next });
       } catch (err) {
         if (stopped) return;
-        setState((current) => ({
-          status: 'error',
-          error: err instanceof Error ? err : new Error(String(err)),
-          data: current.data,
-        }));
-        return;
+        failures += 1;
+        if (failures > maxRetries) {
+          setState((current) => ({
+            status: 'error',
+            error: err instanceof Error ? err : new Error(String(err)),
+            data: current.data,
+          }));
+          return;
+        }
+        if (outOfTime()) {
+          setState((current) => ({ status: 'timeout', data: current.data }));
+          return;
+        }
       }
-      if (stopped) return;
-      if (callbacks.current.isTerminal(next)) {
-        setState({ status: 'done', data: next });
-        return;
-      }
-      if (Date.now() - startedAt + intervalMs >= timeoutMs) {
-        setState({ status: 'timeout', data: next });
-        return;
-      }
-      setState({ status: 'running', data: next });
       timer = setTimeout(tick, intervalMs);
     };
     void tick();
@@ -78,7 +110,7 @@ export function usePoll<T>({
       stopped = true;
       clearTimeout(timer);
     };
-  }, [enabled, intervalMs, timeoutMs]);
+  }, [enabled, intervalMs, timeoutMs, maxRetries]);
 
   return state;
 }

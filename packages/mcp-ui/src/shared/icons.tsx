@@ -55,14 +55,6 @@ export function ChevronIcon() {
   );
 }
 
-export function ActivityIcon() {
-  return (
-    <svg {...base}>
-      <path d="M1.5 8h2.5l2-5 4 10 2-5h2.5" />
-    </svg>
-  );
-}
-
 export function ExternalLinkIcon() {
   return (
     <svg {...base}>

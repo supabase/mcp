@@ -27,7 +27,9 @@ export function ProgressView<T>({
   projectRef,
   poll,
   checkWith,
+  canPoll = true,
   canReachProject,
+  canOpenLinks,
 }: {
   toolCall: ToolCallState<T>;
   app: App | null;
@@ -67,8 +69,15 @@ export function ProgressView<T>({
   poll: PollState<T>;
   /** Tool the model can use to check progress, shown if polling stops. */
   checkWith: string;
+  /**
+   * False when the host can't proxy tool calls (no `serverTools`), so there
+   * is no polling: the view says to ask the assistant instead.
+   */
+  canPoll?: boolean;
   /** See `ReadyActions`. */
   canReachProject?: boolean;
+  /** See `ReadyActions`. */
+  canOpenLinks?: boolean;
 }) {
   const view = progressBody({
     toolCall,
@@ -84,7 +93,9 @@ export function ProgressView<T>({
     projectRef,
     poll,
     checkWith,
+    canPoll,
     canReachProject,
+    canOpenLinks,
   });
 
   useAnnouncement(view.announce.polite);
@@ -107,7 +118,9 @@ function progressBody<T>({
   projectRef,
   poll,
   checkWith,
+  canPoll = true,
   canReachProject,
+  canOpenLinks,
 }: Parameters<typeof ProgressView<T>>[0]): {
   content: ReactNode;
   announce: { polite?: string; assertive?: string };
@@ -177,6 +190,10 @@ function progressBody<T>({
       : undefined;
   const timedOut = !isReady && poll.status === 'timeout';
   const failed = stepList.some((step) => step.state === 'failed');
+  const noPolling =
+    !isReady && !failed && !canPoll
+      ? `Progress can't be shown here. Ask the assistant to check with ${checkWith}.`
+      : undefined;
   const title = isReady
     ? titles.created
     : failed
@@ -187,6 +204,7 @@ function progressBody<T>({
   const timeoutText = `Timed out while polling for ${noun} status.`;
   if (timedOut) announce.polite = timeoutText;
   if (pollError) announce.assertive = pollError;
+  if (noPolling) announce.polite = noPolling;
 
   return {
     announce,
@@ -195,8 +213,9 @@ function progressBody<T>({
         <CardHeader
           title={title}
           badge={
-            // With a poll error the step count is stale, so show no badge.
-            pollError ? undefined : (
+            // With a poll error or no polling the step count is stale, so
+            // show no badge.
+            pollError || noPolling ? undefined : (
               <StepBadge steps={stepList} timedOut={timedOut} />
             )
           }
@@ -208,9 +227,9 @@ function progressBody<T>({
             <XCircleIcon />
             <span>{pollError}</span>
           </div>
-        ) : timedOut ? (
+        ) : timedOut || noPolling ? (
           <div data-slot="problem" data-tone="muted">
-            <span>{timeoutText}</span>
+            <span>{noPolling ?? timeoutText}</span>
           </div>
         ) : (
           <StepLine steps={stepList} />
@@ -219,7 +238,8 @@ function progressBody<T>({
           <ReadyActions
             app={app}
             projectRef={projectRef(data)}
-            canReachProject={canReachProject}
+            canReachProject={canPoll && canReachProject}
+            canOpenLinks={canOpenLinks}
           />
         )}
       </div>

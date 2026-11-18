@@ -1,4 +1,8 @@
-import type { App, McpUiHostContext } from '@modelcontextprotocol/ext-apps';
+import type {
+  App,
+  McpUiHostCapabilities,
+  McpUiHostContext,
+} from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { useEffect, useState } from 'react';
 import { parseToolError, parseToolResult } from './tool-result';
@@ -18,12 +22,17 @@ export type McpView<T> = {
   /** Arguments of the tool call the view was opened for, once received. */
   input: Record<string, unknown> | undefined;
   hostContext: McpUiHostContext | undefined;
+  /**
+   * What the host supports, once connected (empty until then). Views need
+   * `serverTools` to poll or fetch, and `openLinks` to open links.
+   */
+  hostCapabilities: McpUiHostCapabilities;
 };
 
 /**
  * Connects a view to its host. Returns the state of the tool call the view
  * was opened for (its parsed result once it arrives), the app, the tool input
- * and the host context. Also applies the host's styles (see `useHostStyles`).
+ * the host context and capabilities. Also applies the host's styles (see `useHostStyles`).
  */
 export function useMcpView<T>(name: string): McpView<T> {
   const [toolCall, setToolCall] = useState<ToolCallState<T>>({
@@ -69,5 +78,6 @@ export function useMcpView<T>(name: string): McpView<T> {
     app,
     input,
     hostContext,
+    hostCapabilities: app?.getHostCapabilities() ?? {},
   };
 }

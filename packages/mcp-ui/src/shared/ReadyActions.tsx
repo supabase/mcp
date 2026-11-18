@@ -1,14 +1,9 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { MouseEvent, SyntheticEvent } from 'react';
 import { type Politeness, useAnnounce } from './Announcer';
-import { callProjectTool } from './call-tool';
+import { callTool } from './call-tool';
 import { CopyField } from './CopyField';
-import {
-  ActivityIcon,
-  ChevronIcon,
-  ExternalLinkIcon,
-  SpinnerIcon,
-} from './icons';
+import { ChevronIcon, ExternalLinkIcon, SpinnerIcon } from './icons';
 import { Message } from './Message';
 import { type Transition, useMachine } from './use-machine';
 
@@ -77,60 +72,6 @@ const connectionTransition: Transition<
   }
 };
 
-/** Ping: one `select 1` at a time; the last result stays until the next. */
-type Ping =
-  | { status: 'idle' }
-  | { status: 'running' }
-  | { status: 'ok'; ms: number }
-  | { status: 'error'; message: string };
-
-type PingEvent =
-  | { type: 'start' }
-  | { type: 'succeeded'; ms: number }
-  | { type: 'failed'; message: string };
-
-type PingEffect = { type: 'ping' } | Announce;
-
-const pingTransition: Transition<Ping, PingEvent, PingEffect> = (
-  state,
-  event
-) => {
-  switch (event.type) {
-    case 'start':
-      return state.status === 'running'
-        ? null
-        : {
-            state: { status: 'running' },
-            effects: [
-              { type: 'announce', message: 'Pinging project' },
-              { type: 'ping' },
-            ],
-          };
-    case 'succeeded':
-      return state.status === 'running'
-        ? {
-            state: { status: 'ok', ms: event.ms },
-            effects: [
-              { type: 'announce', message: `Reachable, ${event.ms} ms` },
-            ],
-          }
-        : null;
-    case 'failed':
-      return state.status === 'running'
-        ? {
-            state: { status: 'error', message: event.message },
-            effects: [
-              {
-                type: 'announce',
-                message: event.message,
-                politeness: 'assertive',
-              },
-            ],
-          }
-        : null;
-  }
-};
-
 /** Prefer an enabled publishable key, then the legacy `anon` key. */
 function pickKey(keys: Key[]): string | undefined {
   const enabled = keys.filter((k) => !k.disabled);
@@ -141,34 +82,39 @@ function pickKey(keys: Key[]): string | undefined {
   )?.api_key;
 }
 
-const errorMessage = (err: unknown) =>
-  err instanceof Error ? err.message : String(err);
-
 /** The project's page in the Supabase dashboard (Studio). */
 const studioUrl = (projectRef: string) =>
   `https://supabase.com/dashboard/project/${encodeURIComponent(projectRef)}`;
 
 /**
- * Actions for a project that is ready: open it in Studio, ping it, and a
- * collapsible disclosure with its connection details. UI-only: nothing here is sent to the model's context.
+ * Actions for a project that is ready: open it in Studio, and a collapsible
+ * disclosure with its connection details. UI-only: nothing here is sent to the
+ * model's context.
  *
- * Calls always pass `projectRef` and never fall back to a scoped server's own
- * project, which is never the one this view created: a scoped server makes the
- * connection details fall back to the dashboard and the ping fail.
+ * Calls always pass `projectRef` as `project_id`. A server scoped to another
+ * project (e.g. a branch's parent) would reject it, so callers pass
+ * `canReachProject` false then.
  */
 export function ReadyActions({
   app,
   projectRef,
   canReachProject = true,
+  canOpenLinks = true,
 }: {
   app: App;
   projectRef: string;
   /**
-   * False when the server is known to be scoped to another project (e.g. a
-   * branch's parent), so no tool can reach this one: ping is hidden and
-   * connection details go straight to the dashboard link.
+   * False when no tool call can reach this project: the server is scoped to
+   * another project, or the host can't proxy tool calls. Connection details
+   * then go straight to the dashboard link.
    */
   canReachProject?: boolean;
+  /**
+   * False when the host can't open links. A sandboxed view can't open them
+   * itself, so the Open in Studio button is hidden and connection details
+   * offer the Studio link to copy instead.
+   */
+  canOpenLinks?: boolean;
 }) {
   const announce = useAnnounce();
   const projectUrl = studioUrl(projectRef);
@@ -184,52 +130,21 @@ export function ReadyActions({
           return;
         case 'fetchDetails':
           Promise.all([
-            callProjectTool<{ url: string }>(
-              app,
-              'get_project_url',
-              projectRef
-            ),
-            callProjectTool<{ keys: Key[] }>(
-              app,
-              'get_publishable_keys',
-              projectRef
-            ),
-          ]).then(
-            ([{ url }, { keys }]) => {
+            callTool<{ url: string }>(app, 'get_project_url', {
+              project_id: projectRef,
+            }),
+            callTool<{ keys: Key[] }>(app, 'get_publishable_keys', {
+              project_id: projectRef,
+            }),
+          ])
+            .then(([{ url }, { keys }]) => {
               const key = pickKey(keys);
               send(
                 key ? { type: 'loaded', url, key } : { type: 'unavailable' }
               );
-            },
-            () => send({ type: 'unavailable' })
-          );
+            })
+            .catch(() => send({ type: 'unavailable' }));
           return;
-      }
-    }
-  );
-
-  const [ping, sendPing] = useMachine(
-    pingTransition,
-    { status: 'idle' },
-    (effect, send) => {
-      switch (effect.type) {
-        case 'announce':
-          announce(effect.message, effect.politeness);
-          return;
-        case 'ping': {
-          const start = performance.now();
-          callProjectTool(app, 'execute_sql', projectRef, {
-            query: 'select 1',
-          }).then(
-            () =>
-              send({
-                type: 'succeeded',
-                ms: Math.round(performance.now() - start),
-              }),
-            (err) => send({ type: 'failed', message: errorMessage(err) })
-          );
-          return;
-        }
       }
     }
   );
@@ -251,39 +166,19 @@ export function ReadyActions({
 
   return (
     <div className="ready-actions">
-      <div data-slot="actions">
-        <a
-          className="button"
-          data-size="sm"
-          href={projectUrl}
-          onClick={openLink}
-        >
-          <ExternalLinkIcon />
-          Open in Studio
-        </a>
-        {/* Ping needs a tool that can reach this project. */}
-        {canReachProject && (
-          <button
-            type="button"
+      {canOpenLinks && (
+        <div data-slot="actions">
+          <a
+            className="button"
             data-size="sm"
-            onClick={() => sendPing({ type: 'start' })}
-            disabled={ping.status === 'running'}
+            href={projectUrl}
+            onClick={openLink}
           >
-            {ping.status === 'running' ? <SpinnerIcon /> : <ActivityIcon />}
-            {ping.status === 'running' ? 'Pinging…' : 'Ping project'}
-          </button>
-        )}
-        {ping.status === 'ok' && (
-          <span data-slot="ping-result">
-            <span data-tone="success">Reachable</span>, {ping.ms} ms
-          </span>
-        )}
-        {ping.status === 'error' && (
-          <span data-slot="ping-result">
-            <span data-tone="danger">Failed</span>, {ping.message}
-          </span>
-        )}
-      </div>
+            <ExternalLinkIcon />
+            Open in Studio
+          </a>
+        </div>
+      )}
       <details data-slot="connection" onToggle={onToggle}>
         <summary>
           Connection details
@@ -296,20 +191,26 @@ export function ReadyActions({
               <Message>Loading connection details…</Message>
             </div>
           )}
-          {connection.status === 'dashboard' && (
-            <a
-              data-slot="dashboard-link"
-              href={dashboardUrl}
-              onClick={openLink}
-            >
-              Open in Studio
-              <ExternalLinkIcon />
-            </a>
-          )}
+          {connection.status === 'dashboard' &&
+            (canOpenLinks ? (
+              <a
+                data-slot="dashboard-link"
+                href={dashboardUrl}
+                onClick={openLink}
+              >
+                Open in Studio
+                <ExternalLinkIcon />
+              </a>
+            ) : (
+              <CopyField label="Studio link" value={dashboardUrl} />
+            ))}
           {connection.status === 'details' && (
             <>
               <CopyField label="Project URL" value={connection.url} />
               <CopyField label="Publishable key" value={connection.key} />
+              {!canOpenLinks && (
+                <CopyField label="Studio link" value={projectUrl} />
+              )}
             </>
           )}
         </div>

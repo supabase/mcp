@@ -13,7 +13,8 @@
     "build:watch": "vite build --app --watch",
     "typecheck": "tsc --noEmit",
     "prebuild": "pnpm typecheck && pnpm lint:css",
-    "lint:css": "node scripts/check-css.mjs"
+    "lint:css": "node scripts/check-css.mjs",
+    "test": "vitest"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "catalog:",
@@ -24,13 +25,16 @@
     "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.0",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.0",
+    "happy-dom": "^20.0.0",
     "lightningcss": "^1.33.0",
     "typescript": "^5.6.3",
     "vite": "^8.0.0",
-    "vite-plugin-singlefile": "^2.3.0"
+    "vite-plugin-singlefile": "^2.3.0",
+    "vitest": "^2.1.9"
   }
 }
