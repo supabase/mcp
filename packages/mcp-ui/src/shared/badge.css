@@ -1,0 +1,34 @@
+@layer components {
+  :where(.badge) {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sb-space-1);
+    padding: 2px var(--sb-space-2);
+    border: var(--border-width-regular) solid var(--color-border-primary);
+    border-radius: var(--border-radius-full);
+    background: var(--color-background-secondary);
+    color: var(--color-text-secondary);
+    font-size: var(--font-text-xs-size);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--font-text-xs-line-height);
+    white-space: nowrap;
+
+    &:where([data-tone="success"]) {
+      color: var(--color-text-success);
+      background: var(--color-background-success);
+      border-color: var(--color-border-success);
+    }
+
+    &:where([data-tone="warning"]) {
+      color: var(--color-text-warning);
+      background: var(--color-background-warning);
+      border-color: var(--color-border-warning);
+    }
+
+    &:where([data-tone="danger"]) {
+      color: var(--color-text-danger);
+      background: var(--color-background-danger);
+      border-color: var(--color-border-danger);
+    }
+  }
+}

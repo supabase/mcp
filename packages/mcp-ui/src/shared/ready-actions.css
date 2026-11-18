@@ -1,0 +1,129 @@
+@layer components {
+  /* Open in Studio and connection details, once the project is ready. */
+  :where(.ready-actions) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-space-3);
+
+    :where([data-slot="actions"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-2);
+    }
+
+    /*
+     * A native disclosure along the bottom of the card. Inside a
+     * .progress-card it reads the card's padding, radius and border width
+     * (--sb-component-progress-card-*, declared in progress-card.css): the negative
+     * margins cancel the card's inline and bottom padding so the divider and
+     * tinted background run edge to edge (the card clips the rounded
+     * corners). The summary and panel use the same inline padding to line up
+     * with the card's content. While collapsed, the summary is the card's
+     * bottom edge, so it also reads the radius and border width to round its
+     * bottom corners to the card's inner curve and keep its focus ring from
+     * being clipped. The open panel needs no such rounding: its contents are
+     * padded away from the edge.
+     *
+     * Each read carries a fallback, because this file may ship without
+     * progress-card.css. The padding fallbacks are the card's own values. The
+     * margin fallbacks are zero: outside a card there is no padding to cancel,
+     * and the block would otherwise bleed out of its container.
+     */
+    :where([data-slot="connection"]) {
+      margin-inline: calc(
+        -1 *
+        var(--sb-component-progress-card-padding-inline, 0px)
+      );
+      margin-block-end: calc(
+        -1 *
+        var(--sb-component-progress-card-padding-block, 0px)
+      );
+      background: var(--color-background-secondary);
+      border-block-start: var(--border-width-regular) solid
+        var(--color-border-secondary);
+
+      :where(summary) {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--sb-space-2);
+        padding: var(--sb-space-2)
+          var(--sb-component-progress-card-padding-inline, var(--sb-space-4));
+        font-size: var(--font-text-xs-size);
+        font-weight: var(--font-weight-medium);
+        line-height: var(--font-text-xs-line-height);
+        color: var(--color-text-tertiary);
+        cursor: pointer;
+        list-style: none;
+
+        &::-webkit-details-marker {
+          display: none;
+        }
+
+        /* The card clips overflow, so keep the focus ring inside. */
+        &:where(:focus-visible) {
+          outline-offset: -2px;
+        }
+
+        &:where(:hover) {
+          color: var(--color-text-secondary);
+        }
+
+        :where(.icon) {
+          transition: transform 0.15s ease;
+
+          @media (prefers-reduced-motion: reduce) {
+            transition: none;
+          }
+        }
+      }
+
+      /* Inner radius = outer radius minus the border. */
+      &:where(:not([open])) :where(summary) {
+        border-end-start-radius: calc(
+          var(--sb-component-progress-card-radius, var(--border-radius-lg)) -
+          var(
+            --sb-component-progress-card-border-width,
+            var(--border-width-regular)
+          )
+        );
+        border-end-end-radius: calc(
+          var(--sb-component-progress-card-radius, var(--border-radius-lg)) -
+          var(
+            --sb-component-progress-card-border-width,
+            var(--border-width-regular)
+          )
+        );
+      }
+
+      &:where([open]) :where(summary .icon) {
+        transform: rotate(180deg);
+      }
+
+      :where([data-slot="panel"]) {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sb-space-3);
+        padding: 0
+          var(--sb-component-progress-card-padding-inline, var(--sb-space-4))
+          var(--sb-component-progress-card-padding-block, var(--sb-space-3));
+      }
+
+      /* A text link with a trailing external-link icon. */
+      :where([data-slot="dashboard-link"]) {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sb-space-1);
+        align-self: flex-start;
+      }
+
+      :where([data-slot="loading"]) {
+        display: flex;
+        align-items: center;
+        gap: var(--sb-space-2);
+        color: var(--color-text-tertiary);
+      }
+    }
+  }
+}

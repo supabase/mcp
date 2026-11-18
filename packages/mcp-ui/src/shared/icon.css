@@ -1,0 +1,14 @@
+@layer components {
+  :where(.icon) {
+    flex: none;
+
+    &:where([data-state="spinning"]) {
+      transform-origin: center;
+      animation: spin 0.9s linear infinite;
+
+      @media (prefers-reduced-motion: reduce) {
+        animation-duration: 3s;
+      }
+    }
+  }
+}

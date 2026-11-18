@@ -1,3 +1,5 @@
+import './button.css';
+import './ready-actions.css';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { MouseEvent, SyntheticEvent } from 'react';
 import { type Politeness, useAnnounce } from './Announcer';

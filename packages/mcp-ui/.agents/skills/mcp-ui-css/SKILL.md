@@ -1,17 +1,17 @@
 ---
 name: mcp-ui-css
 description: |
-  Guide for authoring CSS in packages/mcp-ui (the MCP Apps views): one native stylesheet organized in cascade layers, specificity capped with :where(), and colours, fonts and radii taken from the host's MCP Apps style variables. Use when adding or editing any .css file, className, data-slot, data-state or data-tone in packages/mcp-ui, or when adding a view.
+  Guide for authoring CSS in packages/mcp-ui (the MCP Apps views): native stylesheets organized in cascade layers, specificity capped with :where(), and colours, fonts and radii taken from the host's MCP Apps style variables. Use when adding or editing any .css file, className, data-slot, data-state or data-tone in packages/mcp-ui, or when adding a view.
 ---
 
 # MCP UI CSS
 
-Reference implementation: `packages/mcp-ui/src/shared/styles.css`.
+Reference implementation: `packages/mcp-ui/src/shared/base.css` and the component files beside it (`badge.css`, `copy-field.css`, …).
 
 Each view is a single-file HTML document that a host (Claude, ChatGPT, an IDE) renders in an iframe inside its own UI. Two consequences shape every rule here:
 
 - **The host owns the look.** It sends a theme, fonts and a set of standard style variables. A view that ignores them looks foreign inside the host. Supabase's own design values are only a fallback for hosts that send nothing.
-- **Views multiply.** Every view shares one stylesheet, so a selector that wins by weight or by source order today breaks someone else's view later. Layers and `:where()` keep every rule trivially overridable.
+- **Views multiply.** Views share the same rules, so a selector that wins by weight or by source order today breaks someone else's view later. Layers and `:where()` keep every rule trivially overridable.
 
 We stay close to the platform: plain CSS, native nesting, custom properties, `@layer`, `:where()`, logical properties. No Tailwind, no CSS-in-JS, no preprocessors, no utility-class styling.
 
@@ -23,7 +23,9 @@ We stay close to the platform: plain CSS, native nesting, custom properties, `@l
 @layer base, native, components, view, utilities;
 ```
 
-`src/shared/styles.css` starts with this statement and defines `base`, `native`, `components` and `utilities` in exactly one block each. Add rules to the existing block; never append a second block for the same layer.
+The statement lives only in `src/shared/base.css`, which holds `base`, `native` and `utilities`. Every view's `main.tsx` imports `base.css` as its first import, so the order is fixed before any other layered rule loads. Other CSS files do not repeat the statement.
+
+Each shared component keeps its `components` rules in `src/shared/<component>.css`, named after its class (`badge.css` for `.badge`), and the TSX file that renders it imports that CSS (`import './badge.css';`). A view only ships the CSS of the components it imports, so a view that never renders `.copy-field` never carries its rules. A file has at most one block per layer, and a class is styled in only one file: the order of `components` rules across files follows import order and can differ between views. Where several TSX files render the same markup, each imports the CSS. Button variants (`data-size`, `.primary`) have no component of their own: they live in `button.css`, imported by each TSX file that renders a variant.
 
 Later layers win over earlier ones regardless of specificity, so never reach for `!important` or a heavier selector to override across layers.
 
@@ -72,11 +74,9 @@ Later layers win over earlier ones regardless of specificity, so never reach for
 
 ### 3. A view's own styles are one nested block under its wrapper
 
-Each view component renders a wrapper element with a class ending in `-view`. Most views need no CSS of their own. When one does, create `src/views/<view>/view.css`, import it in that view's `main.tsx` after the shared stylesheet, and give it exactly this shape:
+Each view component renders a wrapper element with a class ending in `-view`. Most views need no CSS of their own. When one does, create `src/views/<view>/view.css`, import it in that view's `main.tsx` after `base.css`, and give it exactly this shape:
 
 ```css
-@layer base, native, components, view, utilities;
-
 @layer view {
   .create-project-view {
     :where([data-slot="header"]) {
@@ -86,9 +86,7 @@ Each view component renders a wrapper element with a class ending in `-view`. Mo
 }
 ```
 
-Repeat the order statement at the top of every `view.css`. Each view is built as a separate document, and the repeated statement is what keeps the layer order fixed whatever the import order.
-
-If a second view needs the same piece, move it to `components` in the shared stylesheet.
+If a second view needs the same piece, move it to a component: a `src/shared/<component>.css` in `components`, imported by the component's TSX.
 
 ### The `utilities` layer is for rules that must always win
 
@@ -102,7 +100,7 @@ The SDK's `useHostStyles` writes the host's style variables as inline styles on 
 
 1. **Use the host's variable names directly.** `color: var(--color-text-primary)`, not a local alias such as `--text`. The full list of names is the `McpUiStyleVariableKey` type in `node_modules/@modelcontextprotocol/ext-apps/dist/src/spec.types.d.ts`. It covers `--color-background-*`, `--color-text-*`, `--color-border-*`, `--color-ring-*`, `--font-sans`, `--font-mono`, `--font-weight-*`, `--font-text-{xs,sm,md,lg}-{size,line-height}`, `--font-heading-*`, `--border-radius-*`, `--border-width-regular` and `--shadow-*`.
 2. **Reach for a host variable before any literal.** If the property is a colour, a font family, weight, size or line-height, a radius, a border width or a shadow, there is a host variable for it. A literal colour or font size in `native`, `components` or `view` is a bug.
-3. **Fallbacks live once, in `base`, on `:where(:root)`.** Never write `var(--x, fallback)` anywhere else. Before first use of a host variable that has no fallback yet, add one to `base`.
+3. **Fallbacks live once, in `base`, on `:where(:root)`.** Never write `var(--x, fallback)` anywhere else, except a read of another component's `--sb-component-<component>-*` property (see Local tokens). Before first use of a host variable that has no fallback yet, add one to `base`.
 4. **Fallback values come from the Supabase design system** (`apps/design-system` and `packages/ui/build/css` in the supabase monorepo), and only there. They exist for hosts that omit a variable. Never use a Supabase value where a host variable exists.
 5. **Derive a fallback from another host variable when the design system does.** The border fallback is the primary text colour at low alpha, the badge fill is the status text colour at 10%. Written with `color-mix()` over the host variable, these stay coherent when a host sends only some variables.
 6. **Dark mode is `light-dark()` in `base` and nothing else.** The root declares `color-scheme: light dark`; the host's theme overrides it inline; `light-dark()` follows. Never select on `[data-theme]` or `prefers-color-scheme` to change a colour.
@@ -116,7 +114,8 @@ Where the host standard has no variable, use a local token prefixed `--sb-`. The
 - `--sb-space-1` to `--sb-space-4` (4px, 8px, 12px, 16px): the host standard has no spacing scale. Use these for gaps and padding; a one-off size may stay literal.
 - `--sb-inset-top`, `-right`, `-bottom`, `-left`: the host's safe-area insets, set from JS in `src/shared/use-host-styles.ts`.
 
-- `--sb-local-*`: a custom property scoped to one component, not a global token. Declare it on the owning component's rule (for example `--sb-local-card-padding-inline` on `.progress-card`), in any layer; it needs no fallback in `base`. Rules that style parts of that component from elsewhere, such as a part that only ever renders inside the card, may read it, because they are its descendants in the DOM. The linter does not require a base declaration for these, but does fail if a `--sb-local-*` variable is read and declared nowhere in the stylesheet, which catches typos. Use it to share a value between a component and its descendants' rules; use plain `--sb-*` for a token any rule may use.
+- `--sb-component-<component>-*`: a custom property that belongs to one component, named after the component's CSS file, which is also the class it owns (`--sb-component-progress-card-radius` in `progress-card.css`; a view's `view.css` uses `--sb-view-<view>-*`). Declare it on the component's rule, in any layer; it needs no fallback in `base`. A file may declare only its own namespace. `--sb-component-` and `--sb-view-` are reserved: `base.css` declares none, and a name under them that matches no file is an error, so a global token can never be mistaken for a component's. The linter resolves a name to the longest matching file name, so `progress` and `progress-card` can coexist. A file reads its own namespace with no fallback, and the property must be declared in that same file.
+- Reading another component's namespace needs a fallback: `var(--sb-component-progress-card-radius, var(--border-radius-lg))`. `ready-actions.css` aligns with the card it sits in this way. A view can ship `ready-actions.css` without `progress-card.css`, and without the fallback the read would be invalid there. This is the one place outside `base` where a `var()` fallback is allowed, and there it is required. Write the fallback with the global tokens the owner declares its property with, so the component looks right on its own, or a zero where the property is a padding that margins cancel. The linter also fails if the property is not declared in the other component's file, which catches typos and stale names.
 
 Add a local token when a value is reused or carries meaning. Do not add one for a single use.
 
@@ -148,8 +147,8 @@ Add a local token when a value is reused or carries meaning. Do not add one for 
 
 ## Checklist
 
-1. Pick the layer by scope: token, root or reset → `base`; bare element → `native`; shared class → `components`; one view → `view` in that view's `view.css`; must win everywhere → `utilities` (rare).
-2. Add the rule to the existing layer block. Check its specificity against the layer's cap and wrap the rest in `:where()`.
+1. Pick the layer by scope: token, root or reset → `base`; bare element → `native` (both in `base.css`); shared class → `components`, in `src/shared/<component>.css` imported by the component; one view → `view` in that view's `view.css`; must win everywhere → `utilities` (rare).
+2. Add the rule to the file's existing layer block. Check its specificity against the layer's cap and wrap the rest in `:where()`.
 3. Use host variables for colour, type, radius, border width and shadow; `--sb-*` for spacing. Add any new fallback to `base`.
 4. One component class per element; parts as `data-slot`; state as `data-state`, `data-tone` or ARIA. No `!important`, ids, utility-class styling or inline styles.
 5. From `packages/mcp-ui`: `pnpm lint:css`, then `pnpm build`. From the repo root: `pnpm format`.

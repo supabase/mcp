@@ -1,0 +1,49 @@
+@layer components {
+  /* Label, monospace value and a copy button. */
+  :where(.copy-field) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-space-1);
+
+    :where([data-slot="label"]) {
+      color: var(--color-text-tertiary);
+      font-size: var(--font-text-xs-size);
+      font-weight: var(--font-weight-medium);
+    }
+
+    :where([data-slot="control"]) {
+      display: flex;
+      align-items: stretch;
+      gap: var(--sb-space-2);
+    }
+
+    /* Icon-only, square, as tall as the value box beside it. */
+    :where([data-slot="copy"]) {
+      flex: none;
+      justify-content: center;
+      aspect-ratio: 1;
+      padding: var(--sb-control-compact-padding-block)
+        var(--sb-control-compact-padding-inline);
+
+      &:where([data-state="copied"]) {
+        color: var(--color-text-success);
+      }
+
+      &:where([data-state="failed"]) {
+        color: var(--color-text-danger);
+      }
+    }
+
+    :where([data-slot="value"]) {
+      flex: 1;
+      min-inline-size: 0;
+      padding: var(--sb-control-compact-padding-block)
+        var(--sb-control-compact-padding-inline);
+      overflow-x: auto;
+      white-space: nowrap;
+      border: var(--border-width-regular) solid var(--color-border-primary);
+      border-radius: var(--border-radius-md);
+      font-size: var(--font-text-xs-size);
+    }
+  }
+}

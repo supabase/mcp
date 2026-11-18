@@ -1,3 +1,5 @@
+import './icon.css';
+
 /** Inline SVG icons (no icon dependency, to keep the HTML small). */
 const base = {
   width: 16,

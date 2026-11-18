@@ -1,18 +1,24 @@
 /**
  * Checks every `src/**\/*.css` against the rules in
- * `.agents/skills/mcp-ui-css/SKILL.md`: rules live in layers declared in a
- * fixed order, specificity stays under each layer's cap, no `!important` or
- * ids, and `var()` fallbacks only in `base`. Custom properties named
- * `--sb-local-*` belong to one component: they may be declared in any layer
- * and read anywhere, but must be declared somewhere. Run with `pnpm lint:css`.
+ * `.agents/skills/mcp-ui-css/SKILL.md`: each file holds only the layers its
+ * kind may (`base.css`, a shared component's file, a view's `view.css`), a
+ * component class is styled in one file, the layer order statement lives in
+ * `base.css` (which every view imports first), rules live in layers declared
+ * in a fixed order, specificity stays under each layer's cap, no `!important`
+ * or ids, and `var()` fallbacks only in `base`. Component custom properties
+ * are namespaced: a component file declares `--sb-component-<component>-*` (a
+ * view's `view.css`, `--sb-view-<view>-*`) and nothing else, and reads its
+ * own namespace with no fallback. `--sb-component-` and `--sb-view-` are
+ * reserved for those files; `base.css` never declares them. A file that reads
+ * another component's namespace must give a fallback, so it still works where
+ * that component's file is not shipped; the property must exist in the other
+ * file. Run with
+ * `pnpm lint:css`.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { transform } from 'lightningcss';
-
-/** Component-scoped custom properties; exempt from the base-declaration rule. */
-const LOCAL_PREFIX = '--sb-local-';
 
 const LAYERS = ['base', 'native', 'components', 'view', 'utilities'];
 
@@ -35,6 +41,44 @@ const files = readdirSync(join(root, 'src'), {
   .map((entry) => join(entry.parentPath, entry.name));
 
 const errors = [];
+
+/** Path of a file relative to the package, with forward slashes. */
+const nameOf = (file) => relative(root, file).split('\\').join('/');
+
+/** Reserved: only a component's or a view's own file may declare these. */
+const RESERVED = ['--sb-component-', '--sb-view-'];
+const isReserved = (prop) => RESERVED.some((prefix) => prop.startsWith(prefix));
+
+/**
+ * Namespace of each component or view file: `--sb-component-<component>-` for
+ * `src/shared/<component>.css`, `--sb-view-<view>-` for
+ * `src/views/<view>/view.css`.
+ */
+const namespaces = [];
+for (const file of files) {
+  const name = nameOf(file);
+  const component = name.match(/^src\/shared\/([^/]+)\.css$/)?.[1];
+  const view = name.match(/^src\/views\/([^/]+)\/view\.css$/)?.[1];
+  if (component && name !== 'src/shared/base.css') {
+    namespaces.push({ file: name, prefix: `--sb-component-${component}-` });
+  } else if (view) {
+    namespaces.push({ file: name, prefix: `--sb-view-${view}-` });
+  }
+}
+
+/** The namespace a property belongs to: the longest matching prefix. */
+function ownerOf(prop) {
+  let best = null;
+  for (const ns of namespaces) {
+    if (
+      prop.startsWith(ns.prefix) &&
+      (!best || ns.prefix.length > best.prefix.length)
+    ) {
+      best = ns;
+    }
+  }
+  return best;
+}
 
 /** Specificity of one selector; `&` and pseudo-elements count as zero. */
 function specificity(selector) {
@@ -102,9 +146,42 @@ function* customProps(rule) {
   for (const child of rules) yield* customProps(child);
 }
 
+/** Layers each kind of file may contain. */
+const BASE_FILE = 'src/shared/base.css';
+function allowedLayers(name) {
+  if (name === BASE_FILE) return ['base', 'native', 'utilities'];
+  if (/^src\/shared\/[^/]+\.css$/.test(name)) return ['components'];
+  if (/^src\/views\/[^/]+\/view\.css$/.test(name)) return ['view'];
+  return null;
+}
+
+/** Style rules in a rule, through at-rules such as `@media`. */
+function* styleRules(rule) {
+  if (rule.type === 'style') yield rule;
+  else for (const child of rule.value?.rules ?? []) yield* styleRules(child);
+}
+
+/** Class names in a selector, at any depth. */
+function* classes(selector) {
+  for (const part of selector) {
+    if (part.type === 'class') yield part.name;
+    for (const inner of part.selectors ?? []) yield* classes(inner);
+  }
+}
+
+// Pass 1: parse every file and collect what rules in other files may rely on.
+const parsed = [];
+const declaredInBase = new Set();
+/** File -> every custom property it declares, in any layer. */
+const declaredByFile = new Map();
+/** Class -> file that styles it at the top level of `components`. */
+const classOwner = new Map();
+
 for (const file of files) {
-  const name = relative(root, file);
+  const name = nameOf(file);
   const at = (loc) => `${name}:${loc.line + 1}`;
+  const declared = new Set();
+  declaredByFile.set(name, declared);
   let stylesheet;
   transform({
     filename: name,
@@ -113,20 +190,36 @@ for (const file of files) {
   });
 
   const rules = stylesheet.rules;
-  const order = rules.find((rule) => rule.type === 'layer-statement');
-  if (!order) {
-    errors.push(`${name}: missing \`@layer ${LAYERS.join(', ')};\``);
-  } else if (order.value.names.join(', ') !== LAYERS.join(', ')) {
+  const allowed = allowedLayers(name);
+  if (!allowed) {
     errors.push(
-      `${at(order.value.loc)}: layer order must be \`${LAYERS.join(', ')}\``
+      `${name}: unexpected CSS file; use src/shared/base.css, src/shared/<component>.css or src/views/<view>/view.css`
     );
   }
 
-  // A pass to collect the custom properties `base` declares (and every
-  // `--sb-local-*` declared in any layer), then one to check.
+  // The statement fixes the layer order for every view, so it lives once, in
+  // base.css, which each view's main.tsx imports first (checked below).
+  const order = rules.find((rule) => rule.type === 'layer-statement');
+  if (name === BASE_FILE) {
+    if (!order) {
+      errors.push(`${name}: missing \`@layer ${LAYERS.join(', ')};\``);
+    } else if (order.value.names.join(', ') !== LAYERS.join(', ')) {
+      errors.push(
+        `${at(order.value.loc)}: layer order must be \`${LAYERS.join(', ')}\``
+      );
+    } else if (rules.indexOf(order) !== 0) {
+      errors.push(
+        `${at(order.value.loc)}: the layer order statement must come before any rule`
+      );
+    }
+  } else if (order) {
+    errors.push(
+      `${at(order.value.loc)}: layer order statement belongs in ${BASE_FILE} only`
+    );
+  }
+
   const checks = [];
-  const declaredInBase = new Set();
-  const declaredLocal = new Set();
+  const seenLayers = new Map();
 
   for (const rule of rules) {
     if (rule.type === 'layer-block') {
@@ -135,12 +228,38 @@ for (const file of files) {
         errors.push(`${at(rule.value.loc)}: unknown layer \`${layer}\``);
         continue;
       }
+      if (seenLayers.has(layer)) {
+        errors.push(
+          `${at(rule.value.loc)}: second \`@layer ${layer}\` block in this file (first at line ${seenLayers.get(layer)}); add to the existing block`
+        );
+      } else {
+        seenLayers.set(layer, rule.value.loc.line + 1);
+      }
+      if (allowed && !allowed.includes(layer)) {
+        errors.push(
+          `${at(rule.value.loc)}: \`${layer}\` rules are not allowed in this file (allowed: ${allowed.map((l) => `\`${l}\``).join(', ')})`
+        );
+      }
       for (const child of rule.value.rules) {
-        if (layer === 'base') {
-          for (const prop of customProps(child)) declaredInBase.add(prop);
-        }
         for (const prop of customProps(child)) {
-          if (prop.startsWith(LOCAL_PREFIX)) declaredLocal.add(prop);
+          declared.add(prop);
+          if (layer === 'base') declaredInBase.add(prop);
+        }
+        if (layer === 'components') {
+          for (const style of styleRules(child)) {
+            for (const selector of style.value.selectors ?? []) {
+              for (const cls of classes(selector)) {
+                const owner = classOwner.get(cls);
+                if (owner && owner !== name) {
+                  errors.push(
+                    `${at(style.value.loc)}: class \`.${cls}\` is already styled in components by ${owner}; a component class may be styled in only one file`
+                  );
+                } else {
+                  classOwner.set(cls, name);
+                }
+              }
+            }
+          }
         }
         checks.push({ rule: child, layer });
       }
@@ -150,85 +269,173 @@ for (const file of files) {
       }
     }
   }
+  parsed.push({ name, at, checks });
+}
 
+// Pass 2: check every rule, with the custom properties of all files known.
+for (const { name, at, checks } of parsed) {
   for (const { rule, layer } of checks) {
     const ownProps = new Set(customProps(rule));
     for (const style of styleRules(rule)) {
-      checkStyle(style, { layer, top: true, ownProps });
+      checkStyle(style, { layer, top: true, ownProps, at, name });
     }
   }
+}
 
-  /** Style rules in a rule, through at-rules such as `@media`. */
-  function* styleRules(rule) {
-    if (rule.type === 'style') yield rule;
-    else for (const child of rule.value?.rules ?? []) yield* styleRules(child);
+/** Where a file may declare a `--sb-*` property. */
+function checkDeclared(prop, { name, at, loc }) {
+  if (!prop.startsWith('--sb-')) return;
+  const owner = ownerOf(prop);
+  if (name === BASE_FILE) {
+    if (isReserved(prop)) {
+      errors.push(
+        `${at(loc)}: \`${prop}\` is in a reserved namespace (${RESERVED.join(', ')}); base declares global tokens only`
+      );
+    }
+    return;
   }
-
-  function checkStyle(style, { layer, top, ownProps }) {
-    const { selectors, declarations, rules = [], loc } = style.value;
-    for (const selector of selectors ?? []) {
-      if (top && layer === 'components' && isSlotOnly(selector)) {
-        errors.push(
-          `${at(loc)}: top-level \`data-slot\` rule; slots must be nested inside their component's rule`
-        );
-      }
-      if (hasId(selector)) errors.push(`${at(loc)}: id selector`);
-      const value = specificity(selector);
-      if (top && exceeds(value, CAPS[layer])) {
-        errors.push(
-          `${at(loc)}: specificity (${value}) is over the \`${layer}\` cap (${CAPS[layer]})`
-        );
-      }
-      if (!top && compare(value, [0, 0, 0]) > 0) {
-        errors.push(
-          `${at(loc)}: nested selector adds specificity; wrap it in :where()`
-        );
-      }
-      // `:where(&:disabled)` drops the parent's own specificity too, so it
-      // loses to the parent rule; `&:where(:disabled)` keeps it.
-      if (
-        selector.some(
-          (part) =>
-            part.kind === 'where' &&
-            part.selectors.some((s) => s.some((p) => p.type === 'nesting'))
-        )
-      ) {
-        errors.push(
-          `${at(loc)}: \`:where(&…)\` loses to its parent rule; use \`&:where(…)\``
-        );
-      }
-    }
-    if (declarations?.importantDeclarations.length) {
-      errors.push(`${at(loc)}: !important`);
-    }
-    for (const decl of declarations?.declarations ?? []) {
-      for (const ref of vars(decl.value)) {
-        const prop = ref.name.ident;
-        if (ref.fallback && layer !== 'base') {
-          errors.push(`${at(loc)}: var(${prop}, …) fallback outside base`);
-        }
-        if (prop.startsWith(LOCAL_PREFIX)) {
-          if (!declaredLocal.has(prop)) {
-            errors.push(`${at(loc)}: var(${prop}) is not declared anywhere`);
-          }
-        } else if (!declaredInBase.has(prop) && !ownProps.has(prop)) {
-          errors.push(
-            `${at(loc)}: var(${prop}) has no fallback declared in base`
-          );
-        }
-      }
-    }
-    for (const child of rules) checkNested(child, { layer, ownProps });
+  if (isReserved(prop) && !owner) {
+    errors.push(
+      `${at(loc)}: \`${prop}\` matches no component or view file; the name after the reserved prefix must be a file's basename`
+    );
+    return;
   }
+  const own = namespaces.find((ns) => ns.file === name);
+  if (own && owner?.file !== name) {
+    errors.push(
+      `${at(loc)}: \`${prop}\` is outside this file's namespace; declare only \`${own.prefix}*\` here (global tokens go in base)`
+    );
+  }
+}
 
-  /** Nested rules, and declarations nested in at-rules such as `@media`. */
-  function checkNested(rule, context) {
-    if (rule.type === 'style') checkStyle(rule, { ...context, top: false });
-    else if (rule.type === 'nested-declarations') {
-      checkStyle({ value: rule.value }, { ...context, top: false });
-    } else {
-      for (const child of rule.value?.rules ?? []) checkNested(child, context);
+function checkStyle(style, { layer, top, ownProps, at, name }) {
+  const { selectors, declarations, rules = [], loc } = style.value;
+  for (const selector of selectors ?? []) {
+    if (top && layer === 'components' && isSlotOnly(selector)) {
+      errors.push(
+        `${at(loc)}: top-level \`data-slot\` rule; slots must be nested inside their component's rule`
+      );
     }
+    if (hasId(selector)) errors.push(`${at(loc)}: id selector`);
+    const value = specificity(selector);
+    if (top && exceeds(value, CAPS[layer])) {
+      errors.push(
+        `${at(loc)}: specificity (${value}) is over the \`${layer}\` cap (${CAPS[layer]})`
+      );
+    }
+    if (!top && compare(value, [0, 0, 0]) > 0) {
+      errors.push(
+        `${at(loc)}: nested selector adds specificity; wrap it in :where()`
+      );
+    }
+    // `:where(&:disabled)` drops the parent's own specificity too, so it
+    // loses to the parent rule; `&:where(:disabled)` keeps it.
+    if (
+      selector.some(
+        (part) =>
+          part.kind === 'where' &&
+          part.selectors.some((s) => s.some((p) => p.type === 'nesting'))
+      )
+    ) {
+      errors.push(
+        `${at(loc)}: \`:where(&…)\` loses to its parent rule; use \`&:where(…)\``
+      );
+    }
+  }
+  if (declarations?.importantDeclarations.length) {
+    errors.push(`${at(loc)}: !important`);
+  }
+  for (const decl of declarations?.declarations ?? []) {
+    if (decl.property === 'custom') {
+      checkDeclared(decl.value.name, { name, at, loc });
+    }
+    for (const ref of vars(decl.value)) {
+      checkRead(ref, { layer, ownProps, at, name, loc });
+    }
+  }
+  for (const child of rules) checkNested(child, { layer, ownProps, at, name });
+}
+
+/** One `var()` read: where its property is declared, whether it may fall back. */
+function checkRead(ref, { layer, ownProps, at, name, loc }) {
+  const prop = ref.name.ident;
+  const fallback = Boolean(ref.fallback);
+  if (isReserved(prop) && !ownerOf(prop)) {
+    errors.push(
+      `${at(loc)}: var(${prop}) matches no component or view file; the name after the reserved prefix must be a file's basename`
+    );
+    return;
+  }
+  // Global tokens (anything `base` declares): fallbacks only in base.
+  if (declaredInBase.has(prop)) {
+    if (fallback && layer !== 'base') {
+      errors.push(`${at(loc)}: var(${prop}, …) fallback outside base`);
+    }
+    return;
+  }
+  if (!prop.startsWith('--sb-')) {
+    if (fallback && layer !== 'base') {
+      errors.push(`${at(loc)}: var(${prop}, …) fallback outside base`);
+    }
+    if (!ownProps.has(prop)) {
+      errors.push(`${at(loc)}: var(${prop}) has no fallback declared in base`);
+    }
+    return;
+  }
+  const owner = ownerOf(prop);
+  if (!owner) {
+    errors.push(
+      `${at(loc)}: var(${prop}) is neither a global token declared in base nor in any component's namespace`
+    );
+  } else if (owner.file === name) {
+    if (fallback) {
+      errors.push(
+        `${at(loc)}: var(${prop}, …) has a fallback; a component reads its own namespace without one`
+      );
+    }
+    if (!declaredByFile.get(name).has(prop)) {
+      errors.push(`${at(loc)}: var(${prop}) is not declared in this file`);
+    }
+  } else {
+    if (!fallback) {
+      errors.push(
+        `${at(loc)}: var(${prop}) reads the namespace of ${owner.file}; it needs a fallback, \`var(${prop}, …)\`, for views that do not ship that file`
+      );
+    }
+    if (!declaredByFile.get(owner.file).has(prop)) {
+      errors.push(`${at(loc)}: var(${prop}) is not declared in ${owner.file}`);
+    }
+  }
+}
+
+/** Nested rules, and declarations nested in at-rules such as `@media`. */
+function checkNested(rule, context) {
+  if (rule.type === 'style') checkStyle(rule, { ...context, top: false });
+  else if (rule.type === 'nested-declarations') {
+    checkStyle({ value: rule.value }, { ...context, top: false });
+  } else {
+    for (const child of rule.value?.rules ?? []) checkNested(child, context);
+  }
+}
+
+// Every view must load base.css first, so the layer order statement is the
+// first CSS in its bundle.
+const viewsDir = join(root, 'src/views');
+for (const entry of readdirSync(viewsDir, { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue;
+  const main = join(viewsDir, entry.name, 'main.tsx');
+  const name = relative(root, main);
+  let code;
+  try {
+    code = readFileSync(main, 'utf8');
+  } catch {
+    continue;
+  }
+  const first = code.match(/^import\b[^;]*;/m)?.[0];
+  if (!first?.includes('shared/base.css')) {
+    errors.push(
+      `${name}: the first import must be \`import '../../shared/base.css';\``
+    );
   }
 }
 

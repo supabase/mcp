@@ -1,7 +1,7 @@
+import '../../shared/base.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AnnouncerProvider } from '../../shared/Announcer';
-import '../../shared/styles.css';
 import { CreateBranch } from './CreateBranch';
 
 const root = document.getElementById('root');
