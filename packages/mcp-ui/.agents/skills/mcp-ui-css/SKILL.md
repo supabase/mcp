@@ -39,7 +39,8 @@ Later layers win over earlier ones regardless of specificity, so never reach for
 
 - `base`: `:where(:root)`, `:where(body)`, `:where(:focus-visible)`.
 - `native`: a bare element selector. States go inside `:where()` so the rule stays at one element: `&:where(:hover:not(:disabled))`, `&:where(:disabled)` (not `:where(&:disabled)`, which drops to zero specificity and loses to the bare element).
-- `components`: wrap the class in `:where()`: `:where(.badge)`. A variant of an element is element plus `:where(.class)`: `button:where(.primary)`. Parts and states nested inside also use `:where()`.
+  - One exception: a link that looks like a button (`<a class="button">`) shares the native button rule through a selector list, `:is(button, a:where(.button))`. `:is()` takes its heaviest argument, so it stays at one element. Button variants use the same list (`:is(button, a:where(.button)):where(.primary)`), and the text-link rule excludes it (`a:where(:not(.button))`) so neither depends on source order. Plain CSS has no mixins; a selector list is how two selectors share one set of styles. Don't copy button declarations into a separate link rule.
+- `components`: wrap the class in `:where()`: `:where(.badge)`. A variant of an element is element plus `:where(.class)`: `button:where(.primary)` (written `:is(button, a:where(.button)):where(.primary)` so button-styled links get it too). Parts and states nested inside also use `:where()`.
 - `view`: one bare class (`.create-project-view`); everything nested uses `:where()`.
 - `utilities`: `:where(.sr-only)`. It is the last layer, so it wins without any specificity.
 - Never chain classes, never use ids, never nest without `:where()` (a nested `code` inside `.x` becomes `.x code` and raises specificity).

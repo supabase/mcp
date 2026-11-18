@@ -164,7 +164,11 @@
 }
 
 @layer native {
-  button {
+  /*
+   * Buttons, and links that look like one (`<a class="button">`): one rule
+   * for both, so the link picks up every button style and variant.
+   */
+  :is(button, a:where(.button)) {
     display: inline-flex;
     align-items: center;
     gap: var(--sb-space-2);
@@ -174,6 +178,7 @@
     background: transparent;
     color: var(--color-text-primary);
     font: inherit;
+    text-decoration: none;
     cursor: pointer;
 
     &:where(:hover:not(:disabled)) {
@@ -187,7 +192,9 @@
     }
   }
 
-  a {
+  /* Text links. Button-styled links are excluded so neither rule depends on
+   * source order to win. */
+  a:where(:not(.button)) {
     color: var(--color-text-secondary);
     text-decoration: underline;
     text-underline-offset: 4px;
@@ -355,7 +362,7 @@
   }
 
   /* Compact button, as tall as the copy field's controls. */
-  button:where([data-size="sm"]) {
+  :is(button, a:where(.button)):where([data-size="sm"]) {
     gap: var(--sb-space-1);
     padding: var(--sb-control-compact-padding-block)
       var(--sb-control-compact-padding-inline);
@@ -363,7 +370,7 @@
     line-height: var(--font-text-xs-line-height);
   }
 
-  button:where(.primary) {
+  :is(button, a:where(.button)):where(.primary) {
     border-color: transparent;
     background: var(--color-background-inverse);
     color: var(--color-text-inverse);
@@ -382,7 +389,7 @@
     }
   }
 
-  /* Connection details and ping, once the project is ready. */
+  /* Open in Studio, ping and connection details, once the project is ready. */
   :where(.ready-actions) {
     display: flex;
     flex-direction: column;
@@ -472,6 +479,14 @@
         gap: var(--sb-space-3);
         padding: 0 var(--sb-local-card-padding-inline)
           var(--sb-local-card-padding-block);
+      }
+
+      /* A text link with a trailing external-link icon. */
+      :where([data-slot="dashboard-link"]) {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sb-space-1);
+        align-self: flex-start;
       }
 
       :where([data-slot="loading"]) {
