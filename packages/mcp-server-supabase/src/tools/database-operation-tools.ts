@@ -14,6 +14,10 @@ import {
 } from '../advisories/index.js';
 import { ToolCallerError } from '../errors.js';
 import type { ObservationFact } from '../observation.js';
+import {
+  listExtensionsFallback,
+  listTablesFallback,
+} from '../pg-meta/catalog-fallback.js';
 import { listExtensionsSql, listTablesSql } from '../pg-meta/index.js';
 import {
   postgresExtensionSchema,
@@ -294,11 +298,26 @@ export function getDatabaseTools({
       inject: { project_id },
       execute: async ({ project_id, schemas, verbose }) => {
         const { query, parameters } = listTablesSql(schemas);
-        const data = await database.executeSql(project_id, {
-          query,
-          parameters,
-          read_only: true,
-        });
+        const data = await database
+          .executeSql<unknown>(project_id, {
+            query,
+            parameters,
+            read_only: true,
+          })
+          // TEMPORARY workaround: see pg-meta/catalog-fallback.ts.
+          .catch((error) =>
+            listTablesFallback(
+              (query, parameters) =>
+                database.executeSql(project_id, {
+                  query,
+                  parameters,
+                  read_only: true,
+                }),
+              schemas
+            ).catch(() => {
+              throw error;
+            })
+          );
         const parsedTables = data.map((table) =>
           postgresTableSchema.parse(table)
         );
@@ -443,10 +462,19 @@ export function getDatabaseTools({
       inject: { project_id },
       execute: async ({ project_id }) => {
         const query = listExtensionsSql();
-        const data = await database.executeSql(project_id, {
-          query,
-          read_only: true,
-        });
+        const data = await database
+          .executeSql<unknown>(project_id, {
+            query,
+            read_only: true,
+          })
+          // TEMPORARY workaround: see pg-meta/catalog-fallback.ts.
+          .catch((error) =>
+            listExtensionsFallback((query) =>
+              database.executeSql(project_id, { query, read_only: true })
+            ).catch(() => {
+              throw error;
+            })
+          );
         const extensions = data.map((extension) =>
           postgresExtensionSchema.parse(extension)
         );
