@@ -305,7 +305,7 @@ export function getDatabaseTools({
             parameters,
             read_only: true,
           })
-          // TEMPORARY workaround for Spark's partial pg_catalog; removed with pg-meta/catalog-fallback.ts.
+          // TEMPORARY: see pg-meta/catalog-fallback.ts.
           .catch((error) => {
             if (!isCatalogGap(error)) throw error;
             return listTablesFallback(
@@ -469,7 +469,7 @@ export function getDatabaseTools({
             query,
             read_only: true,
           })
-          // TEMPORARY workaround for Spark's partial pg_catalog; removed with pg-meta/catalog-fallback.ts.
+          // TEMPORARY: see pg-meta/catalog-fallback.ts.
           .catch((error) => {
             if (!isCatalogGap(error)) throw error;
             return listExtensionsFallback((query) =>

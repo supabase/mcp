@@ -100,13 +100,18 @@ const attnums = (value: unknown) =>
         .filter(Boolean)
         .map(Number);
 
-/** True when a query failed because the database lacks a Postgres feature or catalog, not for other errors. */
+// The whole message must be one of Spark's refusals: a Postgres error that only mentions these words (a schema
+// name in `permission denied for schema ...`) must not reach this fallback, which skips pg-meta's privilege filters.
+const CATALOG_GAP =
+  /^(?:[a-z_ ]+ is not supported|no such (?:table|function|column): [\w.]+)$/i;
+
 export function isCatalogGap(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /\bnot supported\b|\bno such (table|function|column)\b/i.test(message);
+  const message = (error instanceof Error ? error.message : String(error))
+    .replace(/^Failed to run sql query: /, '')
+    .trim();
+  return !/^permission denied\b/i.test(message) && CATALOG_GAP.test(message);
 }
 
-// A catalog the database lacks reads as empty; any other failure propagates.
 const optional = (run: Promise<Record<string, unknown>[]>) =>
   run.catch((error) => {
     if (isCatalogGap(error)) return [] as Record<string, unknown>[];

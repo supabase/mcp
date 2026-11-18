@@ -1772,3 +1772,120 @@ describe('tools', () => {
     });
   });
 });
+
+describe('catalog fallback on a partial pg_catalog (temporary workaround)', () => {
+  // Answers queries matching `refuse` with a Spark-style refusal; the rest reach the default PGlite handler.
+  function refuseQueries(refuse: (query: string) => string | undefined) {
+    const seen: string[] = [];
+    harness.mockServer?.use(
+      http.post<never, { query: string }>(
+        `${API_URL}/v1/projects/:projectId/database/query`,
+        async ({ request }) => {
+          const { query } = await request.clone().json();
+          seen.push(query);
+          const message = refuse(query);
+          if (message === undefined) return undefined;
+          return HttpResponse.json(
+            { message: `Failed to run sql query: ${message}` },
+            { status: 400 }
+          );
+        }
+      )
+    );
+    return seen;
+  }
+
+  async function projectWithTable() {
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+    await project.db.exec(
+      'create table public.notes (id int primary key, body text unique);'
+    );
+    return project;
+  }
+
+  test('list_tables answers from plain catalog queries when Spark refuses the pg-meta query', async () => {
+    const { callTool } = await setup();
+    const project = await projectWithTable();
+    refuseQueries((query) =>
+      /with ordinality/i.test(query)
+        ? 'WITH ORDINALITY is not supported'
+        : undefined
+    );
+
+    const result = await callTool({
+      name: 'list_tables',
+      arguments: { project_id: project.id, schemas: ['public'], verbose: true },
+    });
+
+    expect(result.tables).toEqual([
+      expect.objectContaining({
+        name: 'public.notes',
+        primary_keys: ['id'],
+        columns: [
+          expect.objectContaining({ name: 'id', data_type: 'integer' }),
+          expect.objectContaining({
+            name: 'body',
+            options: expect.arrayContaining(['unique']),
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  test('list_tables returns a permission error unchanged, even when it mentions an unsupported feature', async () => {
+    const { callTool } = await setup();
+    const project = await projectWithTable();
+    const seen = refuseQueries(
+      () => 'permission denied for schema reports is not supported'
+    );
+
+    await expect(
+      callTool({
+        name: 'list_tables',
+        arguments: { project_id: project.id, schemas: ['public'] },
+      })
+    ).rejects.toThrow('permission denied for schema reports');
+    expect(seen).toHaveLength(1);
+  });
+
+  test('list_tables returns the original refusal when an optional catalog read fails for another reason', async () => {
+    const { callTool } = await setup();
+    const project = await projectWithTable();
+    refuseQueries((query) =>
+      /with ordinality/i.test(query)
+        ? 'WITH ORDINALITY is not supported'
+        : /pg_enum/.test(query)
+          ? 'canceling statement due to statement timeout'
+          : undefined
+    );
+
+    await expect(
+      callTool({
+        name: 'list_tables',
+        arguments: { project_id: project.id, schemas: ['public'] },
+      })
+    ).rejects.toThrow('WITH ORDINALITY is not supported');
+  });
+
+  test('list_extensions answers from pg_extension when Spark refuses the pg-meta query', async () => {
+    const { callTool } = await setup();
+    const project = await projectWithTable();
+    refuseQueries((query) =>
+      /pg_available_extensions/.test(query)
+        ? 'a column alias list on a function is not supported'
+        : undefined
+    );
+
+    const result = await callTool({
+      name: 'list_extensions',
+      arguments: { project_id: project.id },
+    });
+
+    expect(result.extensions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'plpgsql' })])
+    );
+  });
+});

@@ -2,7 +2,6 @@ import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, test } from 'vitest';
 import {
   type CatalogQuery,
-  isCatalogGap,
   listExtensionsFallback,
   listTablesFallback,
 } from './catalog-fallback.js';
@@ -30,7 +29,7 @@ create table public.pairs (a int, b int, author_id bigint, primary key (b, a),
   constraint pairs_author foreign key (author_id) references public.authors (id));
 create table public.pair_notes (b int, a int, body text,
   constraint pair_notes_pair foreign key (b, a) references public.pairs (b, a));
-create table public.events (id int, at date, code text, primary key (id, at), unique (code, at))
+create table public.events (id int, at date unique, code text, primary key (id, at), unique (code, at))
   partition by range (at);
 create table public.events_2026 partition of public.events
   for values from ('2026-01-01') to ('2027-01-01');
@@ -81,19 +80,6 @@ describe('catalog fallback (temporary workaround)', () => {
       expect(actual).toEqual(expected);
     }
   );
-
-  test('falls back only for missing Postgres features or catalogs', () => {
-    expect(isCatalogGap(new Error('WITH ORDINALITY is not supported'))).toBe(
-      true
-    );
-    expect(isCatalogGap(new Error('no such table: main.pg_enum'))).toBe(true);
-    expect(
-      isCatalogGap(new Error('canceling statement due to statement timeout'))
-    ).toBe(false);
-    expect(isCatalogGap(new Error('permission denied for table users'))).toBe(
-      false
-    );
-  });
 
   test('lists installed extensions like the pg-meta query', async () => {
     const query = await database();
