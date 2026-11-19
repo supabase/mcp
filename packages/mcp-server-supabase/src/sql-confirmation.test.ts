@@ -39,12 +39,19 @@ describe('withFallback', () => {
     const primary = vi.fn<SqlConfirmationClassifier>(async () => {
       throw new SqlClassifierUnavailableError('parser failed to load');
     });
-    const fallback = classifierReturning(undefined);
+    // A value only the fallback gives: a swallowed throw would resolve with
+    // `undefined`.
+    const fallback = classifierReturning('do-heuristic');
+    const opts = options();
 
-    expect(await withFallback(primary, fallback)('select 1', options())).toBe(
-      undefined
+    expect(await withFallback(primary, fallback)('select 1', opts)).toBe(
+      'do-heuristic'
     );
+    // The fallback gets the caller's own options object, so it sees the same
+    // abort signal as the primary.
     expect(fallback).toHaveBeenCalledOnce();
+    expect(fallback.mock.calls[0]?.[0]).toBe('select 1');
+    expect(fallback.mock.calls[0]?.[1]).toBe(opts);
   });
 
   test('matches an unavailable error from another copy of the module by name', async () => {
@@ -89,17 +96,23 @@ describe('withFallback', () => {
     }
   );
 
-  test('propagates any other primary rejection without the fallback', async () => {
-    const error = new Error('worker exited');
-    const fallback = classifierReturning(undefined);
+  test.each([
+    ['an Error', new Error('worker exited')],
+    // A thrown value that is not an Error has no name to match.
+    ['a string', 'worker exited'],
+  ])(
+    'propagates any other primary rejection (%s) without the fallback',
+    async (_label, thrown) => {
+      const fallback = classifierReturning(undefined);
 
-    await expect(
-      withFallback(async () => {
-        throw error;
-      }, fallback)('select 1', options())
-    ).rejects.toBe(error);
-    expect(fallback).not.toHaveBeenCalled();
-  });
+      await expect(
+        withFallback(async () => {
+          throw thrown;
+        }, fallback)('select 1', options())
+      ).rejects.toBe(thrown);
+      expect(fallback).not.toHaveBeenCalled();
+    }
+  );
 
   test('a custom `on` widens the trigger set', async () => {
     const fallback = classifierReturning('destructive');
@@ -161,16 +174,74 @@ describe('withFallback', () => {
     ['an array', ['unavailable']],
     ['a non-string kind', { failure: 1 }],
   ])(
-    'rejects a primary result with %s without the fallback',
+    'passes a primary result with %s through unchanged without the fallback',
     async (_label, value) => {
-      // A result that broke the type contract, for example over IPC.
+      // A result that broke the type contract, for example over IPC. Only an
+      // exact failure can trigger the fallback; judging any other value is
+      // the caller's job.
       const primary = (async () =>
         value) as unknown as SqlConfirmationClassifier;
       const fallback = classifierReturning(undefined);
 
-      await expect(
-        withFallback(primary, fallback)('select 1', options())
-      ).rejects.toThrow('classifier returned an invalid result');
+      expect(await withFallback(primary, fallback)('select 1', options())).toBe(
+        value
+      );
+      expect(fallback).not.toHaveBeenCalled();
+    }
+  );
+
+  // A classifier in the same process can resolve with a live object. Reading
+  // it can throw, and that throw is not the primary's rejection: the value is
+  // the primary's result, and judging it is the caller's job.
+  const throwingTrap = () => {
+    throw new Error('trap threw');
+  };
+  test.each([
+    [
+      'a getter that throws',
+      {
+        get failure(): never {
+          throw new Error('getter threw');
+        },
+      },
+    ],
+    [
+      // The error `withFallback` falls back on when the primary rejects with
+      // it. Here it comes from reading the result, so it is not a rejection.
+      'a getter that throws SqlClassifierUnavailableError',
+      {
+        get failure(): never {
+          throw new SqlClassifierUnavailableError('getter threw');
+        },
+      },
+    ],
+    [
+      'a Proxy whose traps throw',
+      new Proxy(
+        { failure: 'unavailable' },
+        {
+          // `then` stays readable, so a promise can resolve with the proxy.
+          get: (_target, key) => (key === 'then' ? undefined : throwingTrap()),
+          has: throwingTrap,
+          ownKeys: throwingTrap,
+          getOwnPropertyDescriptor: throwingTrap,
+        }
+      ),
+    ],
+  ])(
+    'passes a primary result with %s through unchanged without the fallback',
+    async (_label, value) => {
+      const primary = (async () =>
+        value) as unknown as SqlConfirmationClassifier;
+      const fallback = classifierReturning('destructive');
+
+      const result = await withFallback(primary, fallback)(
+        'select 1',
+        options()
+      );
+
+      // Compared by identity outside `expect`, so no matcher reads the value.
+      expect(Object.is(result, value)).toBe(true);
       expect(fallback).not.toHaveBeenCalled();
     }
   );
