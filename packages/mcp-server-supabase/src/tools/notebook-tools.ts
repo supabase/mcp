@@ -576,7 +576,12 @@ export function getNotebookTools({
               if (readOnly || !database) return undefined;
               for (const cell of queryCells) {
                 if (!isPrimaryDatabaseCell(cell, project_id)) continue;
-                if ((await classifySql(cell.sql, ctx)) !== undefined) {
+                if (
+                  (await classifySql(cell.sql, ctx, {
+                    feature: 'notebook',
+                    record,
+                  })) !== undefined
+                ) {
                   return cell;
                 }
               }

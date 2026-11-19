@@ -113,8 +113,10 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
   // Once this server has issued a confirmation for this exact SQL, only an
   // accepted resend runs it, whatever the classifier says now.
   const reason: SqlConfirmationPromptReason | undefined = classify
-    ? ((await classifySql(query, ctx)) ??
-      (hasMatchingState ? 'reconfirm' : undefined))
+    ? ((await classifySql(query, ctx, {
+        feature: 'destructive_sql',
+        record,
+      })) ?? (hasMatchingState ? 'reconfirm' : undefined))
     : undefined;
   if (classify && !reason) {
     record?.({
