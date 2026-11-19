@@ -1,3 +1,5 @@
+import './button.css';
+import './ready-actions.css';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { MouseEvent, SyntheticEvent } from 'react';
 import { type Politeness, useAnnounce } from './Announcer';
@@ -182,7 +184,7 @@ export function ReadyActions({
       <details data-slot="connection" onToggle={onToggle}>
         <summary>
           Connection details
-          <ChevronIcon />
+          <ChevronIcon slot="disclosure-indicator" />
         </summary>
         <div data-slot="panel">
           {connection.status === 'loading' && (

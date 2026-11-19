@@ -1,0 +1,24 @@
+@layer components {
+  /* Name, identifier and extra facts (see Summary). */
+  :where(.summary) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-space-1);
+
+    :where([data-slot="name"]) {
+      font-size: var(--font-text-md-size);
+      line-height: var(--font-text-md-line-height);
+      font-weight: var(--font-weight-medium);
+    }
+
+    :where([data-slot="meta"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-2);
+      color: var(--color-text-tertiary);
+      font-family: var(--font-mono);
+      font-size: var(--font-text-xs-size);
+    }
+  }
+}

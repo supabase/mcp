@@ -1,0 +1,256 @@
+/*
+ * The global core every MCP UI view ships: tokens, native element styles and
+ * utilities. Components keep their CSS in a file beside their TSX and import
+ * it, so a view only ships the CSS of the components it renders. Before
+ * editing, read packages/mcp-ui/.agents/skills/mcp-ui-css/SKILL.md: layers,
+ * specificity caps, host theming and markup rules. `pnpm lint:css` checks
+ * them.
+ */
+@layer base, native, components, view, utilities;
+
+@layer base {
+  /*
+   * Fallbacks for the host's MCP Apps style variables, from the Supabase
+   * design system. `useHostStyles` sets the host's values inline on <html>,
+   * which beats these whenever the host sends a variable.
+   */
+  :where(:root) {
+    --color-text-primary: light-dark(oklch(0.1 0 0), oklch(0.95 0.00275 157.5));
+    --color-text-secondary: light-dark(
+      oklch(0.413 0 0),
+      oklch(0.798 0.00275 157.5)
+    );
+    --color-text-tertiary: light-dark(
+      oklch(0.5475 0 0),
+      oklch(0.684 0.00275 157.5)
+    );
+    --color-text-inverse: var(--color-background-primary);
+    --color-text-disabled: color-mix(
+      in oklab,
+      var(--color-text-primary) 50%,
+      transparent
+    );
+    --color-text-success: light-dark(
+      hsl(156.5 86.5% 26.1%),
+      hsl(154.9 59.5% 70%)
+    );
+    --color-text-warning: light-dark(oklch(0.55 0.14 58), oklch(0.8 0.14 75));
+    --color-text-danger: light-dark(oklch(0.52 0.14 25), oklch(0.55 0.14 25));
+
+    /* Only used through `--color-text-inverse`: the body stays transparent. */
+    --color-background-primary: light-dark(
+      oklch(0.995 0 0),
+      oklch(0.19 0.0025 157.5)
+    );
+    --color-background-secondary: color-mix(
+      in oklab,
+      var(--color-text-primary) 5%,
+      transparent
+    );
+    --color-background-inverse: var(--color-text-primary);
+    --color-background-disabled: color-mix(
+      in oklab,
+      var(--color-text-primary) 8%,
+      transparent
+    );
+    --color-background-success: color-mix(
+      in oklab,
+      var(--color-text-success) 10%,
+      transparent
+    );
+    --color-background-warning: color-mix(
+      in oklab,
+      var(--color-text-warning) 10%,
+      transparent
+    );
+    --color-background-danger: color-mix(
+      in oklab,
+      var(--color-text-danger) 10%,
+      transparent
+    );
+
+    --color-border-primary: color-mix(
+      in oklab,
+      var(--color-text-primary) 13.5%,
+      transparent
+    );
+    --color-border-secondary: color-mix(
+      in oklab,
+      var(--color-text-primary) 8%,
+      transparent
+    );
+    --color-border-disabled: color-mix(
+      in oklab,
+      var(--color-text-primary) 8%,
+      transparent
+    );
+    --color-border-success: color-mix(
+      in oklab,
+      var(--color-text-success) 30%,
+      transparent
+    );
+    --color-border-warning: color-mix(
+      in oklab,
+      var(--color-text-warning) 30%,
+      transparent
+    );
+    --color-border-danger: color-mix(
+      in oklab,
+      var(--color-text-danger) 30%,
+      transparent
+    );
+
+    --color-ring-primary: light-dark(
+      oklch(0.7 0.15 157.5 / 0.55),
+      oklch(0.76 0.15 157.5 / 0.55)
+    );
+
+    /* No font files are loaded: these resolve to the host's or the system's. */
+    --font-sans: Inter, "Helvetica Neue", Helvetica, ui-sans-serif, system-ui,
+      sans-serif;
+    --font-mono: "Source Code Pro", ui-monospace, Menlo, monospace;
+    --font-weight-medium: 500;
+    --font-text-xs-size: 12px;
+    --font-text-xs-line-height: 1.33;
+    --font-text-sm-size: 13px;
+    --font-text-sm-line-height: 1.43;
+    --font-text-md-size: 14px;
+    --font-text-md-line-height: 1.43;
+
+    --border-width-regular: 1px;
+    --border-radius-md: 6px;
+    --border-radius-lg: 8px;
+    --border-radius-full: 9999px;
+
+    /* Local tokens: the host standard has no spacing scale. */
+    --sb-space-1: 4px;
+    --sb-space-2: 8px;
+    --sb-space-3: 12px;
+    --sb-space-4: 16px;
+
+    --sb-control-compact-padding-block: 6px;
+    --sb-control-compact-padding-inline: var(--sb-space-2);
+
+    /* The host's safe area insets, set by `useHostStyles`. */
+    --sb-inset-top: 0px;
+    --sb-inset-right: 0px;
+    --sb-inset-bottom: 0px;
+    --sb-inset-left: 0px;
+
+    color-scheme: light dark;
+
+    font-family: var(--font-sans);
+    font-size: var(--font-text-sm-size);
+    line-height: var(--font-text-sm-line-height);
+    color: var(--color-text-primary);
+  }
+
+  :where(body) {
+    margin: 0;
+    padding: calc(var(--sb-inset-top) + var(--sb-space-1))
+      calc(var(--sb-inset-right) + var(--sb-space-1))
+      calc(var(--sb-inset-bottom) + var(--sb-space-1))
+      calc(var(--sb-inset-left) + var(--sb-space-1));
+    background: transparent;
+  }
+
+  :where(:focus-visible) {
+    outline: 2px solid var(--color-ring-primary);
+    outline-offset: 2px;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}
+
+@layer native {
+  /*
+   * Buttons, and links that look like one (`<a class="button">`): one rule
+   * for both, so the link picks up every button style and variant.
+   */
+  :is(button, a:where(.button)) {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sb-space-2);
+    padding: 6px var(--sb-space-3);
+    border: var(--border-width-regular) solid var(--color-border-primary);
+    border-radius: var(--border-radius-md);
+    background: transparent;
+    color: var(--color-text-primary);
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+
+    &:where(:hover:not(:disabled)) {
+      background: var(--color-background-secondary);
+    }
+
+    &:where(:disabled) {
+      color: var(--color-text-disabled);
+      border-color: var(--color-border-disabled);
+      cursor: not-allowed;
+    }
+  }
+
+  /* Text links. Button-styled links are excluded so neither rule depends on
+   * source order to win. */
+  a:where(:not(.button)) {
+    color: var(--color-text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+
+    &:where(:hover) {
+      color: var(--color-text-primary);
+    }
+  }
+
+  /*
+   * Icons (see icons.tsx). Here rather than in `components` so a component
+   * that styles an icon inside it (by `data-slot`) always wins, whatever the
+   * import order. Like the link rules above, a class in `native` bends the
+   * layer rules; see SKILL.md.
+   */
+  svg:where(.icon) {
+    flex: none;
+
+    &:where([data-state="spinning"]) {
+      transform-origin: center;
+      animation: spin 0.9s linear infinite;
+
+      @media (prefers-reduced-motion: reduce) {
+        animation-duration: 3s;
+      }
+    }
+  }
+
+  code {
+    font-family: var(--font-mono);
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+/*
+ * Rules that must override everything, including `view`. Keep this layer
+ * nearly empty; see the `utilities` section of
+ * packages/mcp-ui/.agents/skills/mcp-ui-css/SKILL.md before adding to it.
+ */
+@layer utilities {
+  /* Hidden visually, still read by screen readers. */
+  :where(.sr-only) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}

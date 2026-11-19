@@ -1,0 +1,80 @@
+@layer components {
+  /* The card around a long-running operation (see ProgressView). */
+  :where(.progress-card) {
+    /* The card's padding, corner radius and border width. Parts styled
+       elsewhere that sit inside the card (the ready-actions connection block)
+       read these, with a fallback, to stay aligned with it. */
+    --sb-component-progress-card-padding-block: var(--sb-space-3);
+    --sb-component-progress-card-padding-inline: var(--sb-space-4);
+    --sb-component-progress-card-radius: var(--border-radius-lg);
+    --sb-component-progress-card-border-width: var(--border-width-regular);
+
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-space-3);
+    padding: var(--sb-component-progress-card-padding-block)
+      var(--sb-component-progress-card-padding-inline);
+    overflow: hidden;
+    border: var(--sb-component-progress-card-border-width) solid
+      var(--color-border-primary);
+    border-radius: var(--sb-component-progress-card-radius);
+
+    /* Eyebrow label naming the operation and its state. */
+    :where([data-slot="title"]) {
+      margin: 0;
+      color: var(--color-text-tertiary);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+      font-weight: var(--font-weight-medium);
+    }
+
+    /* The heading row, then the summary. */
+    :where([data-slot="header"]) {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sb-space-1);
+    }
+
+    /* Eyebrow title on the left, status badge on the right. */
+    :where([data-slot="heading"]) {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sb-space-3);
+    }
+
+    /* The current step, with a spinner or a failure icon. */
+    :where([data-slot="step"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-2);
+      color: var(--color-text-primary);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+
+      &:where([data-state="failed"]) {
+        color: var(--color-text-danger);
+      }
+    }
+
+    /* A single-message state: polling timed out or failed, the call was
+       cancelled with a reason, or the tool call itself failed (failure icon and message). */
+    :where([data-slot="problem"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-2);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+
+      &:where([data-tone="danger"]) {
+        flex-wrap: nowrap;
+        color: var(--color-text-danger);
+      }
+
+      &:where([data-tone="muted"]) {
+        color: var(--color-text-tertiary);
+      }
+    }
+  }
+}

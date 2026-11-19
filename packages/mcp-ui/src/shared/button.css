@@ -1,0 +1,28 @@
+@layer components {
+  :is(button, a:where(.button)):where([data-size="sm"]) {
+    gap: var(--sb-space-1);
+    padding: var(--sb-control-compact-padding-block)
+      var(--sb-control-compact-padding-inline);
+    font-size: var(--font-text-xs-size);
+    line-height: var(--font-text-xs-line-height);
+  }
+
+  :is(button, a:where(.button)):where(.primary) {
+    border-color: transparent;
+    background: var(--color-background-inverse);
+    color: var(--color-text-inverse);
+
+    &:where(:hover:not(:disabled)) {
+      background: color-mix(
+        in oklab,
+        var(--color-background-inverse) 90%,
+        transparent
+      );
+    }
+
+    &:where(:disabled) {
+      background: var(--color-background-disabled);
+      color: var(--color-text-disabled);
+    }
+  }
+}

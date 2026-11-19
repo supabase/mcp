@@ -1,3 +1,4 @@
+import './message.css';
 import type { ReactNode } from 'react';
 
 /** A single line of status text: loading, empty or error. */

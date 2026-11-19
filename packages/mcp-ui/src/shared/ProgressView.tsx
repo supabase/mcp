@@ -1,3 +1,5 @@
+import './progress-card.css';
+import './summary.css';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { ReactNode } from 'react';
 import { Badge } from './Badge';

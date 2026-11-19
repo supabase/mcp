@@ -1,3 +1,4 @@
+import './copy-field.css';
 import { useEffect, useRef, useState } from 'react';
 import { useAnnounce } from './Announcer';
 import { CheckIcon, CopyIcon, XCircleIcon } from './icons';

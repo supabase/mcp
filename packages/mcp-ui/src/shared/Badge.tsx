@@ -1,3 +1,4 @@
+import './badge.css';
 import type { ReactNode } from 'react';
 
 /** A small pill label; `tone` colours it for success, warning or danger. */
