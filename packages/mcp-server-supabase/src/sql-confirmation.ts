@@ -3,6 +3,7 @@
  * from a worker process) without constructing an MCP server.
  */
 
+import { isSqlClassificationFailure } from './sql-classification-failure.js';
 import { isDestructiveSql } from './tools/destructive-sql.js';
 
 /**
@@ -38,35 +39,6 @@ export type SqlClassificationFailure = {
   failure: SqlClassificationFailureKind;
 };
 
-const SQL_CLASSIFICATION_FAILURE_KINDS: Record<
-  SqlClassificationFailureKind,
-  true
-> = {
-  oversized: true,
-  unavailable: true,
-  timeout: true,
-  crashed: true,
-};
-
-/**
- * Whether `value` is exactly a `SqlClassificationFailure`: a plain object
- * whose only own key is `failure`, with a known kind.
- */
-export function isSqlClassificationFailure(
-  value: unknown
-): value is SqlClassificationFailure {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === 1 &&
-    Object.hasOwn(value, 'failure') &&
-    'failure' in value &&
-    typeof value.failure === 'string' &&
-    Object.hasOwn(SQL_CLASSIFICATION_FAILURE_KINDS, value.failure)
-  );
-}
-
 /**
  * `undefined` means the SQL needs no confirmation.
  */
@@ -90,7 +62,8 @@ export type SqlConfirmationClassification =
  * The tool checks the result at runtime. Any other value (for example `null`,
  * `false`, an unknown string or an unknown failure kind) fails the tool call
  * like `crashed`. A rejection or throw also fails the tool call, and the SQL
- * does not run.
+ * does not run. Each of these failures reaches the client and the host as a
+ * `SqlClassifierCallError`.
  *
  * `signal` aborts when the MCP request is cancelled. Pass it on to the work
  * (for example a worker call) so it stops early, and settle promptly once it
@@ -120,6 +93,24 @@ export class SqlClassifierUnavailableError extends Error {
 }
 
 /**
+ * The error a tool call fails with when the classifier could not answer: it
+ * resolved with `unavailable`, `timeout` or `crashed`, resolved with a result
+ * outside the contract, or rejected. The SQL does not run.
+ *
+ * The message comes from a fixed set and never includes the classifier's own
+ * error name or message.
+ *
+ * Match it by `name`: the ESM and CJS builds of this module each have their
+ * own class, so `instanceof` can miss.
+ */
+export class SqlClassifierCallError extends Error {
+  constructor(message?: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'SqlClassifierCallError';
+  }
+}
+
+/**
  * The regex classifier: `destructive` when the SQL matches the destructive
  * SQL patterns, otherwise `undefined`. This is the default classifier.
  */
@@ -129,10 +120,10 @@ export const regexClassifier: SqlConfirmationClassifier = async (sql) =>
 /**
  * Uses `fallback` when `primary` cannot answer: when `primary` resolves with a
  * failure whose kind is in `on` (default `['unavailable']`), or rejects with a
- * `SqlClassifierUnavailableError`. Any other valid result, including other
- * failure kinds, passes through, and any other rejection propagates. An
- * object that is not exactly a `SqlClassificationFailure` rejects, without
- * the fallback. Both receive the same `signal`.
+ * `SqlClassifierUnavailableError`. Any other result passes through unchanged,
+ * including other failure kinds and an object that is not exactly a
+ * `SqlClassificationFailure`, which the tool then fails as an invalid result.
+ * Any other rejection propagates. Both receive the same `signal`.
  *
  * The fallback's result is final, so a fallback failure still fails closed.
  *
@@ -163,15 +154,18 @@ export function withFallback(
       }
       return await fallback(sql, options);
     }
-    if (typeof classification === 'object' && classification !== null) {
-      if (!isSqlClassificationFailure(classification)) {
-        throw new Error(
-          'Could not check the SQL for destructive operations (classifier returned an invalid result).'
-        );
-      }
-      if (on.includes(classification.failure)) {
-        return await fallback(sql, options);
-      }
+    let failure: SqlClassificationFailureKind | undefined;
+    try {
+      failure = isSqlClassificationFailure(classification)
+        ? classification.failure
+        : undefined;
+    } catch {
+      // Reading the result threw. That is not a rejection of `primary`, so the
+      // result passes through for the tool to fail as an invalid result.
+      return classification;
+    }
+    if (failure !== undefined && on.includes(failure)) {
+      return await fallback(sql, options);
     }
     return classification;
   };
