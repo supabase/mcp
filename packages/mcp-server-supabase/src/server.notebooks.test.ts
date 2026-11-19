@@ -10,15 +10,23 @@ import {
   expectTerminalResult,
   freezeClock,
 } from '../test/confirmation-results.js';
-import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import {
+  callModernTool,
+  captureToolErrors,
+  createServerHarness,
+} from '../test/server-harness.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { NotebookCell } from './platform/types.js';
+import type { SupabaseMcpServerOptions } from './server.js';
+import type { SqlConfirmationClassifier } from './sql-confirmation.js';
 import { isInputRequiredResult } from '@modelcontextprotocol/client';
 import type {
   CallToolResult,
   ClientCapabilities,
+  InputRequiredResult,
 } from '@modelcontextprotocol/client';
 import { HttpResponse, http } from 'msw';
+import { inspect } from 'node:util';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const harness = createServerHarness();
@@ -1645,7 +1653,7 @@ describe('run_notebook', () => {
       }
     );
 
-    test('form-capable client sees accurate mutating and destructive counts before the notebook link', async () => {
+    test('form-capable client sees the mutating count and the destructive clause before the notebook link', async () => {
       const { client } = await setupModern({
         features: RUN_FEATURES,
         clientCapabilities: FORM_CAPABLE,
@@ -1681,7 +1689,7 @@ describe('run_notebook', () => {
       }
       const message = params.message;
       expect(message?.split('\n')[0]).toMatch(
-        /^This notebook modifies data or schema in 2 of 3 query cells, 1 destructive/
+        /^This notebook modifies data or schema in 2 of 3 query cells, at least 1 destructive/
       );
       expect(message).toContain(
         'It may permanently remove data, tables, schemas or other objects.'
@@ -1892,6 +1900,12 @@ describe('run_notebook', () => {
       [
         'analyzed write',
         'explain analyze update films set id = 1 where id = 2',
+      ],
+      [
+        // A plain read by its statement keyword, flagged by the regex for the
+        // UPDATE without WHERE in its dollar-quoted argument.
+        'selection passing destructive SQL to a function',
+        'select my_fn($$x; update stats set n = 0$$)',
       ],
     ] as const)(
       '%s requires confirmation before a notebook database cell uses the server write setting',
@@ -2160,13 +2174,6 @@ describe('run_notebook', () => {
           sql: 'select count(*) from films',
           row_limit: 100,
         },
-        {
-          id: 'cleanup',
-          type: 'database',
-          title: 'Cleanup',
-          sql: 'delete from films',
-          row_limit: 100,
-        },
       ]);
 
       const first = await callModernTool(client, {
@@ -2182,7 +2189,9 @@ describe('run_notebook', () => {
         throw new Error('expected form confirmation');
       }
       const message = params.message;
-      expect(message).toContain('2 destructive');
+      // The padded cell is the only destructive one, so the clause shows only
+      // when the DROP after the long query is detected.
+      expect(message).toContain('at least 1 destructive');
     });
 
     test.each([false, true])(
@@ -2653,6 +2662,695 @@ describe('run_notebook', () => {
       });
 
       expect(executeSql).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('injected SQL confirmation classifier', () => {
+    type SetupOverrides = {
+      clientCapabilities?: ClientCapabilities;
+      readOnly?: boolean;
+      enabledTools?: readonly ('run_notebook' | 'delete_notebook')[];
+      onToolCall?: SupabaseMcpServerOptions['onToolCall'];
+    };
+
+    async function setupWithClassifier(
+      classifier: SqlConfirmationClassifier,
+      overrides: SetupOverrides = {}
+    ) {
+      const { client, platform } = await setupModern({
+        features: RUN_FEATURES,
+        clientCapabilities: overrides.clientCapabilities ?? FORM_CAPABLE,
+        readOnly: overrides.readOnly,
+        onToolCall: overrides.onToolCall,
+        elicitation: {
+          requestState: { key: 'a'.repeat(32), principal: 'test-user' },
+          confirmation: {
+            enabledTools: overrides.enabledTools ?? ['run_notebook'],
+            classifier,
+          },
+        },
+      });
+      const executeSql = vi
+        .spyOn(platform.database!, 'executeSql')
+        .mockResolvedValue([]);
+      return { client, executeSql };
+    }
+
+    const dbCell = (id: string, sql: string): NotebookCell => ({
+      id,
+      type: 'database',
+      sql,
+      row_limit: 100,
+    });
+
+    // Plain reads the regex clears, so only an injected classifier flags them.
+    const READ_ONE = 'select 1';
+    const READ_TWO = 'select 2';
+    const REPLICA_READ = 'select 30';
+    // Not a plain read, and the regex clears it.
+    const INSERT = 'insert into films (id) values (1)';
+    // A plain read by its statement keyword, which the regex flags for the
+    // UPDATE without WHERE in its dollar-quoted argument.
+    const REGEX_FLAGGED_READ = 'select my_fn($$x; update stats set n = 0$$)';
+    const PLAIN_READS: readonly NotebookCell[] = [
+      dbCell('one', READ_ONE),
+      dbCell('two', READ_TWO),
+    ];
+    const ACCEPT = { confirm_run: { action: 'accept', content: {} } };
+
+    // Stand-ins for a classifier's own error. Neither may reach the client.
+    const PRIVATE_MESSAGE = 'PRIVATE_CLASSIFIER_MESSAGE';
+    const PRIVATE_NAME = 'PRIVATE_CLASSIFIER_NAME';
+    const privateError = () =>
+      Object.assign(new Error(PRIVATE_MESSAGE), { name: PRIVATE_NAME });
+    const returning = (value: unknown) =>
+      (async () => value) as unknown as SqlConfirmationClassifier;
+
+    /** The `error` of a failed tool call's `{ "error": { name, message } }` text. */
+    function toolError(result: CallToolResult | InputRequiredResult) {
+      if (isInputRequiredResult(result)) {
+        throw new Error('expected a CallToolResult');
+      }
+      return (
+        parseToolResult(result) as {
+          error?: { name?: unknown; message?: unknown };
+        }
+      ).error;
+    }
+
+    function promptLines(result: CallToolResult | InputRequiredResult) {
+      if (!isInputRequiredResult(result)) {
+        throw new Error('expected an input_required result');
+      }
+      const params = result.inputRequests?.confirm_run?.params;
+      if (!params || !('message' in params)) {
+        throw new Error('expected form confirmation');
+      }
+      return params.message.split('\n');
+    }
+
+    function promptFirstLine(result: CallToolResult | InputRequiredResult) {
+      return promptLines(result)[0];
+    }
+
+    // One representative per class of classifier outcome the tool treats
+    // differently. Which results flag and which fail is the shared classify
+    // step's job, proven at execute_sql in server.database.test.ts.
+    type Verdict = 'clears' | 'flags' | 'fails';
+    type ClassifierRow = {
+      classifier: string;
+      verdict: Verdict;
+      classify: SqlConfirmationClassifier;
+      /** Text from the classifier's own error, which must not reach the client. */
+      private?: readonly string[];
+      /** Runs on this path only. */
+      onlyOn?: string;
+    };
+    const FIRST_CALL_PLAIN_READS = 'first call with only plain reads';
+    const CLASSIFIERS: readonly ClassifierRow[] = [
+      {
+        classifier: 'returns undefined',
+        verdict: 'clears',
+        classify: returning(undefined),
+      },
+      {
+        classifier: 'returns destructive',
+        verdict: 'flags',
+        classify: returning('destructive'),
+      },
+      {
+        // The one failure that flags instead of failing the call.
+        classifier: 'returns an oversized failure',
+        verdict: 'flags',
+        classify: returning({ failure: 'oversized' }),
+        onlyOn: FIRST_CALL_PLAIN_READS,
+      },
+      {
+        classifier: 'rejects',
+        verdict: 'fails',
+        classify: async () => {
+          throw privateError();
+        },
+        private: [PRIVATE_MESSAGE, PRIVATE_NAME],
+      },
+    ];
+
+    // One row per path that classifies, with the outcome of each verdict there.
+    type Outcome =
+      | 'runs every cell'
+      | 'asks for confirmation'
+      | 'is blocked as requiring confirmation'
+      | 'stops with an error';
+    type PathRow = {
+      path: string;
+      cells: readonly NotebookCell[];
+      clientCapabilities?: ClientCapabilities;
+      /** The call under test answers a confirmation issued for `cells`. */
+      resend?: { accept: boolean; changedCells?: readonly NotebookCell[] };
+      outcomes: Record<Verdict, Outcome>;
+    };
+    const PATHS: readonly PathRow[] = [
+      {
+        path: FIRST_CALL_PLAIN_READS,
+        cells: PLAIN_READS,
+        outcomes: {
+          clears: 'runs every cell',
+          flags: 'asks for confirmation',
+          fails: 'stops with an error',
+        },
+      },
+      {
+        path: 'first call with a cell that is not a plain read',
+        cells: [...PLAIN_READS, dbCell('insert', INSERT)],
+        outcomes: {
+          clears: 'asks for confirmation',
+          flags: 'asks for confirmation',
+          fails: 'stops with an error',
+        },
+      },
+      {
+        path: 'unanswered resend',
+        cells: PLAIN_READS,
+        resend: { accept: false },
+        outcomes: {
+          // Once asked, only an accept runs the cells.
+          clears: 'asks for confirmation',
+          flags: 'asks for confirmation',
+          fails: 'stops with an error',
+        },
+      },
+      {
+        path: 'accepted resend after the cells changed',
+        cells: PLAIN_READS,
+        resend: {
+          accept: true,
+          changedCells: [...PLAIN_READS, dbCell('three', 'select 3')],
+        },
+        outcomes: {
+          // The accept was for other cells, so it asks again for these.
+          clears: 'asks for confirmation',
+          flags: 'asks for confirmation',
+          fails: 'stops with an error',
+        },
+      },
+      {
+        path: 'first call with only plain reads from a client that cannot elicit',
+        cells: PLAIN_READS,
+        clientCapabilities: {},
+        outcomes: {
+          clears: 'runs every cell',
+          flags: 'is blocked as requiring confirmation',
+          fails: 'stops with an error',
+        },
+      },
+    ];
+
+    describe.each(PATHS.map((row) => [row.path, row] as const))(
+      'on the %s',
+      (path, { cells, clientCapabilities, resend, outcomes }) => {
+        test.each(
+          CLASSIFIERS.filter(
+            (row) => row.onlyOn === undefined || row.onlyOn === path
+          ).map((row) => [outcomes[row.verdict], row.classifier, row] as const)
+        )(
+          '%s when the classifier %s',
+          async (outcome, _classifier, { classify, private: privateText }) => {
+            // Flags every cell until the call under test, so a resend path
+            // gets its confirmation issued first.
+            let current: SqlConfirmationClassifier = async () => 'destructive';
+            const { errors, onToolCall } = captureToolErrors();
+            const { client, executeSql } = await setupWithClassifier(
+              (sql, options) => current(sql, options),
+              { clientCapabilities, onToolCall }
+            );
+            const { project, notebook } = await createNotebookFixture([
+              ...cells,
+            ]);
+            const args = runArgs(project, notebook);
+            let answer: {
+              requestState?: string;
+              inputResponses?: Record<string, unknown>;
+            } = {};
+            if (resend) {
+              const first = await callModernTool(client, {
+                name: 'run_notebook',
+                arguments: args,
+              });
+              if (!isInputRequiredResult(first)) {
+                throw new Error('expected an issued notebook confirmation');
+              }
+              if (resend.changedCells) {
+                // Without bumping updated_at, as in 'asks again when the
+                // cells changed after confirmation was requested'.
+                notebook.content.cells = [...resend.changedCells];
+              }
+              answer = {
+                requestState: first.requestState,
+                ...(resend.accept && { inputResponses: ACCEPT }),
+              };
+            }
+            // The first cell clears and the row's classifier decides the
+            // second, so a run that starts before every cell is classified
+            // shows up as a database call.
+            current = (sql, options) =>
+              sql === READ_TWO
+                ? classify(sql, options)
+                : Promise.resolve(undefined);
+
+            const result = await callModernTool(client, {
+              name: 'run_notebook',
+              arguments: args,
+              ...answer,
+            });
+
+            if (outcome === 'runs every cell') {
+              expect(isInputRequiredResult(result)).toBe(false);
+              expect((result as CallToolResult).isError).not.toBe(true);
+              expect(
+                parseCellResults(
+                  parseToolResult(result as CallToolResult).cells
+                )
+              ).toEqual([
+                expect.objectContaining({ cell_id: 'one', status: 'success' }),
+                expect.objectContaining({ cell_id: 'two', status: 'success' }),
+              ]);
+              expect(executeSql).toHaveBeenCalledTimes(2);
+              return;
+            }
+            if (outcome === 'asks for confirmation') {
+              if (!isInputRequiredResult(result)) {
+                throw new Error('expected an input_required result');
+              }
+              expect(result.requestState).toEqual(expect.any(String));
+              expect(result.inputRequests?.confirm_run).toBeDefined();
+            } else {
+              expect(isInputRequiredResult(result)).toBe(false);
+              expect((result as CallToolResult).isError).toBe(true);
+              if (outcome === 'is blocked as requiring confirmation') {
+                expect(toolError(result)).toEqual({
+                  name: 'ToolCallerError',
+                  message: expect.stringContaining('requires confirmation'),
+                });
+              } else {
+                // Hosts match every classification failure by this one name.
+                expect(toolError(result)?.name).toBe('SqlClassifierCallError');
+                const wire = JSON.stringify(result);
+                for (const text of privateText ?? []) {
+                  expect(wire).not.toContain(text);
+                }
+                // What the host gets through `onToolCall`, before the error
+                // is serialized: the package's own error and nothing of the
+                // classifier's, so nothing raw reaches host logs or spans.
+                expect(errors).toHaveLength(1);
+                const [hostError] = errors as [Error];
+                expect(hostError.name).toBe('SqlClassifierCallError');
+                expect(hostError.cause).toBeUndefined();
+                const hostView = inspect(hostError, {
+                  showHidden: true,
+                  depth: null,
+                });
+                for (const text of privateText ?? []) {
+                  expect(hostView).not.toContain(text);
+                }
+              }
+            }
+            expect(executeSql).not.toHaveBeenCalled();
+          }
+        );
+      }
+    );
+
+    test('classifies only the selected primary-database cells, in notebook order, up to the first flagged cell', async () => {
+      // Regression: the loop classifies every query cell, so a slow classifier
+      // runs on SQL that cannot change the answer, and a log cell or an
+      // unselected cell can prompt.
+      const classifier = vi.fn<SqlConfirmationClassifier>(async (sql) =>
+        sql === READ_TWO ? 'destructive' : undefined
+      );
+      const { client, executeSql } = await setupWithClassifier(classifier);
+      const { project } = await createProjectFixture();
+      const notebook = project.createNotebook({
+        name: 'Signups',
+        content: {
+          schema_version: 1,
+          cells: [
+            { id: 'intro', type: 'markdown', text: 'Signup metrics' },
+            {
+              id: 'logs',
+              type: 'log',
+              sql: 'select count(*) from logs',
+              time_range: { type: 'relative', unit: 'hour', amount: 1 },
+            },
+            dbCell('unselected', 'select 20'),
+            dbCell('one', READ_ONE),
+            // A database cell for a read replica, which the run refuses.
+            {
+              id: 'replica',
+              type: 'database',
+              sql: REPLICA_READ,
+              row_limit: 100,
+              database_identifier: `${project.id}-rr-us-east-1`,
+            },
+            dbCell('two', READ_TWO),
+            dbCell('three', 'select 3'),
+          ],
+        },
+      });
+
+      const result = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: {
+          ...runArgs(project, notebook),
+          cells: ['logs', 'one', 'replica', 'two', 'three'],
+        },
+      });
+
+      expect(classifier.mock.calls.map(([sql]) => sql)).toEqual([
+        READ_ONE,
+        READ_TWO,
+      ]);
+      expect(classifier).not.toHaveBeenCalledWith(
+        REPLICA_READ,
+        expect.anything()
+      );
+      expect(isInputRequiredResult(result)).toBe(true);
+      expect(executeSql).not.toHaveBeenCalled();
+    });
+
+    test.each(['accept', 'decline', 'cancel'] as const)(
+      'a resend with %s does not call the classifier again',
+      async (action) => {
+        // Flags the first cell, then fails the way a classifier that broke
+        // after the prompt was issued would.
+        const classifier = vi
+          .fn<SqlConfirmationClassifier>()
+          .mockResolvedValueOnce('destructive')
+          .mockRejectedValue(privateError());
+        const { client, executeSql } = await setupWithClassifier(classifier);
+        const { project, notebook } = await createNotebookFixture([
+          ...PLAIN_READS,
+        ]);
+        const args = runArgs(project, notebook);
+        const first = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: args,
+        });
+        if (!isInputRequiredResult(first)) {
+          throw new Error('expected an issued notebook confirmation');
+        }
+        classifier.mockClear();
+
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: args,
+          requestState: first.requestState,
+          inputResponses: {
+            confirm_run:
+              action === 'accept' ? { action, content: {} } : { action },
+          },
+        });
+
+        expect(classifier).not.toHaveBeenCalled();
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect((result as CallToolResult).isError).not.toBe(true);
+        if (action === 'accept') {
+          expect(
+            parseCellResults(parseToolResult(result as CallToolResult).cells)
+          ).toEqual([
+            expect.objectContaining({ cell_id: 'one', status: 'success' }),
+            expect.objectContaining({ cell_id: 'two', status: 'success' }),
+          ]);
+          expect(executeSql).toHaveBeenCalledTimes(2);
+        } else {
+          expect(result).toMatchObject({
+            structuredContent: {
+              status: action === 'decline' ? 'declined' : 'cancelled',
+            },
+          });
+          expect(executeSql).not.toHaveBeenCalled();
+        }
+      }
+    );
+
+    test('a client that cannot elicit is blocked for a cell that is not a plain read, without calling the classifier', async () => {
+      // Regression: the tool classifies before the plain-read check, so a
+      // failing classifier replaces the "requires confirmation" error.
+      const classifier = vi.fn<SqlConfirmationClassifier>(async () => {
+        throw privateError();
+      });
+      const { client, executeSql } = await setupWithClassifier(classifier, {
+        clientCapabilities: {},
+      });
+      const { project, notebook } = await createNotebookFixture([
+        dbCell('one', READ_ONE),
+        dbCell('insert', INSERT),
+      ]);
+
+      const result = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: runArgs(project, notebook),
+      });
+
+      expect(classifier).not.toHaveBeenCalled();
+      expect(isInputRequiredResult(result)).toBe(false);
+      expect((result as CallToolResult).isError).toBe(true);
+      expect(toolError(result)).toEqual({
+        name: 'ToolCallerError',
+        message: expect.stringContaining('requires confirmation'),
+      });
+      expect(executeSql).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      [
+        'confirmation is not enabled for run_notebook',
+        { enabledTools: ['delete_notebook'] },
+      ],
+      ['the server is read-only', { readOnly: true }],
+    ] as const)(
+      'does not call the classifier when %s',
+      async (_bypass, overrides) => {
+        // Regression: the tool classifies before it knows a confirmation can
+        // apply, so a slow or failing classifier holds up runs it cannot gate.
+        const classifier = vi.fn<SqlConfirmationClassifier>(async () => {
+          throw privateError();
+        });
+        const { client, executeSql } = await setupWithClassifier(
+          classifier,
+          overrides
+        );
+        // Only plain reads: the notebook a gate has to classify to decide on.
+        const { project, notebook } = await createNotebookFixture([
+          ...PLAIN_READS,
+        ]);
+
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+
+        expect(classifier).not.toHaveBeenCalled();
+        expect(isInputRequiredResult(result)).toBe(false);
+        expect((result as CallToolResult).isError).not.toBe(true);
+        expect(executeSql).toHaveBeenCalledTimes(2);
+      }
+    );
+
+    test.each([
+      ['destructive', 'destructive'],
+      ['do-heuristic', 'do-heuristic'],
+      ['unclassified', 'unclassified'],
+      ['an oversized failure', { failure: 'oversized' }],
+    ] as const)(
+      'the prompt counts the cells that run in the server mode plus the flagged cell when the classifier returns %s',
+      async (_reason, classification) => {
+        // Regression: each reason gets its own prompt as in execute_sql, or
+        // the flagged cell is left out of the count.
+        const { client, executeSql } = await setupWithClassifier(async (sql) =>
+          sql === READ_ONE ? classification : undefined
+        );
+        const { project, notebook } = await createNotebookFixture([
+          dbCell('insert', INSERT),
+          dbCell('flagged', READ_ONE),
+          dbCell('regex-flagged', REGEX_FLAGGED_READ),
+          dbCell('read', READ_TWO),
+        ]);
+
+        const result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: runArgs(project, notebook),
+        });
+
+        // 3 of 4: the INSERT and the regex-flagged read run in the server
+        // mode, and the classifier flagged one more cell.
+        expect(promptFirstLine(result)).toMatch(
+          /^This notebook modifies data or schema in 3 of 4 query cells, at least 1 destructive/
+        );
+        expect(executeSql).not.toHaveBeenCalled();
+      }
+    );
+
+    test('the prompt has no destructive clause for a cell only the regex flags', async () => {
+      // Regression: the regex still decides the destructive clause, so the
+      // prompt contradicts the configured classifier.
+      const { client } = await setupWithClassifier(returning(undefined));
+      const { project, notebook } = await createNotebookFixture([
+        dbCell('delete', 'delete from films'),
+      ]);
+
+      const result = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: runArgs(project, notebook),
+      });
+
+      expect(promptFirstLine(result)).toBe(
+        'This notebook modifies data or schema in 1 of 1 query cells.'
+      );
+    });
+
+    test.each([
+      [
+        'carries the permanent-removal line when only the classifier flags a plain read',
+        {
+          cells: PLAIN_READS,
+          classify: (async (sql) =>
+            sql === READ_ONE
+              ? 'destructive'
+              : undefined) satisfies SqlConfirmationClassifier,
+          warns: true,
+        },
+      ],
+      [
+        'has no permanent-removal line when no cell is flagged',
+        {
+          cells: [dbCell('insert', INSERT)],
+          classify: returning(undefined),
+          warns: false,
+        },
+      ],
+    ] as const)('the prompt %s', async (_name, { cells, classify, warns }) => {
+      // Regression: the regex still decides the warning, so a cell only the
+      // configured classifier flags is confirmed without it.
+      const { client, executeSql } = await setupWithClassifier(classify);
+      const { project, notebook } = await createNotebookFixture([...cells]);
+
+      const result = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: runArgs(project, notebook),
+      });
+
+      const lines = promptLines(result);
+      const line =
+        'It may permanently remove data, tables, schemas or other objects.';
+      if (warns) expect(lines).toContain(line);
+      else expect(lines).not.toContain(line);
+      expect(executeSql).not.toHaveBeenCalled();
+    });
+
+    // The regex and the plain-read check pick a cell's mode. The configured
+    // classifier decides only the prompt.
+    test.each([
+      [
+        'a regex-flagged plain read the classifier clears runs without a prompt in the server mode',
+        {
+          classify: returning(undefined),
+          sql: REGEX_FLAGGED_READ,
+          prompts: false,
+          read_only: false,
+        },
+      ],
+      [
+        'a plain read only the classifier flags runs read-only once accepted',
+        {
+          classify: returning('destructive'),
+          sql: READ_ONE,
+          prompts: true,
+          read_only: true,
+        },
+      ],
+    ] as const)('%s', async (_name, { classify, sql, prompts, read_only }) => {
+      const { client, executeSql } = await setupWithClassifier(classify, {
+        readOnly: false,
+      });
+      const { project, notebook } = await createNotebookFixture([
+        dbCell('query', sql),
+      ]);
+      const args = runArgs(project, notebook);
+
+      let result = await callModernTool(client, {
+        name: 'run_notebook',
+        arguments: args,
+      });
+      expect(isInputRequiredResult(result)).toBe(prompts);
+      if (isInputRequiredResult(result)) {
+        expect(executeSql).not.toHaveBeenCalled();
+        result = await callModernTool(client, {
+          name: 'run_notebook',
+          arguments: args,
+          requestState: result.requestState,
+          inputResponses: ACCEPT,
+        });
+      }
+
+      expect(isInputRequiredResult(result)).toBe(false);
+      expect((result as CallToolResult).isError).not.toBe(true);
+      expect(executeSql).toHaveBeenCalledOnce();
+      expect(executeSql).toHaveBeenCalledWith(
+        project.id,
+        expect.objectContaining({ read_only })
+      );
+    });
+
+    test('does not run a cell when the request aborts during classification', async () => {
+      let classifierSignal: AbortSignal | undefined;
+      let classified = false;
+      // What the host sees when the call settles: the handler is done by
+      // then, so a run that went on has already run its cells.
+      const settled: { success: boolean }[] = [];
+      const asked: string[] = [];
+      const { client, executeSql } = await setupWithClassifier(
+        async (sql, { signal }) => {
+          asked.push(sql);
+          classifierSignal = signal;
+          // Clears every cell, the first one only once the request aborts.
+          if (!signal.aborted) {
+            // Executor form: the package's lib target predates withResolvers.
+            await new Promise((resolve) =>
+              signal.addEventListener('abort', resolve, { once: true })
+            );
+          }
+          classified = true;
+          return undefined;
+        },
+        { onToolCall: ({ success }) => settled.push({ success }) }
+      );
+      const { project, notebook } = await createNotebookFixture([
+        ...PLAIN_READS,
+      ]);
+      const controller = new AbortController();
+
+      const request = client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'run_notebook',
+            arguments: runArgs(project, notebook),
+          },
+        },
+        { allowInputRequired: true, signal: controller.signal }
+      );
+      await vi.waitFor(() => expect(classifierSignal).toBeDefined());
+      expect(classifierSignal?.aborted).toBe(false);
+      controller.abort();
+      await expect(request).rejects.toThrow();
+      await vi.waitFor(() => expect(classified).toBe(true));
+      await vi.waitFor(() => expect(settled).toHaveLength(1));
+      // No cell ran and no rows came back: the call ended as a failure.
+      expect(settled).toEqual([{ success: false }]);
+      expect(executeSql).not.toHaveBeenCalled();
+      // The gate stopped at the aborted classification: it did not go on to
+      // ask about the next cell.
+      expect(asked).toEqual([READ_ONE]);
     });
   });
 });
