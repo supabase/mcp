@@ -1,5 +1,5 @@
 import './button.css';
-import './ready-actions.css';
+import './connection-details.css';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { MouseEvent, SyntheticEvent } from 'react';
 import { type Politeness, useAnnounce } from './Announcer';
@@ -85,19 +85,18 @@ function pickKey(keys: Key[]): string | undefined {
 }
 
 /** The project's page in the Supabase dashboard (Studio). */
-const studioUrl = (projectRef: string) =>
+export const studioUrl = (projectRef: string) =>
   `https://supabase.com/dashboard/project/${encodeURIComponent(projectRef)}`;
 
 /**
- * Actions for a project that is ready: open it in Studio, and a collapsible
- * disclosure with its connection details. UI-only: nothing here is sent to the
- * model's context.
+ * For a project that is ready: a collapsible disclosure with its connection
+ * details. UI-only: nothing here is sent to the model's context.
  *
  * Calls always pass `projectRef` as `project_id`. A server scoped to another
  * project (e.g. a branch's parent) would reject it, so callers pass
  * `canReachProject` false then.
  */
-export function ReadyActions({
+export function ConnectionDetails({
   app,
   projectRef,
   canReachProject = true,
@@ -113,8 +112,7 @@ export function ReadyActions({
   canReachProject?: boolean;
   /**
    * False when the host can't open links. A sandboxed view can't open them
-   * itself, so the Open in Studio button is hidden and connection details
-   * offer the Studio link to copy instead.
+   * itself, so connection details offer the Studio link to copy instead.
    */
   canOpenLinks?: boolean;
 }) {
@@ -167,56 +165,41 @@ export function ReadyActions({
   }
 
   return (
-    <div className="ready-actions">
-      {canOpenLinks && (
-        <div data-slot="actions">
-          <a
-            className="button"
-            data-size="sm"
-            href={projectUrl}
-            onClick={openLink}
-          >
-            <ExternalLinkIcon />
-            Open in Studio
-          </a>
-        </div>
-      )}
-      <details data-slot="connection" onToggle={onToggle}>
-        <summary>
-          Connection details
-          <ChevronIcon slot="disclosure-indicator" />
-        </summary>
-        <div data-slot="panel">
-          {connection.status === 'loading' && (
-            <div data-slot="loading">
-              <SpinnerIcon />
-              <Message>Loading connection details…</Message>
-            </div>
-          )}
-          {connection.status === 'dashboard' &&
-            (canOpenLinks ? (
-              <a
-                data-slot="dashboard-link"
-                href={dashboardUrl}
-                onClick={openLink}
-              >
-                Open in Studio
-                <ExternalLinkIcon />
-              </a>
-            ) : (
-              <CopyField label="Studio link" value={dashboardUrl} />
-            ))}
-          {connection.status === 'details' && (
-            <>
-              <CopyField label="Project URL" value={connection.url} />
-              <CopyField label="Publishable key" value={connection.key} />
-              {!canOpenLinks && (
-                <CopyField label="Studio link" value={projectUrl} />
-              )}
-            </>
-          )}
-        </div>
-      </details>
-    </div>
+    <details className="connection-details" onToggle={onToggle}>
+      <summary>
+        Connection details
+        <ChevronIcon slot="disclosure-indicator" />
+      </summary>
+      <div data-slot="panel">
+        {connection.status === 'loading' && (
+          <div data-slot="loading">
+            <SpinnerIcon />
+            <Message>Loading connection details…</Message>
+          </div>
+        )}
+        {connection.status === 'dashboard' &&
+          (canOpenLinks ? (
+            <a
+              data-slot="dashboard-link"
+              href={dashboardUrl}
+              onClick={openLink}
+            >
+              Open in Studio
+              <ExternalLinkIcon />
+            </a>
+          ) : (
+            <CopyField label="Studio link" value={dashboardUrl} />
+          ))}
+        {connection.status === 'details' && (
+          <>
+            <CopyField label="Project URL" value={connection.url} />
+            <CopyField label="Publishable key" value={connection.key} />
+            {!canOpenLinks && (
+              <CopyField label="Studio link" value={projectUrl} />
+            )}
+          </>
+        )}
+      </div>
+    </details>
   );
 }

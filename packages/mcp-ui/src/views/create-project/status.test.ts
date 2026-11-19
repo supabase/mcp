@@ -1,34 +1,36 @@
 import { describe, expect, it } from 'vitest';
-import { stepsAt } from '../../shared/StepStatus';
-import { currentStep, isFailed, LABELS } from './status';
-
-const states = (status: string) =>
-  stepsAt(LABELS, currentStep(status), isFailed(status)).map((s) => s.state);
+import { progress } from './status';
 
 describe('create-project status', () => {
   it.each(['REMOVED', 'INIT_FAILED', 'RESTORE_FAILED', 'UPGRADE_FAILED'])(
-    '%s is failed',
-    (status) => {
-      expect(isFailed(status)).toBe(true);
-      expect(states(status)).toEqual(['done', 'failed', 'pending']);
-    }
+    '%s fails the creating step',
+    (status) => expect(progress(status)).toEqual({ state: 'failed', step: 1 })
   );
 
-  it.each(['COMING_UP', 'UNKNOWN'])('%s is provisioning', (status) => {
-    expect(isFailed(status)).toBe(false);
-    expect(states(status)).toEqual(['done', 'active', 'pending']);
-  });
-
-  it.each(['ACTIVE_UNHEALTHY', 'INACTIVE', 'PAUSING', 'RESTARTING'])(
-    '%s is running health checks',
-    (status) => {
-      expect(isFailed(status)).toBe(false);
-      expect(states(status)).toEqual(['done', 'done', 'active']);
-    }
+  it.each(['COMING_UP', 'UNKNOWN'])('%s is creating', (status) =>
+    expect(progress(status)).toEqual({ state: 'step', step: 1 })
   );
 
-  it('ACTIVE_HEALTHY has every step done', () => {
-    expect(isFailed('ACTIVE_HEALTHY')).toBe(false);
-    expect(states('ACTIVE_HEALTHY')).toEqual(['done', 'done', 'done']);
+  it('ACTIVE_UNHEALTHY is checking health', () => {
+    expect(progress('ACTIVE_UNHEALTHY')).toEqual({ state: 'step', step: 2 });
   });
+
+  it('ACTIVE_HEALTHY is done', () => {
+    expect(progress('ACTIVE_HEALTHY')).toEqual({ state: 'done' });
+  });
+
+  // Statuses a new project shouldn't reach: shown with Studio's label, and
+  // neutral while they're still changing.
+  it.each([
+    ['INACTIVE', 'Paused', false],
+    ['PAUSING', 'Pausing', true],
+    ['RESTARTING', 'Restarting', true],
+  ])('%s shows as %s', (status, label, isChanging) =>
+    expect(progress(status)).toEqual({
+      state: 'other',
+      label,
+      tone: undefined,
+      isChanging,
+    })
+  );
 });

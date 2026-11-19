@@ -7,17 +7,20 @@ export type IconProps = {
    * can style it with `data-slot` instead of the `.icon` class.
    */
   slot?: string;
+  /** Width and height in px; shrinks an icon to sit inside small text. */
+  size?: number;
 };
 
 function Icon({
   slot,
+  size = 16,
   state,
   children,
 }: IconProps & { state?: string; children: ReactNode }) {
   return (
     <svg
-      width={16}
-      height={16}
+      width={size}
+      height={size}
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
@@ -39,6 +42,15 @@ export function SpinnerIcon(props: IconProps) {
     <Icon {...props} state="spinning">
       <circle cx="8" cy="8" r="6" opacity="0.25" />
       <path d="M14 8a6 6 0 0 0-6-6" />
+    </Icon>
+  );
+}
+
+export function RefreshIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M13.5 3v3h-3" />
+      <path d="M13.2 6A5.5 5.5 0 1 0 13 10.5" />
     </Icon>
   );
 }

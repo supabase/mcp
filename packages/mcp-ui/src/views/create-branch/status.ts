@@ -1,34 +1,33 @@
 import type { Branch } from '@supabase/mcp-server-supabase/platform';
+import type { Progress } from '../../shared/use-creation-status';
 
+/**
+ * The steps of creating a branch. The first is the create call itself, done
+ * by the time the view has a branch.
+ */
 export const LABELS = [
   'Creating branch',
-  'Provisioning branch database',
+  'Creating',
   'Running migrations',
   'Deploying functions',
 ];
 
-/** Index of the current step and whether it failed, per branch status. */
-export function progress(status: Branch['status']): {
-  step: number;
-  failed: boolean;
-} {
+/** Where a new branch is, per branch status. */
+export function progress(status: Branch['status']): Progress {
   switch (status) {
     case 'FUNCTIONS_DEPLOYED':
-      return { step: LABELS.length, failed: false };
+      return { state: 'done' };
     case 'MIGRATIONS_PASSED':
-      return { step: 3, failed: false };
+      return { state: 'step', step: 3 };
     case 'RUNNING_MIGRATIONS':
-      return { step: 2, failed: false };
+      return { state: 'step', step: 2 };
     case 'MIGRATIONS_FAILED':
-      return { step: 2, failed: true };
+      return { state: 'failed', step: 2 };
     case 'FUNCTIONS_FAILED':
-      return { step: 3, failed: true };
+      return { state: 'failed', step: 3 };
     default:
       // CREATING_PROJECT (provisioning the branch's database), and anything
       // newer than this view.
-      return { step: 1, failed: false };
+      return { state: 'step', step: 1 };
   }
 }
-
-export const isTerminal = (status: Branch['status']) =>
-  status === 'FUNCTIONS_DEPLOYED' || progress(status).failed;

@@ -1,34 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { stepsAt } from '../../shared/StepStatus';
-import { isTerminal, LABELS, progress } from './status';
+import type { Progress } from '../../shared/use-creation-status';
+import { progress } from './status';
 
 type Status = Parameters<typeof progress>[0];
 
-const states = (status: Status) => {
-  const { step, failed } = progress(status);
-  return stepsAt(LABELS, step, failed).map((s) => s.state);
-};
-
-const cases: [Status, string[], boolean][] = [
-  ['CREATING_PROJECT', ['done', 'active', 'pending', 'pending'], false],
-  ['RUNNING_MIGRATIONS', ['done', 'done', 'active', 'pending'], false],
-  ['MIGRATIONS_FAILED', ['done', 'done', 'failed', 'pending'], true],
-  ['MIGRATIONS_PASSED', ['done', 'done', 'done', 'active'], false],
-  ['FUNCTIONS_FAILED', ['done', 'done', 'done', 'failed'], true],
-  ['FUNCTIONS_DEPLOYED', ['done', 'done', 'done', 'done'], true],
+const cases: [Status, Progress][] = [
+  ['CREATING_PROJECT', { state: 'step', step: 1 }],
+  ['RUNNING_MIGRATIONS', { state: 'step', step: 2 }],
+  ['MIGRATIONS_FAILED', { state: 'failed', step: 2 }],
+  ['MIGRATIONS_PASSED', { state: 'step', step: 3 }],
+  ['FUNCTIONS_FAILED', { state: 'failed', step: 3 }],
+  ['FUNCTIONS_DEPLOYED', { state: 'done' }],
 ];
 
 describe('create-branch status', () => {
-  it.each(cases)('%s', (status, expectedStates, terminal) => {
-    expect(states(status)).toEqual(expectedStates);
-    expect(isTerminal(status)).toBe(terminal);
+  it.each(cases)('%s', (status, expected) => {
+    expect(progress(status)).toEqual(expected);
   });
 
-  it('treats an unknown status as the first provisioning step', () => {
+  it('treats an unknown status as the first step', () => {
     expect(progress('SOMETHING_NEW' as Status)).toEqual({
+      state: 'step',
       step: 1,
-      failed: false,
     });
-    expect(isTerminal('SOMETHING_NEW' as Status)).toBe(false);
   });
 });

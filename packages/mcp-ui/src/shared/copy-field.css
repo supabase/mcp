@@ -6,44 +6,54 @@
     gap: var(--sb-space-1);
 
     :where([data-slot="label"]) {
-      color: var(--color-text-tertiary);
-      font-size: var(--font-text-xs-size);
+      color: var(--sb-color-tertiary-foreground);
+      font-size: var(--font-text-sm-size);
       font-weight: var(--font-weight-medium);
     }
 
     :where([data-slot="control"]) {
       display: flex;
-      align-items: stretch;
+      align-items: center;
       gap: var(--sb-space-2);
     }
 
-    /* Icon-only, square, as tall as the value box beside it. */
-    :where([data-slot="copy"]) {
+    /* Icon-only and square, the same size as the value box beside it and the
+       card's other icon buttons. */
+    :where([data-slot="control"] [data-slot="copy"]) {
       flex: none;
       justify-content: center;
-      aspect-ratio: 1;
-      padding: var(--sb-control-compact-padding-block)
-        var(--sb-control-compact-padding-inline);
+      inline-size: var(--sb-control-size);
+      block-size: var(--sb-control-size);
+      padding: 0;
 
       &:where([data-state="copied"]) {
-        color: var(--color-text-success);
+        color: var(--sb-color-primary);
       }
 
       &:where([data-state="failed"]) {
-        color: var(--color-text-danger);
+        color: var(--sb-color-destructive);
       }
     }
 
-    :where([data-slot="value"]) {
+    /* As tall as the copy button: the line fills the box inside its border. */
+    :where([data-slot="control"] [data-slot="value"]) {
       flex: 1;
       min-inline-size: 0;
-      padding: var(--sb-control-compact-padding-block)
-        var(--sb-control-compact-padding-inline);
+      block-size: var(--sb-control-size);
+      padding: 0 var(--sb-control-compact-padding-inline);
       overflow-x: auto;
+      overflow-y: hidden;
+      /* Still scrolls; a visible scrollbar would add height. */
+      scrollbar-width: none;
       white-space: nowrap;
-      border: var(--border-width-regular) solid var(--color-border-primary);
+      border: var(--border-width-regular) solid var(--sb-color-input);
       border-radius: var(--border-radius-md);
-      font-size: var(--font-text-xs-size);
+      font-size: var(--font-text-sm-size);
+      line-height: calc(
+        var(--sb-control-size) -
+        2 *
+        var(--border-width-regular)
+      );
     }
   }
 }

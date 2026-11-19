@@ -1,63 +1,106 @@
 import type { Project } from '@supabase/mcp-server-supabase/platform';
 import { callTool } from '../../shared/call-tool';
-import { ProgressView, Summary } from '../../shared/ProgressView';
-import { stepsAt } from '../../shared/StepStatus';
-import { usePoll } from '../../shared/use-poll';
+import { ProjectCard } from '../../shared/ProjectCard';
+import { ConnectionDetails, studioUrl } from '../../shared/ConnectionDetails';
+import { useCreationStatus } from '../../shared/use-creation-status';
+import { useLookup } from '../../shared/use-lookup';
 import { useMcpView } from '../../shared/use-mcp-view';
-import { currentStep, isFailed, LABELS } from './status';
+import { LABELS, progress } from './status';
 
-/** View for the `create_project` tool. */
+const text = (value: unknown) =>
+  typeof value === 'string' ? value : undefined;
+
+/**
+ * View for the `create_project` tool: the project card from the Supabase
+ * surfaces, kept live. While the project sets up, the badge names the step
+ * it's on (see `status.ts` for how steps map to statuses).
+ */
 export function CreateProject() {
   const { toolCall, app, input, hostCapabilities } = useMcpView<Project>(
     'supabase-create-project'
   );
-  const project = toolCall.status === 'ready' ? toolCall.data : undefined;
-  const canPoll = !!hostCapabilities.serverTools;
+  const canPoll = !!app && !!hostCapabilities.serverTools;
+  const canOpenLinks = !!app && !!hostCapabilities.openLinks;
 
-  const poll = usePoll<Project>({
-    enabled: !!app && !!project && canPoll,
-    fetcher: () => callTool<Project>(app!, 'get_project', { id: project!.id }),
-    isTerminal: (p) => p.status === 'ACTIVE_HEALTHY' || isFailed(p.status),
+  const {
+    data: project,
+    isLoading,
+    isDone,
+    ...status
+  } = useCreationStatus<Project>({
+    noun: 'project',
+    toolCall,
+    canPollInitial: canPoll,
+    read: (created) =>
+      callTool<Project>(app!, 'get_project', { id: created.id }),
+    labels: LABELS,
+    progress,
+    checkWith: 'get_project',
   });
+
+  // The organization's name is a nicety: on failure the card leaves it out.
+  const organization =
+    project?.organization_slug ??
+    project?.organization_id ??
+    text(input?.organization_id);
+  const organizationName = useLookup(
+    canPoll ? organization : undefined,
+    async () => {
+      const { name } = await callTool<{ name: string }>(
+        app!,
+        'get_organization',
+        { id: organization }
+      );
+      return name;
+    }
+  );
+
+  // The dashboard has a project that failed to start (to delete it, or for
+  // support), but nothing for one that was never created or was removed.
+  const canOpenDashboard =
+    !!project && canOpenLinks && project.status !== 'REMOVED';
+
+  const region = text(input?.region);
+  const details = project
+    ? [
+        { label: 'Project ref', value: project.ref },
+        { label: 'Region', value: project.region || 'Region unavailable' },
+      ]
+    : isLoading
+      ? [{ label: 'Project ref' }, { label: 'Region', value: region }]
+      : region
+        ? [{ label: 'Region', value: region }]
+        : [];
 
   return (
     <div className="create-project-view">
-      <ProgressView
-        toolCall={toolCall}
-        app={app}
-        poll={poll}
-        checkWith="get_project"
-        canPoll={canPoll}
-        canOpenLinks={!!hostCapabilities.openLinks}
-        waitingLabel="Waiting for confirmation…"
-        input={input}
-        noun="project"
-        titles={{
-          creating: 'Creating project',
-          created: 'Created project',
-          failed: 'Creating project failed',
-          cancelled: 'Creating project cancelled',
-        }}
-        inputSummary={({ name, region }) =>
-          typeof name === 'string' && typeof region === 'string' ? (
-            <Summary name={name} items={[{ label: 'region', value: region }]} />
-          ) : undefined
+      <ProjectCard
+        {...status}
+        isLoading={isLoading}
+        breadcrumbs={organizationName ? [organizationName] : undefined}
+        name={
+          project?.name ??
+          text(input?.name) ??
+          // A call that failed or was cancelled before the host sent its
+          // arguments: nothing more is coming, so no skeleton.
+          (isLoading ? undefined : 'New project')
         }
-        summary={(p) => (
-          <Summary
-            name={p.name}
-            items={[
-              { label: 'ref', value: p.ref },
-              { label: 'region', value: p.region },
-            ]}
+        details={details}
+        onOpenDashboard={
+          canOpenDashboard
+            ? () => void app!.openLink({ url: studioUrl(project.ref) })
+            : undefined
+        }
+      >
+        {isDone && project && app && (
+          <ConnectionDetails
+            app={app}
+            projectRef={project.ref}
+            canReachProject={canPoll}
+            canOpenLinks={canOpenLinks}
           />
         )}
-        steps={(p) =>
-          stepsAt(LABELS, currentStep(p.status), isFailed(p.status))
-        }
-        ready={(p) => p.status === 'ACTIVE_HEALTHY'}
-        projectRef={(p) => p.ref}
-      />
+      </ProjectCard>
     </div>
   );
 }

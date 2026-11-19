@@ -2,10 +2,10 @@
   /* A single line of status text (see Message). */
   :where(.message) {
     padding-block: var(--sb-space-2);
-    color: var(--color-text-tertiary);
+    color: var(--sb-color-tertiary-foreground);
 
     &:where([data-tone="error"]) {
-      color: var(--color-text-danger);
+      color: var(--sb-color-destructive);
     }
   }
 }
