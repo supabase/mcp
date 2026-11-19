@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
+import { Features } from 'lightningcss';
 import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
@@ -15,6 +16,13 @@ const envName = (view: string) => view.replaceAll('-', '_');
 
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
+  css: {
+    // The minifier (lightningcss) would otherwise rewrite `light-dark()` into a
+    // `prefers-color-scheme` polyfill, which ignores the theme the host sets
+    // (`color-scheme` on <html>): a dark host on a light OS would get light
+    // colours.
+    lightningcss: { exclude: Features.LightDark },
+  },
   environments: Object.fromEntries(
     views.map((view) => [
       envName(view),

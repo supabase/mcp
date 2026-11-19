@@ -9,6 +9,11 @@
 import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
 import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { resource, type Resource } from '@supabase/mcp-utils';
+import createBranchHtml from '@supabase/mcp-ui/create-branch.html';
+import createProjectHtml from '@supabase/mcp-ui/create-project.html';
+
+export const CREATE_PROJECT_UI_URI = 'ui://supabase/create-project';
+export const CREATE_BRANCH_UI_URI = 'ui://supabase/create-branch';
 
 const VIEW_META: { ui: McpUiResourceMeta } = {
   ui: {
@@ -16,6 +21,8 @@ const VIEW_META: { ui: McpUiResourceMeta } = {
     csp: { connectDomains: [], resourceDomains: [] },
     // Views blend into the conversation instead of sitting in a host frame.
     prefersBorder: false,
+    // Views let the user copy connection details.
+    permissions: { clipboardWrite: {} },
   },
 };
 
@@ -41,5 +48,18 @@ function appResource(
 }
 
 export function getAppResources(): Resource[] {
-  return [];
+  return [
+    appResource(
+      CREATE_PROJECT_UI_URI,
+      'Create project view',
+      'Live provisioning progress for the create_project tool.',
+      createProjectHtml
+    ),
+    appResource(
+      CREATE_BRANCH_UI_URI,
+      'Create branch view',
+      'Live setup progress for the create_branch tool.',
+      createBranchHtml
+    ),
+  ];
 }

@@ -5,7 +5,11 @@ import {
 import type { Client } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { createServerHarness } from '../test/server-harness.js';
-import { getAppResources } from './resources/app-resources.js';
+import {
+  CREATE_BRANCH_UI_URI,
+  CREATE_PROJECT_UI_URI,
+  getAppResources,
+} from './resources/app-resources.js';
 
 const harness = createServerHarness();
 
@@ -82,6 +86,16 @@ describe('MCP Apps', () => {
       clientCapabilities: APPS_CLIENT_CAPABILITIES,
     });
 
+    const { tools } = await client.listTools();
+    const linkOf = (name: string) =>
+      (
+        tools.find((tool) => tool.name === name)?._meta?.ui as
+          | { resourceUri?: string }
+          | undefined
+      )?.resourceUri;
+    expect(linkOf('create_project')).toBe(CREATE_PROJECT_UI_URI);
+    expect(linkOf('create_branch')).toBe(CREATE_BRANCH_UI_URI);
+
     expect(await listedViewUris(client)).toEqual([...VIEW_URIS].sort());
     expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
   });
@@ -96,6 +110,7 @@ describe('MCP Apps', () => {
       ui: {
         csp: { connectDomains: [], resourceDomains: [] },
         prefersBorder: false,
+        permissions: { clipboardWrite: {} },
       },
     };
 

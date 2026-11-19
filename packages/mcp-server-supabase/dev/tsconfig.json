@@ -1,0 +1,5 @@
+{
+  "extends": "@total-typescript/tsconfig/tsc/dom/library",
+  "compilerOptions": { "types": ["node"] },
+  "include": ["./**/*.ts", "../src/management-api/types.ts"]
+}
