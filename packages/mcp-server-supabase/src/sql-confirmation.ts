@@ -7,7 +7,9 @@ import { isSqlClassificationFailure } from './sql-classification-failure.js';
 import { isDestructiveSql } from './tools/destructive-sql.js';
 
 /**
- * Why SQL needs confirmation. Each reason gets its own prompt.
+ * Why SQL needs confirmation. In `execute_sql` and `apply_migration` each
+ * reason gets its own prompt. `run_notebook` shows one prompt for the whole
+ * notebook, with the same wording for every reason.
  *
  * - `destructive`: the SQL contains DROP, DELETE, TRUNCATE or UPDATE without
  *   WHERE.
@@ -23,7 +25,8 @@ export type SqlConfirmationReason =
  * Why a classifier could not classify the SQL.
  *
  * - `oversized`: the SQL is over the classifier's size cap. The tool asks for
- *   confirmation and says the SQL was too large to check.
+ *   confirmation. `execute_sql` and `apply_migration` say the SQL was too
+ *   large to check.
  * - `unavailable`, `timeout`, `crashed`: the classifier could not answer.
  *   The tool call fails with an error and the SQL does not run. `unavailable`
  *   covers both a classifier that cannot load and a pool that sheds the
@@ -50,11 +53,15 @@ export type SqlConfirmationClassification =
 /**
  * Classifies SQL for `execute_sql` and `apply_migration` confirmation.
  *
+ * It also decides whether a `run_notebook` run asks for confirmation: the
+ * tool calls it on the database cells in order and stops at the first one it
+ * flags. It does not pick the mode a cell runs in.
+ *
  * Resolve with:
  * - `undefined`: the SQL runs without confirmation. This is the only result
  *   that skips confirmation.
- * - a `SqlConfirmationReason`: the tool asks for confirmation with the prompt
- *   for that reason.
+ * - a `SqlConfirmationReason`: the tool asks for confirmation. `execute_sql`
+ *   and `apply_migration` use the prompt for that reason.
  * - a `SqlClassificationFailure`: `oversized` asks for confirmation;
  *   `unavailable`, `timeout` and `crashed` fail the tool call and the SQL does
  *   not run.

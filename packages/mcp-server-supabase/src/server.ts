@@ -152,6 +152,10 @@ export type SupabaseMcpServerOptions = {
        * classifier, for example `withFallback(parser, regexClassifier)` so a
        * parser that cannot load falls back to the regex.
        *
+       * It also decides whether a `run_notebook` run prompts: the server asks
+       * it about the database cells in order and stops at the first one it
+       * flags. It does not pick the mode a cell runs in.
+       *
        * Only `undefined` skips confirmation. `oversized` asks for
        * confirmation; `unavailable`, `timeout`, `crashed`, a rejection, or any
        * result outside `SqlConfirmationClassification` fails the tool call
@@ -442,6 +446,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             projectId,
             dashboardUrl,
             readOnly,
+            classifySql,
             confirmation:
               confirmationCodec &&
               (enabledConfirmationTools.includes('run_notebook') ||
