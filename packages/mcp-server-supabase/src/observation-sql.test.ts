@@ -23,9 +23,13 @@ import {
 } from '../test/observation-test-helpers.js';
 import type { ObservationFact } from './index.js';
 import type { SupabasePlatform } from './platform/types.js';
+import {
+  regexClassifier,
+  type SqlConfirmationClassification,
+  type SqlConfirmationClassifier,
+} from './sql-confirmation.js';
 import type { ElicitationState } from './tools/confirmation.js';
 import { getDatabaseTools } from './tools/database-operation-tools.js';
-import * as classifier from './tools/destructive-sql.js';
 
 const tools = ['execute_sql', 'apply_migration'] as const;
 type SqlTool = (typeof tools)[number];
@@ -38,6 +42,8 @@ const {
   operationEnd: finished,
 } = factBuilders('destructive_sql');
 const query = 'DROP TABLE "PRIVATE_TABLE"; -- PRIVATE_SQL';
+// The regex clears this, so only an injected classifier can flag it.
+const clearedQuery = 'SELECT 1 AS "PRIVATE_RESULT";';
 const projectId = 'PRIVATE_PROJECT';
 
 async function setup(
@@ -47,6 +53,8 @@ async function setup(
     readOnly?: boolean;
     capabilities?: ClientCapabilities;
     legacy?: boolean;
+    classifier?: SqlConfirmationClassifier;
+    query?: string;
   } = {}
 ) {
   const executeSql = vi.fn(async () => []);
@@ -69,13 +77,16 @@ async function setup(
       confirmation:
         options.configured === false
           ? undefined
-          : { enabledTools: options.disabled ? [] : tools },
+          : {
+              enabledTools: options.disabled ? [] : tools,
+              ...(options.classifier && { classifier: options.classifier }),
+            },
     },
   });
   function args(name: SqlTool) {
     return {
       project_id: projectId,
-      query,
+      query: options.query ?? query,
       ...(name === 'apply_migration' ? { name: 'PRIVATE_MIGRATION' } : {}),
     };
   }
@@ -111,6 +122,32 @@ const staleStates = [
 
 function otherTool(name: SqlTool): SqlTool {
   return name === 'execute_sql' ? 'apply_migration' : 'execute_sql';
+}
+
+// The two ways a classifier cannot answer: a failure it resolves with, and a
+// throw.
+const classifierFailures: readonly {
+  how: string;
+  fail: SqlConfirmationClassifier;
+}[] = [
+  {
+    how: 'resolves with a timeout failure',
+    fail: async () => ({ failure: 'timeout' }),
+  },
+  {
+    how: 'throws',
+    fail: async () => {
+      throw new Error('PRIVATE_CLASSIFIER_ERROR');
+    },
+  },
+];
+
+/** The `name` in a failed tool call's `{ "error": { name, message } }` text. */
+function errorName(result: CallToolResult) {
+  const [content] = result.content;
+  if (content?.type !== 'text') throw new Error('expected a text result');
+  return (JSON.parse(content.text) as { error?: { name?: unknown } }).error
+    ?.name;
 }
 
 function promptMessage(result: InputRequiredResult) {
@@ -202,13 +239,14 @@ describe.each(tools)('%s SQL observations', (name) => {
   // is only an error for SQL that needs confirmation, so the other two
   // classifier classes get their own rows on the same paths.
   test.each(staleStates)(
-    'runs SQL that no longer classifies as destructive and ignores the stale state (changed $change)',
+    'runs SQL the classifier now clears and ignores the stale state (changed $change)',
     async ({ mismatch, changedArgs }) => {
-      const h = await setup();
+      let classification: SqlConfirmationClassification = 'destructive';
+      const h = await setup({ classifier: async () => classification });
       const first = issued(
         await h.call(mismatch === 'tool_mismatch' ? otherTool(name) : name)
       );
-      vi.spyOn(classifier, 'isDestructiveSql').mockReturnValue(false);
+      classification = undefined;
       const sent = { ...h.args(name), ...changedArgs };
       const result = await h.call(name, {
         requestState: first.requestState,
@@ -233,22 +271,32 @@ describe.each(tools)('%s SQL observations', (name) => {
     }
   );
 
-  test.each(staleStates)(
-    'returns the classifier failure, not the state error, when classification throws (changed $change)',
-    async ({ mismatch, changedArgs }) => {
-      const h = await setup();
+  test.each(
+    staleStates.flatMap((stale) =>
+      classifierFailures.map((failure) => ({ ...stale, ...failure }))
+    )
+  )(
+    'returns the classification error, not the state error, when the classifier $how (changed $change)',
+    async ({ mismatch, changedArgs, fail }) => {
+      let current: SqlConfirmationClassifier = async () => 'destructive';
+      const h = await setup({
+        classifier: (sql, options) => current(sql, options),
+      });
       const first = issued(
         await h.call(mismatch === 'tool_mismatch' ? otherTool(name) : name)
       );
-      vi.spyOn(classifier, 'isDestructiveSql').mockImplementation(() => {
-        throw new Error('PRIVATE_CLASSIFIER_ERROR');
-      });
+      current = fail;
       const result = await h.call(name, {
         requestState: first.requestState,
         arguments: { ...h.args(name), ...changedArgs },
         inputResponses: accept,
       });
+      expect(isInputRequiredResult(result)).toBe(false);
       expect((result as CallToolResult).isError).toBe(true);
+      expect(errorName(result as CallToolResult)).toBe(
+        'SqlClassifierCallError'
+      );
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_CLASSIFIER_ERROR');
       // The state error records a decision and a validation fact. A failed
       // classification records nothing.
       assertAttempt(h.attempts[1], name, [], 'tool_error');
@@ -266,14 +314,16 @@ describe.each(tools)('%s SQL observations', (name) => {
   ] as const)(
     'keeps staged $action final when classification changes (fails=$fails)',
     async ({ action, fails }) => {
-      const h = await setup();
+      const classify = vi.fn<SqlConfirmationClassifier>(
+        async () => 'destructive'
+      );
+      const h = await setup({ classifier: classify, query: clearedQuery });
       const first = issued(await h.call(name));
-      const classify = vi
-        .spyOn(classifier, 'isDestructiveSql')
-        .mockImplementation(() => {
-          if (fails) throw new Error('PRIVATE_CLASSIFIER_ERROR');
-          return false;
-        });
+      classify.mockClear();
+      classify.mockImplementation(async () => {
+        if (fails) throw new Error('PRIVATE_CLASSIFIER_ERROR');
+        return undefined;
+      });
       const result = await h.call(name, {
         requestState: first.requestState,
         inputResponses: { confirm_destructive: { action } },
@@ -293,9 +343,13 @@ describe.each(tools)('%s SQL observations', (name) => {
   );
 
   test('asks again without executing when an unanswered resend no longer classifies as destructive', async () => {
-    const h = await setup();
+    let classification: SqlConfirmationClassification = 'destructive';
+    const h = await setup({
+      classifier: async () => classification,
+      query: clearedQuery,
+    });
     const first = issued(await h.call(name));
-    vi.spyOn(classifier, 'isDestructiveSql').mockReturnValue(false);
+    classification = undefined;
     const result = await h.call(name, { requestState: first.requestState });
     expect(h.operation(name)).not.toHaveBeenCalled();
     const again = issued(result);
@@ -335,6 +389,7 @@ test.each(tools)(
     const ctx = {
       mcpReq: {
         requestState: () => undefined,
+        signal: new AbortController().signal,
         envelope: {
           [PROTOCOL_VERSION_META_KEY]: '2026-07-28',
           [CLIENT_CAPABILITIES_META_KEY]: form,
