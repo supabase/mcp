@@ -28,6 +28,7 @@ import {
   type SqlConfirmationClassification,
   type SqlConfirmationClassifier,
 } from './sql-confirmation.js';
+import { createSqlClassifyStep } from './tools/classify-sql.js';
 import type { ElicitationState } from './tools/confirmation.js';
 import { getDatabaseTools } from './tools/database-operation-tools.js';
 
@@ -399,6 +400,7 @@ test.each(tools)(
     const sqlTools = getDatabaseTools({
       database,
       confirmation: { codec, enabledTools: tools },
+      classifySql: createSqlClassifyStep(regexClassifier),
     });
     const sqlTool: Tool<
       z.ZodObject<any>,
