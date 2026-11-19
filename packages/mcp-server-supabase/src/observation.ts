@@ -79,6 +79,30 @@ export type ObservationFact =
       disposition: 'returned' | 'threw';
       durationMs: number;
     }>
+  | Readonly<{
+      /** One per call to the SQL confirmation classifier, recorded when the call settles. */
+      kind: 'sql_classifier_call';
+      /**
+       * Only `destructive_sql` and `notebook` are recorded. The type stays wide for a host that narrows
+       * to a feature this fact never has (for example one that keeps only `cost` facts) and then switches
+       * over `kind`: a narrow type would drop this kind there, and the switch would compile without it.
+       */
+      feature: ConfirmationFeature;
+      result:
+        | 'not_destructive' // the classifier resolved with undefined
+        | 'destructive'
+        | 'do_heuristic'
+        | 'unclassified'
+        | 'oversized'
+        | 'unavailable'
+        | 'timeout'
+        | 'crashed'
+        | 'invalid' // a resolved value outside the contract
+        | 'rejected' // the classifier threw or rejected
+        | 'aborted'; // the request was cancelled while the classifier ran
+      /** Ms from calling the classifier until it settled. */
+      durationMs: number;
+    }>
   | NotebookRunFact;
 
 export type ObservationContext = CoreObservationContext<ObservedTool>;
