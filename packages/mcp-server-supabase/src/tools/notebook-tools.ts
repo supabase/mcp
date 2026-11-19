@@ -18,6 +18,7 @@ import {
   notebookSchema,
 } from '../platform/types.js';
 import { hashObject } from '../util.js';
+import type { SqlClassifyStep } from './classify-sql.js';
 import {
   actionOnlyElicitationSchema,
   checkConfirmationState,
@@ -59,6 +60,8 @@ type NotebookToolsOptions = {
   projectId?: string;
   dashboardUrl?: string;
   readOnly?: boolean;
+  /** The server's one classify step. Required, so no caller can skip it. */
+  classifySql: SqlClassifyStep;
   /**
    * Enables form confirmation per tool. `run_notebook` confirms only mutating
    * database cells; `delete_notebook` always confirms. Clients without form
@@ -399,6 +402,7 @@ export function getNotebookTools({
   debugging,
   projectId,
   readOnly,
+  classifySql,
   confirmation,
   dashboardUrl = 'https://supabase.com/dashboard',
 }: NotebookToolsOptions) {
@@ -544,28 +548,53 @@ export function getNotebookTools({
             );
           }
 
-          // Confirm every executable database cell that is not a plain read
-          // before running the first cell.
+          // These cells run in the server's mode; every other cell runs
+          // read-only. The built-in regex picks them on purpose, not the
+          // configured classifier, so a cell runs in the same mode on every
+          // host and an accepted resend needs no classifier call.
           const mutatingCells: QueryCell[] = [];
-          const destructiveCells: QueryCell[] = [];
+          let hasNonPlainRead = false;
           if (!readOnly && database) {
             for (const cell of queryCells) {
               if (!isPrimaryDatabaseCell(cell, project_id)) continue;
-              if (isDestructiveSql(cell.sql)) {
-                destructiveCells.push(cell);
-                mutatingCells.push(cell);
-              } else if (!isPlainNotebookRead(cell.sql)) {
+              const plainRead = isPlainNotebookRead(cell.sql);
+              if (!plainRead) hasNonPlainRead = true;
+              if (!plainRead || isDestructiveSql(cell.sql)) {
                 mutatingCells.push(cell);
               }
             }
           }
 
+          // Asks the configured classifier about the database cells, at most
+          // once per call and only when a prompt depends on the answer. It
+          // stops at the first flagged cell, so the prompt cannot say how
+          // many cells are destructive. A classifier that cannot answer
+          // fails the whole call before any cell runs.
+          let flaggedCell: Promise<QueryCell | undefined> | undefined;
+          const findFlaggedCell = () => {
+            flaggedCell ??= (async () => {
+              if (readOnly || !database) return undefined;
+              for (const cell of queryCells) {
+                if (!isPrimaryDatabaseCell(cell, project_id)) continue;
+                if ((await classifySql(cell.sql, ctx)) !== undefined) {
+                  return cell;
+                }
+              }
+              return undefined;
+            })();
+            return flaggedCell;
+          };
+
+          // Confirm before running the first cell when a database cell is not
+          // a plain read or the classifier flags one. A regex flag alone does
+          // not prompt: the regex only picks the run mode above.
           if (
             runConfirmation &&
             // Still validate pending approvals and honor decline/cancel if
             // the notebook or execution mode changed in the meantime.
-            (mutatingCells.length > 0 ||
-              ctx.mcpReq.requestState() !== undefined)
+            (hasNonPlainRead ||
+              ctx.mcpReq.requestState() !== undefined ||
+              (await findFlaggedCell()) !== undefined)
           ) {
             if (!isFormCapable(ctx)) {
               record?.({
@@ -587,8 +616,12 @@ export function getNotebookTools({
               reason: 'eligible',
             });
 
-            const askForConfirmation = async () =>
-              inputRequired({
+            const askForConfirmation = async () => {
+              const flagged = await findFlaggedCell();
+              const confirmedCells =
+                mutatingCells.length +
+                (flagged && !mutatingCells.includes(flagged) ? 1 : 0);
+              return inputRequired({
                 inputRequests: {
                   confirm_run: inputRequired.elicit({
                     mode: 'form',
@@ -596,8 +629,8 @@ export function getNotebookTools({
                       ...(readOnly
                         ? ['Database queries run read-only.']
                         : [
-                            `This notebook modifies data or schema in ${mutatingCells.length} of ${queryCells.length} query cells${destructiveCells.length ? `, ${destructiveCells.length} destructive (DROP, DELETE, TRUNCATE or UPDATE without WHERE)` : ''}.`,
-                            ...(destructiveCells.length
+                            `This notebook modifies data or schema in ${confirmedCells} of ${queryCells.length} query cells${flagged ? ', at least 1 destructive (DROP, DELETE, TRUNCATE or UPDATE without WHERE)' : ''}.`,
+                            ...(flagged
                               ? [
                                   'It may permanently remove data, tables, schemas or other objects.',
                                 ]
@@ -620,6 +653,7 @@ export function getNotebookTools({
                   ctx
                 ),
               });
+            };
 
             const confirmationState = await checkConfirmationState({
               ctx,
