@@ -20,6 +20,12 @@ import type {
   SupabasePlatform,
 } from '../src/platform/types.js';
 import type { SupabaseMcpServerOptions } from '../src/server.js';
+import {
+  regexClassifier,
+  SqlClassifierUnavailableError,
+  type SqlConfirmationClassifier,
+  withFallback,
+} from '../src/sql-confirmation.js';
 
 const confirmation = {
   requestState: {
@@ -39,6 +45,19 @@ type Attempt = {
   facts: ObservationFact[];
   ends: ObservationEnd[];
 };
+/** Every `result` a `sql_classifier_call` fact can carry, written out by hand. */
+type SqlClassifierCallResult =
+  | 'not_destructive'
+  | 'destructive'
+  | 'do_heuristic'
+  | 'unclassified'
+  | 'oversized'
+  | 'unavailable'
+  | 'timeout'
+  | 'crashed'
+  | 'invalid'
+  | 'rejected'
+  | 'aborted';
 const harness = createServerHarness();
 
 afterEach(async () => {
@@ -238,8 +257,261 @@ function factBuilders(
       durationMs: expect.any(Number),
     };
   }
-  return { decision, required, validation, response, started, operationEnd };
+  function classifierCall(result: SqlClassifierCallResult) {
+    return {
+      kind: 'sql_classifier_call',
+      feature,
+      result,
+      durationMs: expect.any(Number),
+    };
+  }
+  return {
+    decision,
+    required,
+    validation,
+    response,
+    started,
+    operationEnd,
+    classifierCall,
+  };
 }
+
+// Stand-ins for a classifier's own error. Neither may reach a fact.
+const privateClassifierError = () =>
+  Object.assign(new Error('PRIVATE_CLASSIFIER_MESSAGE'), {
+    name: 'PRIVATE_CLASSIFIER_NAME',
+  });
+const returning = (value: unknown) =>
+  (async () => value) as unknown as SqlConfirmationClassifier;
+
+// Results whose inspection throws what the classifier's own code threw.
+const failureGetterThrows = {
+  get failure(): never {
+    throw privateClassifierError();
+  },
+};
+const trapsThrow = new Proxy(
+  {},
+  {
+    get(_target, key) {
+      if (key === 'then') return undefined;
+      throw privateClassifierError();
+    },
+    has() {
+      throw privateClassifierError();
+    },
+    ownKeys() {
+      throw privateClassifierError();
+    },
+    getOwnPropertyDescriptor() {
+      throw privateClassifierError();
+    },
+    getPrototypeOf() {
+      throw privateClassifierError();
+    },
+  }
+);
+
+type ClassifierOutcome = {
+  /** Reads after "when the classifier". */
+  label: string;
+  classify: SqlConfirmationClassifier;
+  /** The `result` the `sql_classifier_call` fact carries for this outcome. */
+  result: SqlClassifierCallResult;
+  /** What the classifier's answer means: the SQL needs no confirmation, needs one, or cannot be checked. */
+  verdict: 'clears' | 'flags' | 'fails';
+  /** Another input for a `result` an earlier row already covers. */
+  variant?: true;
+};
+
+/**
+ * One row per classifier outcome and the `sql_classifier_call` result it maps
+ * to. Each result has one main row; `variant` rows are further inputs that
+ * must map to the same result.
+ */
+const classifierOutcomes: readonly ClassifierOutcome[] = [
+  {
+    label: 'returns undefined',
+    classify: returning(undefined),
+    result: 'not_destructive',
+    verdict: 'clears',
+  },
+  {
+    label: 'returns destructive',
+    classify: returning('destructive'),
+    result: 'destructive',
+    verdict: 'flags',
+  },
+  {
+    label: 'returns do-heuristic',
+    classify: returning('do-heuristic'),
+    result: 'do_heuristic',
+    verdict: 'flags',
+  },
+  {
+    label: 'returns unclassified',
+    classify: returning('unclassified'),
+    result: 'unclassified',
+    verdict: 'flags',
+  },
+  {
+    label: 'returns an oversized failure',
+    classify: returning({ failure: 'oversized' }),
+    result: 'oversized',
+    verdict: 'flags',
+  },
+  {
+    label: 'returns an unavailable failure',
+    classify: returning({ failure: 'unavailable' }),
+    result: 'unavailable',
+    verdict: 'fails',
+  },
+  {
+    label: 'returns a timeout failure',
+    classify: returning({ failure: 'timeout' }),
+    result: 'timeout',
+    verdict: 'fails',
+  },
+  {
+    label: 'returns a crashed failure',
+    classify: returning({ failure: 'crashed' }),
+    result: 'crashed',
+    verdict: 'fails',
+  },
+  // Results outside the contract, for example one that crossed IPC.
+  {
+    label: 'returns null',
+    classify: returning(null),
+    result: 'invalid',
+    verdict: 'fails',
+  },
+  {
+    label: 'returns false',
+    classify: returning(false),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  {
+    label: 'returns an unknown reason',
+    classify: returning('PRIVATE_UNKNOWN_REASON'),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  {
+    label: 'returns an unknown failure kind',
+    classify: returning({ failure: 'PRIVATE_FAILURE_KIND' }),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  {
+    label: 'returns a failure with extra keys',
+    classify: returning({ failure: 'oversized', detail: 'PRIVATE_DETAIL' }),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  // `withFallback` passes a near-miss failure through, so the step sees the
+  // value itself and not a rejection.
+  {
+    label: 'returns an unknown failure kind through withFallback',
+    classify: withFallback(
+      returning({ failure: 'PRIVATE_FAILURE_KIND' }),
+      regexClassifier
+    ),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  {
+    label:
+      'returns an unavailable failure with extra keys through withFallback',
+    classify: withFallback(
+      returning({ failure: 'unavailable', detail: 'PRIVATE_DETAIL' }),
+      regexClassifier
+    ),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  {
+    label: 'returns an array through withFallback',
+    classify: withFallback(returning(['unavailable']), regexClassifier),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  // Results whose inspection throws. `then` stays readable, so the
+  // classifier's promise resolves with the value instead of rejecting.
+  {
+    label: 'returns an object whose failure getter throws',
+    classify: returning(failureGetterThrows),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  {
+    label: 'returns a proxy whose traps throw',
+    classify: returning(trapsThrow),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  // `withFallback` passes such a result through too: what reading it throws
+  // is not the classifier's rejection.
+  {
+    label: 'returns an object whose failure getter throws through withFallback',
+    classify: withFallback(returning(failureGetterThrows), regexClassifier),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  {
+    label: 'returns a proxy whose traps throw through withFallback',
+    classify: withFallback(returning(trapsThrow), regexClassifier),
+    result: 'invalid',
+    verdict: 'fails',
+    variant: true,
+  },
+  {
+    label: 'rejects',
+    classify: async () => {
+      throw privateClassifierError();
+    },
+    result: 'rejected',
+    verdict: 'fails',
+  },
+  {
+    label: 'throws synchronously',
+    classify: () => {
+      throw privateClassifierError();
+    },
+    result: 'rejected',
+    verdict: 'fails',
+    variant: true,
+  },
+  // Only `withFallback` reads this error; on its own it is one more rejection.
+  {
+    label: 'rejects with SqlClassifierUnavailableError',
+    classify: async () => {
+      throw new SqlClassifierUnavailableError('PRIVATE_CLASSIFIER_MESSAGE');
+    },
+    result: 'rejected',
+    verdict: 'fails',
+    variant: true,
+  },
+  {
+    label: 'rejects with a string',
+    classify: async () => {
+      throw 'PRIVATE_CLASSIFIER_MESSAGE';
+    },
+    result: 'rejected',
+    verdict: 'fails',
+    variant: true,
+  },
+];
 function assertAttempt(
   attempt: Attempt | undefined,
   name: Extract<ObservationContext, { method: 'tools/call' }>['tool'],
@@ -267,4 +539,6 @@ export {
   factBuilders,
   assertAttempt,
   fakePlatform,
+  classifierOutcomes,
+  privateClassifierError,
 };
