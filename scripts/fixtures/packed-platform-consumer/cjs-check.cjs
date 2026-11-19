@@ -3,6 +3,7 @@ const {
   isToolCallerError,
   ToolCallerError,
 } = require('@supabase/mcp-server-supabase');
+const sqlConfirmation = require('@supabase/mcp-server-supabase/sql-confirmation');
 
 if (typeof createSupabaseMcpHandler !== 'function') {
   throw new Error(
@@ -34,7 +35,10 @@ async function checkToolCallerErrorAcrossBuilds() {
 // Exercise the require()-loaded implementation, not merely its export shape.
 checkToolCallerErrorAcrossBuilds()
   .then(() => import('./modern-call.mjs'))
-  .then(({ runConsumer }) => runConsumer(createSupabaseMcpHandler))
+  .then(({ checkSqlConfirmationExports, runConsumer }) => {
+    checkSqlConfirmationExports(sqlConfirmation);
+    return runConsumer(createSupabaseMcpHandler);
+  })
   .then(() => console.log('CJS_OK'))
   .catch((error) => {
     console.error(error);
