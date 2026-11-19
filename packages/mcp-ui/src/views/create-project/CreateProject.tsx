@@ -16,9 +16,8 @@ const text = (value: unknown) =>
  * it's on (see `status.ts` for how steps map to statuses).
  */
 export function CreateProject() {
-  const { toolCall, app, input, hostCapabilities } = useMcpView<Project>(
-    'supabase-create-project'
-  );
+  const { toolCall, app, input, hostCapabilities, dashboardUrl } =
+    useMcpView<Project>('supabase-create-project');
   const canPoll = !!app && !!hostCapabilities.serverTools;
   const canOpenLinks = !!app && !!hostCapabilities.openLinks;
 
@@ -88,7 +87,10 @@ export function CreateProject() {
         details={details}
         onOpenDashboard={
           canOpenDashboard
-            ? () => void app!.openLink({ url: studioUrl(project.ref) })
+            ? () =>
+                void app!.openLink({
+                  url: studioUrl(dashboardUrl, project.ref),
+                })
             : undefined
         }
       >
@@ -96,6 +98,7 @@ export function CreateProject() {
           <ConnectionDetails
             app={app}
             projectRef={project.ref}
+            dashboardUrl={dashboardUrl}
             canReachProject={canPoll}
             canOpenLinks={canOpenLinks}
           />

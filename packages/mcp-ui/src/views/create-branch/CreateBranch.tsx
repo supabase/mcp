@@ -16,9 +16,8 @@ const text = (value: unknown) =>
  * branch sets up, the badge names the step it's on (see `status.ts`).
  */
 export function CreateBranch() {
-  const { toolCall, app, input, hostCapabilities } = useMcpView<Branch>(
-    'supabase-create-branch'
-  );
+  const { toolCall, app, input, hostCapabilities, dashboardUrl } =
+    useMcpView<Branch>('supabase-create-branch');
   const canPoll = !!app && !!hostCapabilities.serverTools;
   const canOpenLinks = !!app && !!hostCapabilities.openLinks;
   // A server scoped to the parent project takes no `project_id`, and rejects
@@ -87,7 +86,10 @@ export function CreateBranch() {
         }
         onOpenDashboard={
           branch && canOpenLinks
-            ? () => void app!.openLink({ url: studioUrl(branch.project_ref) })
+            ? () =>
+                void app!.openLink({
+                  url: studioUrl(dashboardUrl, branch.project_ref),
+                })
             : undefined
         }
       >
@@ -95,6 +97,7 @@ export function CreateBranch() {
           <ConnectionDetails
             app={app}
             projectRef={branch.project_ref}
+            dashboardUrl={dashboardUrl}
             canReachProject={canPoll && !serverScoped}
             canOpenLinks={canOpenLinks}
           />

@@ -25,7 +25,7 @@ const { app, created, callTool, host } = vi.hoisted(() => {
     region: 'us-east-1',
   };
   return {
-    app: { openLink: () => Promise.resolve({}) },
+    app: { openLink: vi.fn(() => Promise.resolve({})) },
     created,
     callTool: vi.fn(),
     /** What the host has handed the view; each test starts from a delivered result. */
@@ -47,6 +47,7 @@ vi.mock('../../shared/use-mcp-view', () => ({
     input: host.input,
     hostContext: undefined,
     hostCapabilities: { serverTools: {}, openLinks: {} },
+    dashboardUrl: 'https://supabase.green/dashboard',
   }),
 }));
 
@@ -184,6 +185,17 @@ describe('CreateProject', () => {
     await advance(0);
     expect(view.badge()).toBe('Failed');
     expect(view.dashboardLink()).toBeNull();
+  });
+
+  it('opens the dashboard the server links to', async () => {
+    projectReads('ACTIVE_HEALTHY');
+    const view = renderView();
+
+    await advance(0);
+    fireEvent.click(view.dashboardLink()!);
+    expect(app.openLink).toHaveBeenCalledWith({
+      url: 'https://supabase.green/dashboard/project/abcdefghijklmnopqrst',
+    });
   });
 
   it('has no dashboard link when the project was never created', async () => {

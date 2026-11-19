@@ -27,6 +27,8 @@ export type McpView<T> = {
    * `serverTools` to poll or fetch, and `openLinks` to open links.
    */
   hostCapabilities: McpUiHostCapabilities;
+  /** Dashboard base URL the server links to, from the tool result's `_meta`. */
+  dashboardUrl: string;
 };
 
 /**
@@ -40,6 +42,10 @@ export function useMcpView<T>(name: string): McpView<T> {
   });
   const [input, setInput] = useState<Record<string, unknown>>();
   const [hostContext, setHostContext] = useState<McpUiHostContext>();
+  // Older servers don't send it; they only link to production.
+  const [dashboardUrl, setDashboardUrl] = useState(
+    'https://supabase.com/dashboard'
+  );
 
   const { app, error } = useApp({
     appInfo: { name, version: '0.0.0' },
@@ -47,6 +53,9 @@ export function useMcpView<T>(name: string): McpView<T> {
     onAppCreated: (app) => {
       app.ontoolinput = ({ arguments: args }) => setInput(args);
       app.ontoolresult = (result) => {
+        // DASHBOARD_URL_META_KEY in mcp-server-supabase `src/apps/index.ts`.
+        const metaUrl = result._meta?.['supabase.com/dashboardUrl'];
+        if (typeof metaUrl === 'string') setDashboardUrl(metaUrl);
         if (result.isError) {
           setToolCall({ status: 'error', message: parseToolError(result) });
           return;
@@ -79,5 +88,6 @@ export function useMcpView<T>(name: string): McpView<T> {
     input,
     hostContext,
     hostCapabilities: app?.getHostCapabilities() ?? {},
+    dashboardUrl,
   };
 }

@@ -37,3 +37,6 @@ export function appsEnabled(
 export const APPS_EXTENSIONS = {
   [EXTENSION_ID]: { mimeTypes: [RESOURCE_MIME_TYPE] },
 };
+
+/** Tool result `_meta` key with the dashboard base URL the server links to. */
+export const DASHBOARD_URL_META_KEY = 'supabase.com/dashboardUrl';

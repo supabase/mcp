@@ -28,6 +28,7 @@ vi.mock('../../shared/use-mcp-view', () => ({
     input: { project_id: created.parent_project_ref, name: created.name },
     hostContext: undefined,
     hostCapabilities: { serverTools: {}, openLinks: {} },
+    dashboardUrl: 'https://supabase.com/dashboard',
   }),
 }));
 

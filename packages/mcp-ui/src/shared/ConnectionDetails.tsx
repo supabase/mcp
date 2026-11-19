@@ -84,9 +84,9 @@ function pickKey(keys: Key[]): string | undefined {
   )?.api_key;
 }
 
-/** The project's page in the Supabase dashboard (Studio). */
-export const studioUrl = (projectRef: string) =>
-  `https://supabase.com/dashboard/project/${encodeURIComponent(projectRef)}`;
+/** The project's page in the Supabase dashboard (Studio) the server links to. */
+export const studioUrl = (dashboardUrl: string, projectRef: string) =>
+  `${dashboardUrl}/project/${encodeURIComponent(projectRef)}`;
 
 /**
  * For a project that is ready: a collapsible disclosure with its connection
@@ -99,11 +99,14 @@ export const studioUrl = (projectRef: string) =>
 export function ConnectionDetails({
   app,
   projectRef,
+  dashboardUrl,
   canReachProject = true,
   canOpenLinks = true,
 }: {
   app: App;
   projectRef: string;
+  /** Dashboard base URL from the tool result (see `useMcpView`). */
+  dashboardUrl: string;
   /**
    * False when no tool call can reach this project: the server is scoped to
    * another project, or the host can't proxy tool calls. Connection details
@@ -117,8 +120,8 @@ export function ConnectionDetails({
   canOpenLinks?: boolean;
 }) {
   const announce = useAnnounce();
-  const projectUrl = studioUrl(projectRef);
-  const dashboardUrl = `${projectUrl}?showConnect=true`;
+  const projectUrl = studioUrl(dashboardUrl, projectRef);
+  const connectUrl = `${projectUrl}?showConnect=true`;
 
   const [connection, sendConnection] = useMachine(
     connectionTransition,
@@ -179,16 +182,12 @@ export function ConnectionDetails({
         )}
         {connection.status === 'dashboard' &&
           (canOpenLinks ? (
-            <a
-              data-slot="dashboard-link"
-              href={dashboardUrl}
-              onClick={openLink}
-            >
+            <a data-slot="dashboard-link" href={connectUrl} onClick={openLink}>
               Open in Studio
               <ExternalLinkIcon />
             </a>
           ) : (
-            <CopyField label="Studio link" value={dashboardUrl} />
+            <CopyField label="Studio link" value={connectUrl} />
           ))}
         {connection.status === 'details' && (
           <>
