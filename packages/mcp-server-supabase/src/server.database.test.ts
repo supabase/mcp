@@ -1811,7 +1811,7 @@ describe('catalog fallback on a partial pg_catalog (temporary workaround)', () =
     const project = await projectWithTable();
     refuseQueries((query) =>
       /with ordinality/i.test(query)
-        ? 'WITH ORDINALITY is not supported'
+        ? 'unnest currently requires exactly one array'
         : /pg_enum/.test(query)
           ? 'no such table: main.pg_enum'
           : undefined

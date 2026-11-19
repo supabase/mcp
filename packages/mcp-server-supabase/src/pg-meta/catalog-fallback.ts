@@ -4,7 +4,7 @@
  *
  * Used only after the pg-meta query fails with a missing-feature error (`isCatalogGap`). It reads the same facts with plain catalog queries and assembles
  * pg-meta's output shape in TypeScript, for databases whose `pg_catalog` is partial: today Spark on turso, which
- * lacks `unnest ... WITH ORDINALITY`, `DISTINCT ON`, the jsonb aggregates, `pg_enum`, `pg_stat_*` and
+ * lacks `unnest` over several arrays, `DISTINCT ON`, the jsonb aggregates, `pg_enum`, `pg_stat_*` and
  * `pg_available_extensions()`. Row estimates and sizes read as 0, privilege filters are not applied, and enums and
  * comments and partitions are left empty when their catalogs are missing.
  */
@@ -103,7 +103,7 @@ const attnums = (value: unknown) =>
 // The whole message must be one of Spark's refusals: a Postgres error that only mentions these words (a schema
 // name in `permission denied for schema ...`) must not reach this fallback, which skips pg-meta's privilege filters.
 const CATALOG_GAP =
-  /^(?:[a-z_ ]+ is not supported|no such (?:table|function|column): [\w.]+)$/i;
+  /^(?:[a-z_ ]+ is not supported|unnest currently requires exactly one array|no such (?:table|function|column): [\w.]+)$/i;
 
 export function isCatalogGap(error: unknown) {
   const message = (error instanceof Error ? error.message : String(error))
