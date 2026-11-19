@@ -1469,18 +1469,31 @@ export interface paths {
          * Gets all project's logs in a single log stream
          * @description Executes an SQL or LQL query on the project's unified logs stream.
          *
-         *     Either the `iso_timestamp_start` and `iso_timestamp_end` parameters must be provided.
-         *     If both are not provided, only the last 1 minute of logs will be queried.
-         *     The timestamp range must be no more than 24 hours and is rounded to the nearest minute. If the range is more than 24 hours, a validation error will be thrown.
+         *       Either the `iso_timestamp_start` and `iso_timestamp_end` parameters must be provided.
+         *       If both are not provided, only the last 1 minute of logs will be queried.
+         *       The timestamp range must be no more than 24 hours and is rounded to the nearest minute. If the range is more than 24 hours, a validation error will be thrown.
          *
-         *     Filter by the `source` column to specify specific log sources, such as edge_logs, postgres_logs, etc.
+         *       Filter by the `source` column to specify specific log sources, such as edge_logs, postgres_logs, etc.
          *
-         *     Note: SQL must be written in **ClickHouse SQL dialect**.
+         *       Note: SQL must be written in **ClickHouse SQL dialect**.
          *
          */
         get: operations["v1-get-project-logs"];
         put?: never;
-        post?: never;
+        /**
+         * Gets all project's logs in a single log stream
+         * @description Executes an SQL or LQL query on the project's unified logs stream.
+         *
+         *       Either the `iso_timestamp_start` and `iso_timestamp_end` parameters must be provided.
+         *       If both are not provided, only the last 1 minute of logs will be queried.
+         *       The timestamp range must be no more than 24 hours and is rounded to the nearest minute. If the range is more than 24 hours, a validation error will be thrown.
+         *
+         *       Filter by the `source` column to specify specific log sources, such as edge_logs, postgres_logs, etc.
+         *
+         *       Note: SQL must be written in **ClickHouse SQL dialect**.
+         *
+         */
+        post: operations["v1-post-project-logs"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1898,7 +1911,8 @@ export interface paths {
          * @description This endpoint is deprecated - use the deploy endpoint. Creates a function and adds it to the specified project.
          */
         post: operations["v1-create-a-function"];
-        delete?: never;
+        /** Deletes all Edge Functions from a project */
+        delete: operations["v1-delete-all-functions"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4236,6 +4250,36 @@ export interface components {
                 status: string;
             };
         };
+        /**
+         * @description Request body for searching project logs with POST body
+         * @example {
+         *       "sql": "select event_message from edge_logs limit 10",
+         *       "iso_timestamp_start": "2025-03-01T00:00:00Z",
+         *       "iso_timestamp_end": "2025-03-01T23:59:59Z"
+         *     }
+         */
+        V1PostProjectLogsBody: {
+            /**
+             * @description Custom SQL query to execute on the logs. See [querying logs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#querying-with-the-logs-explorer) for more details.
+             * @example select event_message from edge_logs limit 10
+             */
+            sql?: string;
+            /**
+             * @description Custom LQL query to execute on the logs. See [querying logs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#querying-with-the-logs-explorer) for more details.
+             * @example s:event_message
+             */
+            lql?: string;
+            /**
+             * Format: date-time
+             * @example 2025-03-01T00:00:00Z
+             */
+            iso_timestamp_start?: string;
+            /**
+             * Format: date-time
+             * @example 2025-03-01T23:59:59Z
+             */
+            iso_timestamp_end?: string;
+        };
         V1GetUsageApiCountResponse_Output: {
             result?: {
                 timestamp: string;
@@ -5133,9 +5177,18 @@ export interface components {
             };
             /** @enum {string} */
             name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+            /** @description When `true`, the provider's SAML ACS URL and entity ID are scoped to its own provider ID instead of the ones shared by all SAML providers in the project. The same signing key is still used. This cannot be changed once the provider is created. */
+            dedicated_scope?: boolean;
         };
         CreateProviderResponse_Output: {
             id: string;
+            domains?: {
+                domain?: string;
+                created_at?: string;
+                updated_at?: string;
+            }[];
+            created_at?: string;
+            updated_at?: string;
             saml?: {
                 entity_id: string;
                 metadata_url?: string;
@@ -5152,18 +5205,19 @@ export interface components {
                 };
                 /** @enum {string} */
                 name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+                dedicated_scope?: boolean | null;
             };
-            domains?: {
-                domain?: string;
-                created_at?: string;
-                updated_at?: string;
-            }[];
-            created_at?: string;
-            updated_at?: string;
         };
         ListProvidersResponse_Output: {
             items: {
                 id: string;
+                domains?: {
+                    domain?: string;
+                    created_at?: string;
+                    updated_at?: string;
+                }[];
+                created_at?: string;
+                updated_at?: string;
                 saml?: {
                     entity_id: string;
                     metadata_url?: string;
@@ -5180,18 +5234,19 @@ export interface components {
                     };
                     /** @enum {string} */
                     name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+                    dedicated_scope?: boolean | null;
                 };
-                domains?: {
-                    domain?: string;
-                    created_at?: string;
-                    updated_at?: string;
-                }[];
-                created_at?: string;
-                updated_at?: string;
             }[];
         };
         GetProviderResponse_Output: {
             id: string;
+            domains?: {
+                domain?: string;
+                created_at?: string;
+                updated_at?: string;
+            }[];
+            created_at?: string;
+            updated_at?: string;
             saml?: {
                 entity_id: string;
                 metadata_url?: string;
@@ -5208,14 +5263,8 @@ export interface components {
                 };
                 /** @enum {string} */
                 name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+                dedicated_scope?: boolean | null;
             };
-            domains?: {
-                domain?: string;
-                created_at?: string;
-                updated_at?: string;
-            }[];
-            created_at?: string;
-            updated_at?: string;
         };
         /** @example {
          *       "metadata_url": "https://sso.acme.com/metadata.xml",
@@ -5243,6 +5292,13 @@ export interface components {
         };
         UpdateProviderResponse_Output: {
             id: string;
+            domains?: {
+                domain?: string;
+                created_at?: string;
+                updated_at?: string;
+            }[];
+            created_at?: string;
+            updated_at?: string;
             saml?: {
                 entity_id: string;
                 metadata_url?: string;
@@ -5260,16 +5316,16 @@ export interface components {
                 /** @enum {string} */
                 name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
             };
-            domains?: {
-                domain?: string;
-                created_at?: string;
-                updated_at?: string;
-            }[];
-            created_at?: string;
-            updated_at?: string;
         };
         DeleteProviderResponse_Output: {
             id: string;
+            domains?: {
+                domain?: string;
+                created_at?: string;
+                updated_at?: string;
+            }[];
+            created_at?: string;
+            updated_at?: string;
             saml?: {
                 entity_id: string;
                 metadata_url?: string;
@@ -5286,14 +5342,8 @@ export interface components {
                 };
                 /** @enum {string} */
                 name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+                dedicated_scope?: boolean | null;
             };
-            domains?: {
-                domain?: string;
-                created_at?: string;
-                updated_at?: string;
-            }[];
-            created_at?: string;
-            updated_at?: string;
         };
         V1BackupsResponse_Output: {
             region: string;
@@ -10614,6 +10664,8 @@ export interface operations {
             query?: {
                 /** @description Custom SQL query to execute on the logs. See [querying logs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#querying-with-the-logs-explorer) for more details. */
                 sql?: string;
+                /** @description Custom LQL query to execute on the logs. See [querying logs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#querying-with-the-logs-explorer) for more details. */
+                lql?: string;
                 iso_timestamp_start?: string;
                 iso_timestamp_end?: string;
             };
@@ -10625,6 +10677,60 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Usage exceeded. Enable additional usage to continue querying */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "v1-post-project-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V1PostProjectLogsBody"];
+            };
+        };
         responses: {
             200: {
                 headers: {
@@ -12177,6 +12283,54 @@ export interface operations {
             };
         };
     };
+    "v1-delete-all-functions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Failed to delete project's functions */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     "v1-deploy-a-function": {
         parameters: {
             query?: {
@@ -13365,6 +13519,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -13470,6 +13633,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
