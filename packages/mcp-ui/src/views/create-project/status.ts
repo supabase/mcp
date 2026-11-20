@@ -1,7 +1,3 @@
-import {
-  isProjectChanging,
-  projectStatusBadge,
-} from '../../shared/project-status';
 import type { Project } from '@supabase/mcp-server-supabase/platform';
 import type {
   CreationConfig,
@@ -24,6 +20,21 @@ const step = (label: string, n: number): Progress => ({
   of: STEP_COUNT,
 });
 
+/**
+ * Statuses a new project shouldn't reach but that aren't failures, with the
+ * labels of Studio's project list. Ones that move on by themselves are
+ * `isChanging`, so the view keeps checking them.
+ */
+const OTHER: Record<string, { label: string; isChanging: boolean }> = {
+  INACTIVE: { label: 'Paused', isChanging: false },
+  GOING_DOWN: { label: 'Pausing', isChanging: true },
+  PAUSING: { label: 'Pausing', isChanging: true },
+  RESTARTING: { label: 'Restarting', isChanging: true },
+  RESIZING: { label: 'Resizing', isChanging: true },
+  RESTORING: { label: 'Restoring', isChanging: true },
+  UPGRADING: { label: 'Upgrading', isChanging: true },
+};
+
 const isFailed = (status: string) =>
   status === 'REMOVED' || status.endsWith('_FAILED');
 
@@ -38,15 +49,15 @@ export function progress(status: string): Progress {
   // Left COMING_UP but not healthy yet.
   if (status === 'ACTIVE_UNHEALTHY') return step('Checking health', 3);
 
-  // A status a new project shouldn't reach (paused, restarting, …), with
-  // Studio's label. Ones still in progress are neutral, like the steps.
-  const { label, tone } = projectStatusBadge(status);
-  const isChanging = isProjectChanging(status);
+  // A status a new project shouldn't reach (paused, restarting, …): one
+  // Studio names is neutral, and any other is a warning.
+  const known = OTHER[status];
+  if (known) return { state: 'other', ...known };
   return {
     state: 'other',
-    label,
-    tone: isChanging ? undefined : tone,
-    isChanging,
+    label: status.toLowerCase().replaceAll('_', ' '),
+    tone: 'warning',
+    isChanging: false,
   };
 }
 

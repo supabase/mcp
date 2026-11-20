@@ -36,6 +36,10 @@ describe('create-project status', () => {
     ['INACTIVE', 'Paused', false],
     ['PAUSING', 'Pausing', true],
     ['RESTARTING', 'Restarting', true],
+    ['GOING_DOWN', 'Pausing', true],
+    ['RESIZING', 'Resizing', true],
+    ['RESTORING', 'Restoring', true],
+    ['UPGRADING', 'Upgrading', true],
   ])('%s shows as %s', (status, label, isChanging) =>
     expect(progress(status)).toEqual({
       state: 'other',
@@ -44,4 +48,13 @@ describe('create-project status', () => {
       isChanging,
     })
   );
+
+  it('warns on a status it does not know', () => {
+    expect(progress('SOMETHING_NEW')).toEqual({
+      state: 'other',
+      label: 'something new',
+      tone: 'warning',
+      isChanging: false,
+    });
+  });
 });
