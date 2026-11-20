@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 
 /**
  * A best-effort value the view can do without, such as a name for the card's
@@ -12,15 +12,13 @@ export function useLookup<T>(
 ): T | undefined {
   const [loaded, setLoaded] = useState<{ key: string; value: T }>();
 
-  const latestLoad = useRef(load);
-  useEffect(() => {
-    latestLoad.current = load;
-  });
+  // The latest `load`, without making it a dependency: it changes every render.
+  const onLoad = useEffectEvent(load);
 
   useEffect(() => {
     if (key === undefined) return;
     let isCurrent = true;
-    latestLoad.current().then(
+    onLoad().then(
       (value) => isCurrent && setLoaded({ key, value }),
       () => {}
     );
