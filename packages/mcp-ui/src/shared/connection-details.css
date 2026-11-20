@@ -1,0 +1,119 @@
+@layer components {
+  /*
+   * Connection details, once the project is ready: a native disclosure along
+   * the bottom of the card. Inside a .project-card it reads the card's
+   * padding, radius, border width and outline (--sb-component-project-card-*,
+   * declared in project-card.css): the negative margins cancel the card's
+   * inline and bottom padding so the divider (the card's outline) and tinted
+   * background run edge to edge (the card clips the rounded corners). The
+   * summary and panel use the same inline padding to line up with the card's
+   * content. While collapsed, the summary is the card's bottom edge, so it
+   * also reads the radius and border width to round its bottom corners to the
+   * card's inner curve and keep its focus ring from being clipped. The open
+   * panel needs no such rounding: its contents are padded away from the edge.
+   *
+   * Each read carries a fallback, because this file may ship without
+   * project-card.css. The padding fallbacks are the card's own values. The
+   * margin fallbacks are zero: outside a card there is no padding to cancel,
+   * and the block would otherwise bleed out of its container.
+   */
+  :where(.connection-details) {
+    margin-inline: calc(
+      -1 *
+      var(--sb-component-project-card-padding-inline, 0px)
+    );
+    margin-block-end: calc(
+      -1 *
+      var(--sb-component-project-card-padding-block, 0px)
+    );
+    /* An inset area: the host's "set apart" surface, divided off by the
+       card's own outline. */
+    background: var(--sb-color-muted);
+    border-block-start: var(
+      --sb-component-project-card-border,
+      var(--border-width-regular) solid var(--sb-color-border)
+    );
+
+    :where(summary) {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sb-space-2);
+      padding: var(--sb-space-2)
+        var(--sb-component-project-card-padding-inline, var(--sb-space-4));
+      font-size: var(--font-text-sm-size);
+      font-weight: var(--font-weight-medium);
+      line-height: var(--font-text-sm-line-height);
+      color: var(--sb-color-tertiary-foreground);
+      cursor: pointer;
+      list-style: none;
+
+      &::-webkit-details-marker {
+        display: none;
+      }
+
+      /* The card clips overflow, so keep the focus ring inside. */
+      &:where(:focus-visible) {
+        outline-offset: -2px;
+      }
+
+      &:where(:hover) {
+        color: var(--sb-color-muted-foreground);
+      }
+
+      :where([data-slot="disclosure-indicator"]) {
+        transition: transform 0.15s ease;
+
+        @media (prefers-reduced-motion: reduce) {
+          transition: none;
+        }
+      }
+    }
+
+    /* Inner radius = outer radius minus the border. */
+    &:where(:not([open])) :where(summary) {
+      border-end-start-radius: calc(
+        var(--sb-component-project-card-radius, var(--border-radius-lg)) -
+        var(
+          --sb-component-project-card-border-width,
+          var(--border-width-regular)
+        )
+      );
+      border-end-end-radius: calc(
+        var(--sb-component-project-card-radius, var(--border-radius-lg)) -
+        var(
+          --sb-component-project-card-border-width,
+          var(--border-width-regular)
+        )
+      );
+    }
+
+    &:where([open]) :where(summary [data-slot="disclosure-indicator"]) {
+      transform: rotate(180deg);
+    }
+
+    :where([data-slot="panel"]) {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sb-space-3);
+      padding: 0
+        var(--sb-component-project-card-padding-inline, var(--sb-space-4))
+        var(--sb-component-project-card-padding-block, var(--sb-space-4));
+    }
+
+    /* A text link with a trailing external-link icon. */
+    :where([data-slot="dashboard-link"]) {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sb-space-1);
+      align-self: flex-start;
+    }
+
+    :where([data-slot="loading"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-2);
+      color: var(--sb-color-tertiary-foreground);
+    }
+  }
+}

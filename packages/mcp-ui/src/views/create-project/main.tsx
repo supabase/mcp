@@ -1,13 +1,16 @@
+import '../../shared/base.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import '../../shared/styles.css';
-import { ListProjects } from './ListProjects';
+import { AnnouncerProvider } from '../../shared/Announcer';
+import { CreateProject } from './CreateProject';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root element');
 
 createRoot(root).render(
   <StrictMode>
-    <ListProjects />
+    <AnnouncerProvider>
+      <CreateProject />
+    </AnnouncerProvider>
   </StrictMode>
 );

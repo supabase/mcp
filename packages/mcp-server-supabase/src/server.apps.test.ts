@@ -2,12 +2,18 @@ import {
   EXTENSION_ID,
   RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server';
-import type { Client } from '@modelcontextprotocol/client';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { createServerHarness } from '../test/server-harness.js';
 import {
-  LIST_PROJECTS_UI_URI,
-  LIST_TABLES_UI_URI,
+  isInputRequiredResult,
+  type Client,
+} from '@modelcontextprotocol/client';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { createOrganization, createProject } from '../test/mocks.js';
+import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import { DASHBOARD_URL_META_KEY } from './apps/index.js';
+import {
+  CREATE_BRANCH_UI_URI,
+  CREATE_PROJECT_UI_URI,
+  getAppResources,
 } from './resources/app-resources.js';
 
 const harness = createServerHarness();
@@ -15,7 +21,7 @@ const harness = createServerHarness();
 beforeEach(() => harness.reset());
 afterEach(() => harness.close());
 
-const VIEW_URIS = [LIST_PROJECTS_UI_URI, LIST_TABLES_UI_URI];
+const VIEW_URIS = getAppResources().map((view) => view.uri);
 
 const APPS_CLIENT_CAPABILITIES = {
   extensions: { [EXTENSION_ID]: { mimeTypes: [RESOURCE_MIME_TYPE] } },
@@ -92,8 +98,8 @@ describe('MCP Apps', () => {
           | { resourceUri?: string }
           | undefined
       )?.resourceUri;
-    expect(linkOf('list_projects')).toBe(LIST_PROJECTS_UI_URI);
-    expect(linkOf('list_tables')).toBe(LIST_TABLES_UI_URI);
+    expect(linkOf('create_project')).toBe(CREATE_PROJECT_UI_URI);
+    expect(linkOf('create_branch')).toBe(CREATE_BRANCH_UI_URI);
 
     expect(await listedViewUris(client)).toEqual([...VIEW_URIS].sort());
     expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
@@ -109,6 +115,7 @@ describe('MCP Apps', () => {
       ui: {
         csp: { connectDomains: [], resourceDomains: [] },
         prefersBorder: false,
+        permissions: { clipboardWrite: {} },
       },
     };
 
@@ -138,5 +145,69 @@ describe('MCP Apps', () => {
       expect(html, uri).toContain('<script type="module"');
       expect(html, uri).not.toMatch(/<script[^>]*\ssrc=/);
     }
+  });
+
+  test('view tool results carry the configured dashboard URL', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      dashboardUrl: 'https://supabase.green/dashboard/',
+      clientCapabilities: {
+        ...APPS_CLIENT_CAPABILITIES,
+        elicitation: { form: {} },
+      },
+    });
+    const org = await createOrganization({
+      name: 'Free Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const result = await callModernTool(client, {
+      name: 'create_project',
+      arguments: {
+        name: 'New Project',
+        region: 'us-east-1',
+        organization_id: org.id,
+      },
+    });
+    if (isInputRequiredResult(result)) throw new Error('expected a result');
+
+    expect(result._meta?.[DASHBOARD_URL_META_KEY]).toBe(
+      'https://supabase.green/dashboard'
+    );
+    expect(result.content).toEqual([
+      { type: 'text', text: expect.stringContaining('"name":"New Project"') },
+    ]);
+  });
+
+  test('a cost form still reaches the client unchanged', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: {
+        ...APPS_CLIENT_CAPABILITIES,
+        elicitation: { form: {} },
+      },
+    });
+    const org = await createOrganization({
+      name: 'Paid Org',
+      plan: 'pro',
+      allowed_release_channels: ['ga'],
+    });
+    await createProject({
+      name: 'Existing Project',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+
+    const result = await callModernTool(client, {
+      name: 'create_project',
+      arguments: {
+        name: 'Paid Project',
+        region: 'us-east-1',
+        organization_id: org.id,
+      },
+    });
+
+    expect(isInputRequiredResult(result)).toBe(true);
   });
 });

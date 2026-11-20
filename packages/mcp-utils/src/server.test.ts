@@ -375,6 +375,50 @@ describe('tools', () => {
     });
     expect(withoutMeta?._meta).toBeUndefined();
   });
+
+  test('tool resultMeta is attached to results without changing onToolCall data', async () => {
+    const calls: unknown[] = [];
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      onToolCall: (details) => calls.push(details),
+      tools: {
+        plain: tool({
+          description: 'Returns plain data',
+          parameters: z.object({}),
+          outputSchema: z.object({ ok: z.boolean() }),
+          resultMeta: { 'example.com/a': '1' },
+          execute: async () => ({ ok: true }),
+        }),
+        raw: tool({
+          description: 'Returns a CallToolResult with its own _meta',
+          parameters: z.object({}),
+          outputSchema: z.object({}),
+          resultMeta: { 'example.com/a': '1', 'example.com/b': 'from-tool' },
+          execute: async () => ({
+            content: [{ type: 'text' as const, text: 'hi' }],
+            _meta: { 'example.com/b': 'from-result' },
+          }),
+        }),
+      },
+    });
+
+    const { client } = await setup({ server });
+
+    const plainResult = await client.callTool({ name: 'plain', arguments: {} });
+    expect(plainResult._meta).toEqual({ 'example.com/a': '1' });
+    expect(calls[0]).toMatchObject({
+      name: 'plain',
+      success: true,
+      data: { ok: true },
+    });
+
+    const rawResult = await client.callTool({ name: 'raw', arguments: {} });
+    expect(rawResult._meta).toEqual({
+      'example.com/a': '1',
+      'example.com/b': 'from-result',
+    });
+  });
 });
 
 describe('resources', () => {

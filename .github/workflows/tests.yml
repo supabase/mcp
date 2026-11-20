@@ -34,6 +34,19 @@ jobs:
           name: coverage
           path: ./packages/mcp-server-supabase/coverage/lcov.info
           retention-days: 1
+  ui-test:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install: true
+          cache: true
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+      - name: UI tests
+        run: pnpm --filter @supabase/mcp-ui test --run
   coveralls:
     needs: test
     runs-on: ubuntu-latest

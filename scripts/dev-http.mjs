@@ -23,7 +23,10 @@ process.on('SIGTERM', () => shutdown(0));
 
 if (!existsSync(cli)) spawnSync('pnpm', ['build'], { stdio: 'inherit' });
 
-run('pnpm', ['build:watch'], 'packages/mcp-ui');
+// With no views, `vite build --watch` exits and would stop every watcher.
+if (existsSync('packages/mcp-ui/src/views')) {
+  run('pnpm', ['build:watch'], 'packages/mcp-ui');
+}
 run('node_modules/.bin/tsup', ['--watch'], 'packages/mcp-utils');
 run(
   'node_modules/.bin/tsup',

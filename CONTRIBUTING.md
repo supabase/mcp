@@ -4,6 +4,7 @@ Before opening an issue or PR, please read this guide.
 
 - **Issues** should describe a bug or feature request with context on why it matters. Issues that promote unaffiliated products or services will be closed.
 - **PRs** should address an accepted issue. Open an issue first for new features or behavior changes so we can agree on the approach before you invest time coding. PRs that promote unaffiliated products or services will be closed.
+- **`@supabase/mcp-server-postgrest`** is deprecated. We no longer accept issues or PRs for it.
 - AI-assisted contributions are welcome, but a human must review and verify the output. Include verification steps and evidence (screenshots, test output, etc.) in the PR description.
 
 ## Development setup
@@ -89,7 +90,7 @@ The stdio transport is available without `--http`. Configure your MCP client to 
 
 ### MCP Apps views
 
-Some tools have an interactive [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) view, built from `packages/mcp-ui` (Vite and React) into self-contained HTML that the server bundle inlines (HTML is not committed). `pnpm build` builds the views before the server and `pnpm dev:http` rebuilds them on change. Like the other workspace packages, they must be built before running the server's tests. See [`packages/mcp-ui/README.md`](packages/mcp-ui/README.md) for developing views with the mock host and testing them in MCP Inspector.
+Tools can have an interactive [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) view, built from `packages/mcp-ui` (Vite and React) into self-contained HTML that the server bundle inlines (HTML is not committed). `pnpm build` builds the views before the server and `pnpm dev:http` rebuilds them on change. Like the other workspace packages, they must be built before running the server's tests. See [`packages/mcp-ui/README.md`](packages/mcp-ui/README.md) for developing views in MCP Inspector.
 
 MCP Apps are off by default: add `?experimental_apps=true` to the `--http` dev URL to turn them on. Clients will need to advertise the MCP Apps extension to access these views.Legacy-era clients deliberately never qualify because their capabilities arrive only at `initialize` + not every client sends the session back, so results aren't reliable.
 

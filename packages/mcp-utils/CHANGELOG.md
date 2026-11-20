@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/supabase/mcp/compare/mcp-utils-v0.10.0...mcp-utils-v0.11.0) (2026-11-17)
+
+
+### Features
+
+* **mcp-apps:** MCP Apps foundation ([#551](https://github.com/supabase/mcp/issues/551)) ([0dbacba](https://github.com/supabase/mcp/commit/0dbacba0e1f16fc4c2d4a67a1258ba8eb7832115))
+
 ## [0.10.0](https://github.com/supabase/mcp/compare/mcp-utils-v0.9.0...mcp-utils-v0.10.0) (2026-11-13)
 
 

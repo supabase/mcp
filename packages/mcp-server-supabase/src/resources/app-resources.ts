@@ -9,11 +9,11 @@
 import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
 import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { resource, type Resource } from '@supabase/mcp-utils';
-import listProjectsHtml from '@supabase/mcp-ui/list-projects.html';
-import listTablesHtml from '@supabase/mcp-ui/list-tables.html';
+import createBranchHtml from '@supabase/mcp-ui/create-branch.html';
+import createProjectHtml from '@supabase/mcp-ui/create-project.html';
 
-export const LIST_PROJECTS_UI_URI = 'ui://supabase/list-projects';
-export const LIST_TABLES_UI_URI = 'ui://supabase/list-tables';
+export const CREATE_PROJECT_UI_URI = 'ui://supabase/create-project';
+export const CREATE_BRANCH_UI_URI = 'ui://supabase/create-branch';
 
 const VIEW_META: { ui: McpUiResourceMeta } = {
   ui: {
@@ -21,6 +21,8 @@ const VIEW_META: { ui: McpUiResourceMeta } = {
     csp: { connectDomains: [], resourceDomains: [] },
     // Views blend into the conversation instead of sitting in a host frame.
     prefersBorder: false,
+    // Views let the user copy connection details.
+    permissions: { clipboardWrite: {} },
   },
 };
 
@@ -48,16 +50,16 @@ function appResource(
 export function getAppResources(): Resource[] {
   return [
     appResource(
-      LIST_PROJECTS_UI_URI,
-      'List projects view',
-      'Interactive list of Supabase projects for the list_projects tool.',
-      listProjectsHtml
+      CREATE_PROJECT_UI_URI,
+      'Create project view',
+      'Live provisioning progress for the create_project tool.',
+      createProjectHtml
     ),
     appResource(
-      LIST_TABLES_UI_URI,
-      'List tables view',
-      'Interactive list of database tables for the list_tables tool.',
-      listTablesHtml
+      CREATE_BRANCH_UI_URI,
+      'Create branch view',
+      'Live setup progress for the create_branch tool.',
+      createBranchHtml
     ),
   ];
 }
