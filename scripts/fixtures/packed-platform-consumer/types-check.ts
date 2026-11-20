@@ -176,6 +176,18 @@ const sqlFacts = [
     errored: 1,
     budget_exhausted: true,
   },
+  {
+    kind: 'sql_classifier_call',
+    feature: sqlFeature,
+    result: 'do_heuristic',
+    durationMs: 3,
+  },
+  {
+    kind: 'sql_classifier_call',
+    feature: notebookFeature,
+    result: 'aborted',
+    durationMs: 4,
+  },
 ] satisfies Supabase.ObservationFact[];
 void sqlFacts;
 const supabaseObserver: Supabase.RequestObserver = (context) => {

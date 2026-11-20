@@ -20,6 +20,8 @@ import {
   issued,
   assertAttempt,
   form,
+  classifierOutcomes,
+  privateClassifierError,
 } from '../test/observation-test-helpers.js';
 import type { ObservationFact } from './index.js';
 import type { SupabasePlatform } from './platform/types.js';
@@ -27,6 +29,7 @@ import {
   regexClassifier,
   type SqlConfirmationClassification,
   type SqlConfirmationClassifier,
+  withFallback,
 } from './sql-confirmation.js';
 import { createSqlClassifyStep } from './tools/classify-sql.js';
 import type { ElicitationState } from './tools/confirmation.js';
@@ -41,6 +44,7 @@ const {
   validation,
   started,
   operationEnd: finished,
+  classifierCall: classified,
 } = factBuilders('destructive_sql');
 const query = 'DROP TABLE "PRIVATE_TABLE"; -- PRIVATE_SQL';
 // The regex clears this, so only an injected classifier can flag it.
@@ -100,10 +104,35 @@ async function setup(
   function operation(name: SqlTool) {
     return name === 'execute_sql' ? executeSql : applyMigration;
   }
-  return { attempts, args, call, operation, executeSql, applyMigration };
+  return {
+    client,
+    attempts,
+    args,
+    call,
+    operation,
+    executeSql,
+    applyMigration,
+  };
 }
 
 const accept = { confirm_destructive: { action: 'accept', content: {} } };
+// What a first call records after its classification fact, and how it ends,
+// for each classifier verdict.
+const firstCall = {
+  clears: {
+    after: [
+      decision('bypass', 'not_destructive'),
+      started,
+      finished('returned'),
+    ],
+    end: 'completed',
+  },
+  flags: {
+    after: [decision('inline', 'eligible'), required('initial')],
+    end: 'input_required',
+  },
+  fails: { after: [], end: 'tool_error' },
+} as const;
 
 // Resends whose state does not fit the call: issued for the other tool, or for
 // other SQL or another project.
@@ -127,21 +156,24 @@ function otherTool(name: SqlTool): SqlTool {
 
 // The two ways a classifier cannot answer: a failure it resolves with, and a
 // throw.
-const classifierFailures: readonly {
-  how: string;
-  fail: SqlConfirmationClassifier;
-}[] = [
+const classifierFailures = [
   {
     how: 'resolves with a timeout failure',
     fail: async () => ({ failure: 'timeout' }),
+    result: 'timeout',
   },
   {
     how: 'throws',
     fail: async () => {
       throw new Error('PRIVATE_CLASSIFIER_ERROR');
     },
+    result: 'rejected',
   },
-];
+] as const satisfies readonly {
+  how: string;
+  fail: SqlConfirmationClassifier;
+  result: string;
+}[];
 
 /** The `name` in a failed tool call's `{ "error": { name, message } }` text. */
 function errorName(result: CallToolResult) {
@@ -149,6 +181,20 @@ function errorName(result: CallToolResult) {
   if (content?.type !== 'text') throw new Error('expected a text result');
   return (JSON.parse(content.text) as { error?: { name?: unknown } }).error
     ?.name;
+}
+
+/** The `message` in a failed tool call's `{ "error": { name, message } }` text. */
+function errorMessage(result: CallToolResult | InputRequiredResult) {
+  if (isInputRequiredResult(result)) {
+    throw new Error('expected a CallToolResult');
+  }
+  const [content] = result.content;
+  if (content?.type !== 'text') throw new Error('expected a text result');
+  const message = (
+    JSON.parse(content.text) as { error?: { message?: unknown } }
+  ).error?.message;
+  if (typeof message !== 'string') throw new Error('expected an error message');
+  return message;
 }
 
 function promptMessage(result: InputRequiredResult) {
@@ -163,7 +209,11 @@ describe.each(tools)('%s SQL observations', (name) => {
     assertAttempt(
       h.attempts[0],
       name,
-      [decision('inline', 'eligible'), required('initial')],
+      [
+        classified('destructive'),
+        decision('inline', 'eligible'),
+        required('initial'),
+      ],
       'input_required'
     );
     issued(await h.call(name, { requestState: first.requestState }));
@@ -171,6 +221,7 @@ describe.each(tools)('%s SQL observations', (name) => {
       h.attempts[1],
       name,
       [
+        classified('destructive'),
         decision('inline', 'eligible'),
         validation('missing_response'),
         required('missing_response'),
@@ -229,7 +280,11 @@ describe.each(tools)('%s SQL observations', (name) => {
       assertAttempt(
         h.attempts[1],
         name,
-        [decision('inline', 'eligible'), validation(mismatch)],
+        [
+          classified('destructive'),
+          decision('inline', 'eligible'),
+          validation(mismatch),
+        ],
         'tool_error'
       );
       expect(h.operation(name)).not.toHaveBeenCalled();
@@ -259,7 +314,12 @@ describe.each(tools)('%s SQL observations', (name) => {
       assertAttempt(
         h.attempts[1],
         name,
-        [decision('bypass', 'not_destructive'), started, finished('returned')],
+        [
+          classified('not_destructive'),
+          decision('bypass', 'not_destructive'),
+          started,
+          finished('returned'),
+        ],
         'completed'
       );
       expect(h.operation(name)).toHaveBeenCalledOnce();
@@ -278,7 +338,7 @@ describe.each(tools)('%s SQL observations', (name) => {
     )
   )(
     'returns the classification error, not the state error, when the classifier $how (changed $change)',
-    async ({ mismatch, changedArgs, fail }) => {
+    async ({ mismatch, changedArgs, fail, result: factResult }) => {
       let current: SqlConfirmationClassifier = async () => 'destructive';
       const h = await setup({
         classifier: (sql, options) => current(sql, options),
@@ -299,8 +359,14 @@ describe.each(tools)('%s SQL observations', (name) => {
       );
       expect(JSON.stringify(result)).not.toContain('PRIVATE_CLASSIFIER_ERROR');
       // The state error records a decision and a validation fact. A failed
-      // classification records nothing.
-      assertAttempt(h.attempts[1], name, [], 'tool_error');
+      // classification records only its own fact.
+      assertAttempt(
+        h.attempts[1],
+        name,
+        [classified(factResult)],
+        'tool_error'
+      );
+      expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_CLASSIFIER');
       expect(h.executeSql).not.toHaveBeenCalled();
       expect(h.applyMigration).not.toHaveBeenCalled();
     }
@@ -363,6 +429,7 @@ describe.each(tools)('%s SQL observations', (name) => {
       h.attempts[1],
       name,
       [
+        classified('not_destructive'),
         decision('inline', 'eligible'),
         validation('missing_response'),
         required('missing_response'),
@@ -370,7 +437,194 @@ describe.each(tools)('%s SQL observations', (name) => {
       'input_required'
     );
   });
+
+  // The SQL is one the regex clears and each classifier's own text is marked
+  // PRIVATE_, so only the injected classifier decides and any of it that
+  // reaches a fact shows up.
+  test.each(classifierOutcomes)(
+    'first call records one payload-free $result fact when the classifier $label',
+    async ({ classify, result, verdict }) => {
+      const h = await setup({ classifier: classify, query: clearedQuery });
+      await h.call(name);
+      expect(h.attempts).toHaveLength(1);
+      assertAttempt(
+        h.attempts[0],
+        name,
+        [classified(result), ...firstCall[verdict].after],
+        firstCall[verdict].end
+      );
+      expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_');
+    }
+  );
+
+  // A classifier in this process can resolve with a live object whose
+  // `failure` changes between reads: `timeout` for the first reads, then the
+  // classifier's own text. Whichever read the fact takes its result from,
+  // the result is one of the fixed values. One row per number of valid reads,
+  // so no read position can pass that text on. The client's error must be the
+  // one for that same result: a step that reads the result once for the fact
+  // and again for the message can record one outcome and report the other.
+  test.each(
+    Array.from({ length: 13 }, (_, validReads) => [
+      { validReads, how: 'on its own' },
+      { validReads, how: 'through withFallback' },
+    ]).flat()
+  )(
+    'first call records one fixed-result fact that agrees with the client error when the classifier returns a failure whose kind changes after $validReads reads, $how',
+    async ({ validReads, how }) => {
+      const classify = (async () => {
+        let reads = 0;
+        return {
+          get failure() {
+            reads += 1;
+            return reads <= validReads ? 'timeout' : 'PRIVATE_FAILURE_KIND';
+          },
+        };
+      }) as unknown as SqlConfirmationClassifier;
+      const h = await setup({
+        classifier:
+          how === 'on its own'
+            ? classify
+            : withFallback(classify, regexClassifier),
+        query: clearedQuery,
+      });
+      const result = await h.call(name);
+      expect(h.attempts).toHaveLength(1);
+      assertAttempt(
+        h.attempts[0],
+        name,
+        [
+          {
+            ...classified('timeout'),
+            // Either is right for a result that changes while it is read.
+            result: expect.stringMatching(/^(timeout|invalid)$/),
+          },
+        ],
+        'tool_error'
+      );
+      expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_');
+      expect(h.operation(name)).not.toHaveBeenCalled();
+      // With an observer the step reads the result for the fact first, so
+      // the text can reach the client from a later read than without one.
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_');
+      // Keywords only, so a reworded message still passes.
+      const fact = h.attempts[0]!.facts.find(
+        (recorded) => recorded.kind === 'sql_classifier_call'
+      );
+      const message = errorMessage(result);
+      if (fact?.result === 'timeout') {
+        expect(message).toContain('timeout');
+      } else {
+        expect(message).toContain('invalid result');
+        expect(message).not.toContain('timeout');
+      }
+    }
+  );
+
+  // No row for a classifier that now clears: 'asks again without executing
+  // when an unanswered resend no longer classifies as destructive' is that
+  // test.
+  test.each(
+    classifierOutcomes.filter((row) => !row.variant && row.verdict !== 'clears')
+  )(
+    'unanswered resend records one $result fact when the classifier $label',
+    async ({ classify, result, verdict }) => {
+      let current: SqlConfirmationClassifier = async () => 'destructive';
+      const h = await setup({
+        classifier: (sql, options) => current(sql, options),
+        query: clearedQuery,
+      });
+      const first = issued(await h.call(name));
+      current = classify;
+      await h.call(name, { requestState: first.requestState });
+      expect(h.attempts).toHaveLength(2);
+      assertAttempt(
+        h.attempts[1],
+        name,
+        [
+          classified(result),
+          ...(verdict === 'fails'
+            ? []
+            : [
+                decision('inline', 'eligible'),
+                validation('missing_response'),
+                required('missing_response'),
+              ]),
+        ],
+        verdict === 'fails' ? 'tool_error' : 'input_required'
+      );
+    }
+  );
+
+  test.each([
+    { settles: 'resolves', throws: false },
+    { settles: 'rejects', throws: true },
+  ])(
+    'records aborted when the request is cancelled before the classifier $settles',
+    async ({ throws }) => {
+      let classifierSignal: AbortSignal | undefined;
+      const h = await setup({
+        classifier: async (_sql, { signal }) => {
+          classifierSignal = signal;
+          // Executor form: the package's lib target predates withResolvers.
+          await new Promise((resolve) =>
+            signal.addEventListener('abort', resolve, { once: true })
+          );
+          if (throws) throw privateClassifierError();
+          return undefined;
+        },
+        query: clearedQuery,
+      });
+      const controller = new AbortController();
+
+      const request = h.client.request(
+        {
+          method: 'tools/call',
+          params: { name, arguments: h.args(name) },
+        },
+        { allowInputRequired: true, signal: controller.signal }
+      );
+      await vi.waitFor(() => expect(classifierSignal).toBeDefined());
+      expect(classifierSignal?.aborted).toBe(false);
+      controller.abort();
+      await expect(request).rejects.toThrow();
+
+      await vi.waitFor(() => expect(h.attempts[0]?.ends).toHaveLength(1));
+      expect(h.executeSql).not.toHaveBeenCalled();
+      expect(h.applyMigration).not.toHaveBeenCalled();
+      expect(h.attempts).toHaveLength(1);
+      assertAttempt(h.attempts[0], name, [classified('aborted')], 'tool_error');
+      expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_');
+    }
+  );
 });
+
+// One tool is enough: every tool gets its facts from the same classify step.
+test.each([
+  { settles: 'resolves', result: 'not_destructive', throws: false },
+  { settles: 'rejects', result: 'rejected', throws: true },
+] as const)(
+  'the classification fact times the classifier call when it $settles',
+  async ({ result, throws }) => {
+    const h = await setup({
+      // The classifier takes 250 ms on the controlled clock.
+      classifier: async () => {
+        vi.advanceTimersByTime(250);
+        if (throws) throw privateClassifierError();
+        return undefined;
+      },
+      query: clearedQuery,
+    });
+    // Only the clocks are faked, so the server's own timers still run.
+    vi.useFakeTimers({ toFake: ['performance', 'Date'] });
+    await h.call('execute_sql');
+    expect(h.attempts).toHaveLength(1);
+    expect(h.attempts[0]!.facts[0]).toEqual({
+      ...classified(result),
+      durationMs: 250,
+    });
+  }
+);
 
 test.each(tools)(
   '%s failed state mint never records issuance or execution',
@@ -423,7 +677,10 @@ test.each(tools)(
         }
       )
     ).rejects.toBe(failure);
-    expect(facts).toEqual([decision('inline', 'eligible')]);
+    expect(facts).toEqual([
+      classified('destructive'),
+      decision('inline', 'eligible'),
+    ]);
     expect(database.executeSql).not.toHaveBeenCalled();
     expect(database.applyMigration).not.toHaveBeenCalled();
   }
@@ -711,7 +968,16 @@ test.each([
     const result = await h.call(name, {
       arguments: { ...h.args(name), query: sql },
     });
-    const facts: unknown[] = [decision(route, reason)];
+    // Only these two rows get as far as asking the classifier. The SQL is
+    // `sql` above, so the built-in regex clears the SELECT and flags the DROP.
+    const facts: unknown[] = [
+      ...(reason === 'not_destructive'
+        ? [classified('not_destructive')]
+        : reason === 'eligible'
+          ? [classified('destructive')]
+          : []),
+      decision(route, reason),
+    ];
     switch (outcome) {
       case 'completed':
         expect(isInputRequiredResult(result)).toBe(false);

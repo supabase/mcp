@@ -6,8 +6,11 @@ import {
 import { afterEach, expect, test, vi } from 'vitest';
 import {
   assertAttempt,
+  classifierOutcomes,
+  factBuilders,
   form,
   issued,
+  privateClassifierError,
 } from '../test/observation-test-helpers.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import type {
@@ -21,6 +24,7 @@ import type {
   NotebookWithContent,
   SupabasePlatform,
 } from './platform/types.js';
+import type { SqlConfirmationClassifier } from './sql-confirmation.js';
 
 const harness = createServerHarness();
 const projectId = 'PRIVATE_PROJECT';
@@ -37,6 +41,23 @@ const logCell: NotebookCell = {
   type: 'log',
   sql: 'SELECT PRIVATE_LOG_CONTENT FROM logs',
   time_range: { type: 'relative', unit: 'hour', amount: 1 },
+};
+// A plain read the regex clears, so only an injected classifier flags it.
+const read = (number: number) =>
+  ({
+    id: `read-${number}`,
+    type: 'database',
+    sql: `SELECT ${number} AS "PRIVATE_SQL_READ"`,
+    row_limit: 10,
+  }) satisfies NotebookCell;
+const readOne = read(1);
+const readTwo = read(2);
+const readThree = read(3);
+// Never classified: only primary-database cells are.
+const replicaCell: NotebookCell = {
+  ...read(4),
+  id: 'replica',
+  database_identifier: 'PRIVATE_REPLICA',
 };
 const notebook: NotebookWithContent = {
   id: notebookId,
@@ -71,6 +92,13 @@ const eligible = {
   route: 'inline',
   reason: 'eligible',
 };
+const blocked = {
+  kind: 'confirmation_decision',
+  feature: 'notebook',
+  route: 'blocked',
+  reason: 'capability_missing',
+};
+const { classifierCall } = factBuilders('notebook');
 function completed(
   executed: number,
   skipped: number,
@@ -116,12 +144,14 @@ async function setup({
   readOnly = false,
   configured = true,
   enabledTools = configured ? ['run_notebook', 'delete_notebook'] : [],
+  classifier,
 }: {
   cells?: NotebookCell[];
   capabilities?: ClientCapabilities;
   readOnly?: boolean;
   configured?: boolean;
   enabledTools?: ('run_notebook' | 'delete_notebook')[];
+  classifier?: SqlConfirmationClassifier;
 } = {}) {
   const saved: NotebookWithContent = {
     ...notebook,
@@ -188,7 +218,7 @@ async function setup({
     clientCapabilities: capabilities,
     elicitation: {
       requestState: { key: 'a'.repeat(32), principal: 'PRIVATE_PRINCIPAL' },
-      confirmation: { enabledTools },
+      confirmation: { enabledTools, ...(classifier && { classifier }) },
     },
     observer,
   });
@@ -227,13 +257,18 @@ test('initial and missing-response reissue each records only its own confirmatio
   assertAttempt(
     h.attempts[0],
     'run_notebook',
-    [eligible, required('initial')],
+    [eligible, classifierCall('not_destructive'), required('initial')],
     'input_required'
   );
   assertAttempt(
     h.attempts[1],
     'run_notebook',
-    [eligible, validation('missing_response'), required('missing_response')],
+    [
+      eligible,
+      validation('missing_response'),
+      classifierCall('not_destructive'),
+      required('missing_response'),
+    ],
     'input_required'
   );
   expect(JSON.stringify(h.attempts)).not.toMatch(/PRIVATE_(SQL|LOG)/);
@@ -302,6 +337,7 @@ test('accept of changed query cells reissues without starting a run', async () =
       eligible,
       response('accept'),
       validation('changed_quote'),
+      classifierCall('destructive'),
       required('changed_quote'),
     ],
     'input_required'
@@ -378,6 +414,10 @@ test.each([
       h.attempts[0],
       'run_notebook',
       [
+        // Only this path asks the classifier, about the one database cell.
+        ...(reason === 'not_mutating'
+          ? [classifierCall('not_destructive')]
+          : []),
         {
           kind: 'confirmation_decision',
           feature: 'notebook',
@@ -411,6 +451,7 @@ test('a caught cell failure still returns one notebook operation result', async 
     h.attempts[0],
     'run_notebook',
     [
+      classifierCall('not_destructive'),
       {
         kind: 'confirmation_decision',
         feature: 'notebook',
@@ -558,6 +599,11 @@ test('an oversized cell records the remaining budget as spent and later cells as
     h.attempts[0],
     'run_notebook',
     [
+      // One per database cell; the log cell is never classified.
+      classifierCall('not_destructive'),
+      classifierCall('not_destructive'),
+      classifierCall('not_destructive'),
+      classifierCall('not_destructive'),
       {
         kind: 'confirmation_decision',
         feature: 'notebook',
@@ -597,6 +643,215 @@ test('adapter byte-limit errors record the run budget as exhausted', async () =>
   ).toEqual([completed(2, 2, 1, true)]);
   expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_CELL_ERROR');
 });
+
+// The classifier outcomes below decide the second read. The first read clears,
+// and the third comes after the cell that decides, so it is never classified.
+const decidesSecondRead =
+  (classify: SqlConfirmationClassifier): SqlConfirmationClassifier =>
+  (sql, options) =>
+    sql === readTwo.sql ? classify(sql, options) : Promise.resolve(undefined);
+// Only plain reads. The replica and log cells are never classified.
+const plainReads = [readOne, replicaCell, logCell, readTwo, readThree];
+// `writeCell` is not a plain read, so a run over these always confirms.
+const withWrite = [writeCell, readTwo, readThree];
+const flagsOrFails = classifierOutcomes.filter(
+  (row) => row.verdict !== 'clears' && !row.variant
+);
+const flags = classifierOutcomes.filter((row) => row.verdict === 'flags');
+// A classifier that cannot answer: one failure it resolves with and one
+// rejection. How each result maps to a fact is the first-call tables' job.
+// Picked by the fact result, so a reworded label keeps the row, and a result
+// with no main row fails the file instead of dropping its tests.
+const cannotAnswer = (['timeout', 'rejected'] as const).map((result) => {
+  const row = classifierOutcomes.find(
+    (outcome) => outcome.result === result && !outcome.variant
+  );
+  if (!row) throw new Error(`no main classifier outcome row for ${result}`);
+  return row;
+});
+const flagsOrCannotAnswer = [...flags, ...cannotAnswer];
+
+test.each(flagsOrFails)(
+  'first call over plain reads records one payload-free fact per classified cell, ending at $result when the classifier $label',
+  async ({ classify, result, verdict }) => {
+    const h = await setup({
+      cells: plainReads,
+      classifier: decidesSecondRead(classify),
+    });
+    await h.run();
+    expect(h.attempts).toHaveLength(1);
+    assertAttempt(
+      h.attempts[0],
+      'run_notebook',
+      [
+        classifierCall('not_destructive'),
+        classifierCall(result),
+        ...(verdict === 'flags' ? [eligible, required('initial')] : []),
+      ],
+      verdict === 'flags' ? 'input_required' : 'tool_error'
+    );
+    expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_');
+  }
+);
+
+test.each(flagsOrFails)(
+  'first call with a cell that is not a plain read records the decision, then one fact per classified cell, ending at $result when the classifier $label',
+  async ({ classify, result, verdict }) => {
+    const h = await setup({
+      cells: withWrite,
+      classifier: decidesSecondRead(classify),
+    });
+    await h.run();
+    expect(h.attempts).toHaveLength(1);
+    assertAttempt(
+      h.attempts[0],
+      'run_notebook',
+      [
+        eligible,
+        classifierCall('not_destructive'),
+        classifierCall(result),
+        ...(verdict === 'flags' ? [required('initial')] : []),
+      ],
+      verdict === 'flags' ? 'input_required' : 'tool_error'
+    );
+    expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_');
+  }
+);
+
+// A classifier that cannot answer ends each path below at its own fact: no
+// block decision and no new prompt follow it.
+test.each(flagsOrCannotAnswer)(
+  'a client without form support records the classification facts before any block when the classifier $label',
+  async ({ classify, result, verdict }) => {
+    const h = await setup({
+      capabilities: {},
+      cells: plainReads,
+      classifier: decidesSecondRead(classify),
+    });
+    await h.run();
+    expect(h.attempts).toHaveLength(1);
+    assertAttempt(
+      h.attempts[0],
+      'run_notebook',
+      [
+        classifierCall('not_destructive'),
+        classifierCall(result),
+        ...(verdict === 'flags' ? [blocked] : []),
+      ],
+      'tool_error'
+    );
+    expect(h.executeSql).not.toHaveBeenCalled();
+  }
+);
+
+test.each(flagsOrCannotAnswer)(
+  'unanswered resend records the classification facts after its validation when the classifier $label',
+  async ({ classify, result, verdict }) => {
+    let current: SqlConfirmationClassifier = async () => undefined;
+    const h = await setup({
+      cells: withWrite,
+      classifier: (sql, options) => current(sql, options),
+    });
+    const first = issued(await h.run());
+    current = decidesSecondRead(classify);
+    await h.run({ requestState: first.requestState });
+    expect(h.attempts).toHaveLength(2);
+    assertAttempt(
+      h.attempts[1],
+      'run_notebook',
+      [
+        eligible,
+        validation('missing_response'),
+        classifierCall('not_destructive'),
+        classifierCall(result),
+        ...(verdict === 'flags' ? [required('missing_response')] : []),
+      ],
+      verdict === 'flags' ? 'input_required' : 'tool_error'
+    );
+    expect(h.executeSql).not.toHaveBeenCalled();
+  }
+);
+
+test.each(flagsOrCannotAnswer)(
+  'accept of changed cells records the classification facts after its validation when the classifier $label',
+  async ({ classify, result, verdict }) => {
+    let current: SqlConfirmationClassifier = async () => undefined;
+    const h = await setup({
+      cells: [writeCell, readTwo],
+      classifier: (sql, options) => current(sql, options),
+    });
+    const first = issued(await h.run());
+    h.saved.content.cells = withWrite;
+    current = decidesSecondRead(classify);
+    await h.run({
+      requestState: first.requestState,
+      inputResponses: { confirm_run: { action: 'accept', content: {} } },
+    });
+    expect(h.attempts).toHaveLength(2);
+    assertAttempt(
+      h.attempts[1],
+      'run_notebook',
+      [
+        eligible,
+        response('accept'),
+        validation('changed_quote'),
+        classifierCall('not_destructive'),
+        classifierCall(result),
+        ...(verdict === 'flags' ? [required('changed_quote')] : []),
+      ],
+      verdict === 'flags' ? 'input_required' : 'tool_error'
+    );
+    expect(h.executeSql).not.toHaveBeenCalled();
+  }
+);
+
+test.each([
+  { settles: 'resolves', throws: false },
+  { settles: 'rejects', throws: true },
+])(
+  'records aborted for the cell being classified when the request is cancelled before the classifier $settles',
+  async ({ throws }) => {
+    let classifierSignal: AbortSignal | undefined;
+    const h = await setup({
+      cells: [readOne, readTwo],
+      classifier: async (_sql, { signal }) => {
+        classifierSignal = signal;
+        if (!signal.aborted) {
+          // Executor form: the package's lib target predates withResolvers.
+          await new Promise((resolve) =>
+            signal.addEventListener('abort', resolve, { once: true })
+          );
+        }
+        if (throws) throw privateClassifierError();
+        return undefined;
+      },
+    });
+    const controller = new AbortController();
+
+    const request = h.client.request(
+      {
+        method: 'tools/call',
+        params: { name: 'run_notebook', arguments: runArgs },
+      },
+      { allowInputRequired: true, signal: controller.signal }
+    );
+    await vi.waitFor(() => expect(classifierSignal).toBeDefined());
+    expect(classifierSignal?.aborted).toBe(false);
+    controller.abort();
+    await expect(request).rejects.toThrow();
+
+    await vi.waitFor(() => expect(h.attempts[0]?.ends).toHaveLength(1));
+    expect(h.executeSql).not.toHaveBeenCalled();
+    expect(h.attempts).toHaveLength(1);
+    assertAttempt(
+      h.attempts[0],
+      'run_notebook',
+      [classifierCall('aborted')],
+      'tool_error'
+    );
+    expect(JSON.stringify(h.attempts)).not.toContain('PRIVATE_');
+  }
+);
 
 test.each([
   ['accept', 'completed'],
