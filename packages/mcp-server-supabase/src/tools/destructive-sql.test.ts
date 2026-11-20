@@ -142,6 +142,23 @@ describe('isUpdateWithoutWhere', () => {
   ])('UPDATE with WHERE does not match: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(false);
   });
+
+  test.each([
+    'UPDATE films SET elsewhere = 1;',
+    'UPDATE films SET nowhere = 1;',
+    'UPDATE films SET somewhere = 1;',
+  ])(
+    'column name ending in "where" does not falsely count as a WHERE clause: %s',
+    (sql) => {
+      expect(isUpdateWithoutWhere(sql)).toBe(true);
+    }
+  );
+
+  test('WHERE directly followed by a parenthesis still counts as a WHERE clause', () => {
+    expect(
+      isUpdateWithoutWhere("UPDATE films SET title = 'x' where(id = 1);")
+    ).toBe(false);
+  });
 });
 
 describe('isDestructiveSql', () => {

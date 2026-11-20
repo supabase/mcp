@@ -200,7 +200,7 @@ function isUpdateWithoutWhereFromScan(sql: string, scan: SqlScan): boolean {
     return (
       statement.toLowerCase().startsWith('update') &&
       updateWithoutWhereRegex.test(statement) &&
-      !/where\s/i.test(statement)
+      !/\bwhere\b/i.test(statement)
     );
   });
 }
