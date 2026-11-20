@@ -23,27 +23,6 @@ export type ProjectCardNote = { tone: 'danger' | 'muted'; text: string };
 /** The section is labelled by the project name. */
 const NAME_ID = 'project-card-name';
 
-/**
- * The name for the card: the created one, else the one asked for in the
- * tool call's arguments. A call that failed or was cancelled before the host
- * sent its arguments has nothing more coming, so it gets a generic name
- * instead of a skeleton.
- */
-export function cardName({
-  created,
-  requested,
-  isLoading,
-  noun,
-}: {
-  created?: string;
-  requested?: string;
-  isLoading: boolean;
-  /** What is being created: "project" or "branch". */
-  noun: string;
-}) {
-  return created ?? requested ?? (isLoading ? undefined : `New ${noun}`);
-}
-
 /** Stands in for data the card doesn't have yet, in the same place and size. */
 function Skeleton({
   shape = 'text',
@@ -71,10 +50,13 @@ function Skeleton({
  *
  * While `isLoading`, the layout stays the same and anything not known yet
  * (breadcrumbs, name, badge, a detail's value, the actions) is a skeleton.
+ * Once it isn't loading, what is still unknown is left out: a detail is
+ * dropped, and the name falls back to a generic one.
  */
 export function ProjectCard({
   isLoading = false,
   breadcrumbs = [],
+  noun,
   name,
   badge,
   note,
@@ -91,10 +73,20 @@ export function ProjectCard({
    * shown: they rarely read as names.
    */
   breadcrumbs?: string[];
+  /** What the card is for, in the generic name: "project" or "branch". */
+  noun: string;
+  /**
+   * The created one, else the one asked for in the tool call's arguments. A
+   * call that failed or was cancelled before the host sent its arguments has
+   * nothing more coming, so it gets a generic name instead of a skeleton.
+   */
   name?: string;
   badge?: ProjectCardBadge;
   note?: ProjectCardNote;
-  /** Labels are for screen readers; the values are shown, or skeletons while loading. */
+  /**
+   * Labels are for screen readers. A detail without a value is a skeleton
+   * while loading, and left out after.
+   */
   details: { label: string; value?: string }[];
   /**
    * Checks the status again, from a small icon beside the badge. Pass it only
@@ -106,6 +98,10 @@ export function ProjectCard({
   onOpenDashboard?: () => void;
   children?: ReactNode;
 }) {
+  const shownDetails = details.filter(
+    (detail) => isLoading || detail.value !== undefined
+  );
+
   return (
     <section
       className="project-card"
@@ -134,7 +130,7 @@ export function ProjectCard({
           )}
           <div data-slot="title-row">
             <h2 data-slot="name" id={NAME_ID}>
-              {name ?? <Skeleton width="long" />}
+              {name ?? (isLoading ? <Skeleton width="long" /> : `New ${noun}`)}
             </h2>
             {badge ? (
               <Badge
@@ -164,9 +160,9 @@ export function ProjectCard({
               </button>
             )}
           </div>
-          {details.length > 0 && (
+          {shownDetails.length > 0 && (
             <dl data-slot="details">
-              {details.map((detail) => (
+              {shownDetails.map((detail) => (
                 <div data-slot="detail" key={detail.label}>
                   {/* Every detail has one; the separator starting each line is clipped (see the CSS). */}
                   <span data-slot="detail-separator" aria-hidden="true">

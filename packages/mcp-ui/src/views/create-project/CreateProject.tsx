@@ -1,5 +1,5 @@
 import type { Project } from '@supabase/mcp-server-supabase/platform';
-import { cardName, ProjectCard } from '../../shared/ProjectCard';
+import { ProjectCard } from '../../shared/ProjectCard';
 import { ConnectionDetails } from '../../shared/ConnectionDetails';
 import { useCreationStatus } from '../../shared/use-creation-status';
 import { useLookup } from '../../shared/use-lookup';
@@ -20,7 +20,6 @@ export function CreateProject() {
 
   const {
     data: project,
-    isLoading,
     isDone,
     card,
   } = useCreationStatus<Project>({
@@ -52,28 +51,19 @@ export function CreateProject() {
   const canOpenDashboard = !!project && project.status !== 'REMOVED';
 
   const region = inputText('region');
-  const details = project
-    ? [
-        { label: 'Project ref', value: project.ref },
-        { label: 'Region', value: project.region || 'Region unavailable' },
-      ]
-    : isLoading
-      ? [{ label: 'Project ref' }, { label: 'Region', value: region }]
-      : region
-        ? [{ label: 'Region', value: region }]
-        : [];
 
   return (
     <ProjectCard
       {...card}
       breadcrumbs={organizationName ? [organizationName] : undefined}
-      name={cardName({
-        created: project?.name,
-        requested: inputText('name'),
-        isLoading,
-        noun: 'project',
-      })}
-      details={details}
+      name={project?.name ?? inputText('name')}
+      details={[
+        { label: 'Project ref', value: project?.ref },
+        {
+          label: 'Region',
+          value: project ? project.region || 'Region unavailable' : region,
+        },
+      ]}
       onOpenDashboard={
         canOpenDashboard && openLink
           ? () => openLink(studioUrl(project.ref))

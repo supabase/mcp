@@ -1,5 +1,5 @@
 import type { Branch, Project } from '@supabase/mcp-server-supabase/platform';
-import { cardName, ProjectCard } from '../../shared/ProjectCard';
+import { ProjectCard } from '../../shared/ProjectCard';
 import { ConnectionDetails } from '../../shared/ConnectionDetails';
 import { useCreationStatus } from '../../shared/use-creation-status';
 import { useLookup } from '../../shared/use-lookup';
@@ -24,7 +24,6 @@ export function CreateBranch() {
 
   const {
     data: branch,
-    isLoading,
     isDone,
     card,
   } = useCreationStatus<Branch>({
@@ -68,19 +67,8 @@ export function CreateBranch() {
     <ProjectCard
       {...card}
       breadcrumbs={breadcrumbs}
-      name={cardName({
-        created: branch?.name,
-        requested: inputText('name'),
-        isLoading,
-        noun: 'branch',
-      })}
-      details={
-        branch
-          ? [{ label: 'Branch project ref', value: branch.project_ref }]
-          : isLoading
-            ? [{ label: 'Branch project ref' }]
-            : []
-      }
+      name={branch?.name ?? inputText('name')}
+      details={[{ label: 'Branch project ref', value: branch?.project_ref }]}
       onOpenDashboard={
         branch && openLink
           ? () => openLink(studioUrl(branch.project_ref))

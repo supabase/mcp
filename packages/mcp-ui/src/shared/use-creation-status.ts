@@ -397,11 +397,11 @@ export function useCreationStatus<T extends { status: string }>({
   return {
     /** The latest read, or what the tool call returned until there is one. */
     data,
-    isLoading,
     isDone: !!data && config.progress(data.status).state === 'done',
     /** What the status gives `ProjectCard`: spread it in. */
     card: {
       isLoading,
+      noun: config.noun,
       badge,
       note,
       onRetry: canRetry ? () => dispatch({ type: 'retry' }) : undefined,
