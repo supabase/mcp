@@ -17,7 +17,11 @@ import type {
   ObservedTool,
   RequestObserver,
 } from './observation.js';
-import { APPS_EXTENSIONS, appsEnabled } from './apps/index.js';
+import {
+  APPS_EXTENSIONS,
+  appsEnabled,
+  DASHBOARD_URL_META_KEY,
+} from './apps/index.js';
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getResources } from './resources/index.js';
@@ -48,7 +52,7 @@ import {
   type ElicitationToolName,
   type FeatureGroup,
 } from './types.js';
-import { parseFeatureGroups } from './util.js';
+import { DEFAULT_DASHBOARD_URL, parseFeatureGroups } from './util.js';
 
 const { version } = packageJson;
 
@@ -70,7 +74,7 @@ export type SupabaseMcpServerOptions = {
    * The API URL for the Supabase Content API.
    */
   contentApiUrl?: string;
-  /** Dashboard base URL for notebook links. Defaults to the production dashboard. */
+  /** Dashboard base URL for notebook and MCP Apps view links. Defaults to the production dashboard. */
   dashboardUrl?: string;
 
   /**
@@ -200,11 +204,12 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     features,
     experimentalApps = false,
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
-    dashboardUrl,
+    dashboardUrl: rawDashboardUrl = DEFAULT_DASHBOARD_URL,
     onToolCall,
     observer,
     elicitation,
   } = options;
+  const dashboardUrl = rawDashboardUrl.replace(/\/+$/, '');
 
   if (elicitation?.secretCollection) {
     assertValidConnectUrlTemplate(
@@ -526,6 +531,18 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             tools[name] = {
               ...tool,
               _meta: Object.keys(meta).length > 0 ? meta : undefined,
+            };
+          }
+        }
+      } else {
+        for (const [name, tool] of Object.entries(tools)) {
+          if (tool._meta?.ui) {
+            tools[name] = {
+              ...tool,
+              resultMeta: {
+                ...tool.resultMeta,
+                [DASHBOARD_URL_META_KEY]: dashboardUrl,
+              },
             };
           }
         }

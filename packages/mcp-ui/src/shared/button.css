@@ -1,4 +1,5 @@
 @layer components {
+  /* Compact button, as tall as the copy field's controls. */
   :is(button, a:where(.button)):where([data-size="sm"]) {
     gap: var(--sb-space-1);
     padding: var(--sb-control-compact-padding-block)
@@ -9,20 +10,15 @@
 
   :is(button, a:where(.button)):where(.primary) {
     border-color: transparent;
-    background: var(--color-background-inverse);
-    color: var(--color-text-inverse);
+    background: var(--sb-color-foreground);
+    color: var(--sb-color-foreground-contrast);
 
     &:where(:hover:not(:disabled)) {
       background: color-mix(
         in oklab,
-        var(--color-background-inverse) 90%,
+        var(--sb-color-foreground) 90%,
         transparent
       );
-    }
-
-    &:where(:disabled) {
-      background: var(--color-background-disabled);
-      color: var(--color-text-disabled);
     }
   }
 }

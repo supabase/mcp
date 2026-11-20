@@ -1,9 +1,8 @@
 import './button.css';
-import './ready-actions.css';
-import type { App } from '@modelcontextprotocol/ext-apps';
+import './connection-details.css';
 import type { MouseEvent, SyntheticEvent } from 'react';
 import { type Politeness, useAnnounce } from './Announcer';
-import { callTool } from './call-tool';
+import type { CallTool } from './call-tool';
 import { CopyField } from './CopyField';
 import { ChevronIcon, ExternalLinkIcon, SpinnerIcon } from './icons';
 import { Message } from './Message';
@@ -34,12 +33,12 @@ type Connection =
   | { status: 'dashboard' };
 
 type ConnectionEvent =
-  /** `canFetch` false skips the fetch, which would only fail. */
-  | { type: 'request'; canFetch: boolean }
+  /** Without `callTool` there's nothing to fetch with, so skip the fetch. */
+  | { type: 'request'; callTool: CallTool | undefined }
   | { type: 'loaded'; url: string; key: string }
   | { type: 'unavailable' };
 
-type ConnectionEffect = { type: 'fetchDetails' } | Announce;
+type ConnectionEffect = { type: 'fetchDetails'; callTool: CallTool } | Announce;
 
 const DASHBOARD_ANNOUNCEMENT: Announce = {
   type: 'announce',
@@ -54,8 +53,11 @@ const connectionTransition: Transition<
   switch (event.type) {
     case 'request':
       if (state.status !== 'idle') return null;
-      return event.canFetch
-        ? { state: { status: 'loading' }, effects: [{ type: 'fetchDetails' }] }
+      return event.callTool
+        ? {
+            state: { status: 'loading' },
+            effects: [{ type: 'fetchDetails', callTool: event.callTool }],
+          }
         : { state: { status: 'dashboard' }, effects: [DASHBOARD_ANNOUNCEMENT] };
     // Results only land on a request that is still in flight.
     case 'loaded':
@@ -84,43 +86,38 @@ function pickKey(keys: Key[]): string | undefined {
   )?.api_key;
 }
 
-/** The project's page in the Supabase dashboard (Studio). */
-const studioUrl = (projectRef: string) =>
-  `https://supabase.com/dashboard/project/${encodeURIComponent(projectRef)}`;
-
 /**
- * Actions for a project that is ready: open it in Studio, and a collapsible
- * disclosure with its connection details. UI-only: nothing here is sent to the
- * model's context.
+ * For a project that is ready: a collapsible disclosure with its connection
+ * details. UI-only: nothing here is sent to the model's context.
  *
  * Calls always pass `projectRef` as `project_id`. A server scoped to another
- * project (e.g. a branch's parent) would reject it, so callers pass
- * `canReachProject` false then.
+ * project (e.g. a branch's parent) would reject it, so callers pass no
+ * `callTool` then.
  */
-export function ReadyActions({
-  app,
+export function ConnectionDetails({
+  callTool,
+  openLink,
   projectRef,
-  canReachProject = true,
-  canOpenLinks = true,
+  projectUrl,
 }: {
-  app: App;
+  /**
+   * Calls a tool that can reach this project. Undefined when none can: the
+   * server is scoped to another project, or the host can't proxy tool calls.
+   * Connection details then go straight to the dashboard link.
+   */
+  callTool: CallTool | undefined;
+  /**
+   * Asks the host to open a link. A host that can't open links gets the
+   * Studio link to copy instead, since a sandboxed view can't open them
+   * itself.
+   */
+  openLink: ((url: string) => void) | undefined;
   projectRef: string;
-  /**
-   * False when no tool call can reach this project: the server is scoped to
-   * another project, or the host can't proxy tool calls. Connection details
-   * then go straight to the dashboard link.
-   */
-  canReachProject?: boolean;
-  /**
-   * False when the host can't open links. A sandboxed view can't open them
-   * itself, so the Open in Studio button is hidden and connection details
-   * offer the Studio link to copy instead.
-   */
-  canOpenLinks?: boolean;
+  /** The project's page in the Supabase dashboard (Studio), as the view links to it. */
+  projectUrl: string;
 }) {
   const announce = useAnnounce();
-  const projectUrl = studioUrl(projectRef);
-  const dashboardUrl = `${projectUrl}?showConnect=true`;
+  const connectUrl = `${projectUrl}?showConnect=true`;
 
   const [connection, sendConnection] = useMachine(
     connectionTransition,
@@ -130,12 +127,13 @@ export function ReadyActions({
         case 'announce':
           announce(effect.message, effect.politeness);
           return;
-        case 'fetchDetails':
+        case 'fetchDetails': {
+          const { callTool } = effect;
           Promise.all([
-            callTool<{ url: string }>(app, 'get_project_url', {
+            callTool<{ url: string }>('get_project_url', {
               project_id: projectRef,
             }),
-            callTool<{ keys: Key[] }>(app, 'get_publishable_keys', {
+            callTool<{ keys: Key[] }>('get_publishable_keys', {
               project_id: projectRef,
             }),
           ])
@@ -147,76 +145,60 @@ export function ReadyActions({
             })
             .catch(() => send({ type: 'unavailable' }));
           return;
+        }
       }
     }
   );
 
   // Sandboxed views can't navigate, so the host opens the link. `href` keeps
   // it a real link for assistive tech, copying and middle-click.
-  function openLink(event: MouseEvent<HTMLAnchorElement>) {
+  function onLinkClick(event: MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
-    void app.openLink({ url: event.currentTarget.href });
+    openLink?.(event.currentTarget.href);
   }
 
   // Only opening requests details; the machine ignores requests once it has
   // left `idle`, so re-opening never refetches.
   function onToggle(event: SyntheticEvent<HTMLDetailsElement>) {
     if (event.currentTarget.open) {
-      sendConnection({ type: 'request', canFetch: canReachProject });
+      sendConnection({ type: 'request', callTool });
     }
   }
 
   return (
-    <div className="ready-actions">
-      {canOpenLinks && (
-        <div data-slot="actions">
-          <a
-            className="button"
-            data-size="sm"
-            href={projectUrl}
-            onClick={openLink}
-          >
-            <ExternalLinkIcon />
-            Open in Studio
-          </a>
-        </div>
-      )}
-      <details data-slot="connection" onToggle={onToggle}>
-        <summary>
-          Connection details
-          <ChevronIcon slot="disclosure-indicator" />
-        </summary>
-        <div data-slot="panel">
-          {connection.status === 'loading' && (
-            <div data-slot="loading">
-              <SpinnerIcon />
-              <Message>Loading connection details…</Message>
-            </div>
-          )}
-          {connection.status === 'dashboard' &&
-            (canOpenLinks ? (
-              <a
-                data-slot="dashboard-link"
-                href={dashboardUrl}
-                onClick={openLink}
-              >
-                Open in Studio
-                <ExternalLinkIcon />
-              </a>
-            ) : (
-              <CopyField label="Studio link" value={dashboardUrl} />
-            ))}
-          {connection.status === 'details' && (
-            <>
-              <CopyField label="Project URL" value={connection.url} />
-              <CopyField label="Publishable key" value={connection.key} />
-              {!canOpenLinks && (
-                <CopyField label="Studio link" value={projectUrl} />
-              )}
-            </>
-          )}
-        </div>
-      </details>
-    </div>
+    <details className="connection-details" onToggle={onToggle}>
+      <summary>
+        Connection details
+        <ChevronIcon slot="disclosure-indicator" />
+      </summary>
+      <div data-slot="panel">
+        {connection.status === 'loading' && (
+          <div data-slot="loading">
+            <SpinnerIcon />
+            <Message>Loading connection details…</Message>
+          </div>
+        )}
+        {connection.status === 'dashboard' &&
+          (openLink ? (
+            <a
+              data-slot="dashboard-link"
+              href={connectUrl}
+              onClick={onLinkClick}
+            >
+              Open in Studio
+              <ExternalLinkIcon />
+            </a>
+          ) : (
+            <CopyField label="Studio link" value={connectUrl} />
+          ))}
+        {connection.status === 'details' && (
+          <>
+            <CopyField label="Project URL" value={connection.url} />
+            <CopyField label="Publishable key" value={connection.key} />
+            {!openLink && <CopyField label="Studio link" value={projectUrl} />}
+          </>
+        )}
+      </div>
+    </details>
   );
 }

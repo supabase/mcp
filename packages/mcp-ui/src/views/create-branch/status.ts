@@ -1,34 +1,46 @@
 import type { Branch } from '@supabase/mcp-server-supabase/platform';
+import type {
+  CreationConfig,
+  Progress,
+} from '../../shared/use-creation-status';
 
-export const LABELS = [
-  'Creating branch',
-  'Provisioning branch database',
-  'Running migrations',
-  'Deploying functions',
-];
+/**
+ * The steps of creating a branch: the create call itself, done by the time
+ * the view has a branch, then creating the branch's project, running
+ * migrations and deploying functions.
+ */
+const STEP_COUNT = 4;
 
-/** Index of the current step and whether it failed, per branch status. */
-export function progress(status: Branch['status']): {
-  step: number;
-  failed: boolean;
-} {
+/** On step `n` of creating a branch, the create call being step 1. */
+const step = (label: string, n: number): Progress => ({
+  state: 'step',
+  label,
+  step: n,
+  of: STEP_COUNT,
+});
+
+/** Where a new branch is, per branch status. */
+export function progress(status: Branch['status']): Progress {
   switch (status) {
     case 'FUNCTIONS_DEPLOYED':
-      return { step: LABELS.length, failed: false };
+      return { state: 'done' };
     case 'MIGRATIONS_PASSED':
-      return { step: 3, failed: false };
+      return step('Deploying functions', 4);
     case 'RUNNING_MIGRATIONS':
-      return { step: 2, failed: false };
+      return step('Running migrations', 3);
     case 'MIGRATIONS_FAILED':
-      return { step: 2, failed: true };
+      return { state: 'failed', during: 'Running migrations' };
     case 'FUNCTIONS_FAILED':
-      return { step: 3, failed: true };
+      return { state: 'failed', during: 'Deploying functions' };
     default:
       // CREATING_PROJECT (provisioning the branch's database), and anything
       // newer than this view.
-      return { step: 1, failed: false };
+      return step('Creating', 2);
   }
 }
 
-export const isTerminal = (status: Branch['status']) =>
-  status === 'FUNCTIONS_DEPLOYED' || progress(status).failed;
+export const creation: CreationConfig<Branch> = {
+  noun: 'branch',
+  progress,
+  checkWith: 'list_branches',
+};

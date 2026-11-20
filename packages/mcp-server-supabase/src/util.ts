@@ -7,12 +7,14 @@ import {
   type FeatureGroup,
 } from './types.js';
 
+export const DEFAULT_DASHBOARD_URL = 'https://supabase.com/dashboard';
+
 /** Maps a Management API origin to the dashboard used for user-facing links. */
 export function dashboardUrlForApiUrl(apiUrl?: string): string {
   const origin = new URL(apiUrl ?? 'https://api.supabase.com').origin;
   switch (origin) {
     case 'https://api.supabase.com':
-      return 'https://supabase.com/dashboard';
+      return DEFAULT_DASHBOARD_URL;
     case 'https://api.supabase.green':
       return 'https://supabase.green/dashboard';
     default:

@@ -38,6 +38,8 @@ also starts its own sequence, advancing one step per poll.
 | `create-project:create-failed` | creating the project fails (400), so the tool call returns an error |
 | `create-project:polling-timeout` | COMING_UP forever; the view times out after 10 minutes (`POLL_TIMEOUT_MS`) |
 | `create-project:polling-error` | first poll is a 503 "Service temporarily unavailable"; retry then follows the happy sequence |
+| `create-project:health-checks` | COMING_UP, ACTIVE_UNHEALTHY, ACTIVE_UNHEALTHY, ACTIVE_HEALTHY (shows the health checks step) |
+| `create-project:polling-down` | the first 3 polls are 503s, so the view stops polling; Retry then follows the happy sequence |
 | `create-branch:happy` | CREATING_PROJECT, RUNNING_MIGRATIONS, MIGRATIONS_PASSED, FUNCTIONS_DEPLOYED |
 | `create-branch:migrations-failed` | CREATING_PROJECT, RUNNING_MIGRATIONS, MIGRATIONS_FAILED |
 | `create-branch:functions-failed` | RUNNING_MIGRATIONS, MIGRATIONS_PASSED, FUNCTIONS_FAILED |

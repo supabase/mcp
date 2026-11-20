@@ -29,6 +29,22 @@ const PORT = Number(process.env.MOCK_API_PORT ?? process.argv[2] ?? 4010);
 // ---------------------------------------------------------------------------
 // Scenarios
 
+type PollErrors = [message: string, count: number][];
+
+/** Total number of leading polls that fail. */
+function pollErrorCount(errors: PollErrors = []): number {
+  return errors.reduce((total, [, count]) => total + count, 0);
+}
+
+/** The error message for the given (0-based) poll, or undefined once the errors are used up. */
+function pollError(errors: PollErrors = [], poll: number): string | undefined {
+  for (const [message, count] of errors) {
+    if (poll < count) return message;
+    poll -= count;
+  }
+  return undefined;
+}
+
 type Scenario = {
   description: string;
   /** Status returned by each successive `GET /v1/projects/{ref}` poll of a project created while active; the last one repeats. */
@@ -37,10 +53,10 @@ type Scenario = {
   projectCreateError?: string;
   /** Creating a branch fails with a 400 and this message. */
   branchCreateError?: string;
-  /** The first branch list fails with a 503. */
-  branchFirstPollError?: string;
-  /** The first project poll fails with a 503. */
-  projectFirstPollError?: string;
+  /** Leading polls that fail with a 503: each `[message, count]` entry fails `count` polls in a row with `message`, in order. */
+  projectPollErrors?: PollErrors;
+  /** Same as `projectPollErrors`, per branch, for branch list polls. */
+  branchPollErrors?: PollErrors;
   /** Status returned by each successive branch list for a branch created while active; the last one repeats. */
   branchStatuses: BranchStatus[];
 };
@@ -84,7 +100,25 @@ const scenarios: Record<string, Scenario> = {
     description:
       'First poll fails with "Service temporarily unavailable" (503); retry then follows the happy sequence',
     projectStatuses: HAPPY_PROJECT,
-    projectFirstPollError: 'Service temporarily unavailable',
+    projectPollErrors: [['Service temporarily unavailable', 1]],
+    branchStatuses: HAPPY_BRANCH,
+  },
+  'create-project:health-checks': {
+    description:
+      'COMING_UP, ACTIVE_UNHEALTHY, ACTIVE_UNHEALTHY, ACTIVE_HEALTHY: shows the health checks step',
+    projectStatuses: [
+      'COMING_UP',
+      'ACTIVE_UNHEALTHY',
+      'ACTIVE_UNHEALTHY',
+      'ACTIVE_HEALTHY',
+    ],
+    branchStatuses: HAPPY_BRANCH,
+  },
+  'create-project:polling-down': {
+    description:
+      'The first 3 polls fail with a 503, so the view stops polling; Retry then follows the happy sequence',
+    projectStatuses: HAPPY_PROJECT,
+    projectPollErrors: [['Service temporarily unavailable', 3]],
     branchStatuses: HAPPY_BRANCH,
   },
   'create-project:create-failed': {
@@ -128,7 +162,7 @@ const scenarios: Record<string, Scenario> = {
     description:
       'First poll fails with "Service temporarily unavailable" (503); retry then follows the happy sequence',
     projectStatuses: HAPPY_PROJECT,
-    branchFirstPollError: 'Service temporarily unavailable',
+    branchPollErrors: [['Service temporarily unavailable', 1]],
     branchStatuses: HAPPY_BRANCH,
   },
   'create-branch:polling-timeout': {
@@ -368,10 +402,9 @@ route('GET', '/v1/projects/{ref}', ({ params }) => {
 
   const scenario = active();
   const poll = state.polls++;
-  if (poll === 0 && scenario.projectFirstPollError) {
-    return { status: 503, body: { message: scenario.projectFirstPollError } };
-  }
-  const index = scenario.projectFirstPollError ? poll - 1 : poll;
+  const message = pollError(scenario.projectPollErrors, poll);
+  if (message) return { status: 503, body: { message } };
+  const index = poll - pollErrorCount(scenario.projectPollErrors);
   state.project = {
     ...state.project,
     status: pick(scenario.projectStatuses, index),
@@ -382,17 +415,16 @@ route('GET', '/v1/projects/{ref}', ({ params }) => {
 route('GET', '/v1/projects/{ref}/branches', ({ params }) => {
   const list = branches.get(params.ref!) ?? [];
   const scenario = active();
-  if (scenario.branchFirstPollError) {
-    const fresh = list.filter((state) => !state.seeded && state.polls === 0);
-    if (fresh.length > 0) {
-      for (const state of fresh) state.polls++;
-      return {
-        status: 503,
-        body: { message: scenario.branchFirstPollError },
-      };
-    }
+  const failures = pollErrorCount(scenario.branchPollErrors);
+  const failing = list.filter(
+    (state) => !state.seeded && state.polls < failures
+  );
+  if (failing.length > 0) {
+    const message = pollError(scenario.branchPollErrors, failing[0]!.polls);
+    for (const state of failing) state.polls++;
+    return { status: 503, body: { message } };
   }
-  const offset = scenario.branchFirstPollError ? 1 : 0;
+  const offset = failures;
   const response: Branch[] = list.map((state) => {
     if (!state.seeded) {
       state.branch = {

@@ -44,6 +44,7 @@ type ModernSetupOptions = {
   platform?: SupabasePlatform;
   features?: string[];
   experimentalApps?: boolean;
+  dashboardUrl?: string;
   observer?: SupabaseMcpServerOptions['observer'];
   onToolCall?: SupabaseMcpServerOptions['onToolCall'];
   elicitation?: SupabaseMcpServerOptions['elicitation'];
@@ -224,6 +225,7 @@ export function createServerHarness() {
       readOnly,
       features,
       experimentalApps: options.experimentalApps,
+      dashboardUrl: options.dashboardUrl,
       observer: options.observer,
       onToolCall: options.onToolCall,
       elicitation: secretCollection

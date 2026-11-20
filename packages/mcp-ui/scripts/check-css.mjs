@@ -12,13 +12,38 @@
  * reserved for those files; `base.css` never declares them. A file that reads
  * another component's namespace must give a fallback, so it still works where
  * that component's file is not shipped; the property must exist in the other
- * file. Run with
+ * file. Colours are Studio's semantic tokens under the `--sb-color-` prefix,
+ * which only `base.css` may declare (the opposite of the reserved prefixes
+ * above). Host colour variables (`--color-*`) are read only by the host
+ * bridge in `base`, and only inside the value of a `--sb-color-*` declaration
+ * there (each read carries its fallback inline); everything else reads the
+ * `--sb-color-*` tokens. Every host colour the bridge reads, and every
+ * non-`--sb-` property `base.css` declares (the host variables' fallbacks),
+ * must be a name the MCP Apps spec defines (`McpUiStyleVariableKey` in
+ * ext-apps' schema), so a typo can't leave the host's value unused. Run with
  * `pnpm lint:css`.
  */
 import { readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { transform } from 'lightningcss';
+
+/**
+ * The host's MCP Apps colour variables, read only by the bridge in `base`,
+ * inside the value of a `--sb-color-*` declaration.
+ */
+const HOST_COLOR_PREFIX = '--color-';
+
+/** The style variables a host may send, from the MCP Apps spec. */
+const HOST_VARIABLES = new Set(
+  createRequire(import.meta.url)(
+    '@modelcontextprotocol/ext-apps/schema.json'
+  ).$defs.McpUiStyleVariableKey.anyOf.map((key) => key.const)
+);
+
+/** Studio's colour tokens: only `base.css` may declare these. */
+const SB_COLOR_PREFIX = '--sb-color-';
 
 const LAYERS = ['base', 'native', 'components', 'view', 'utilities'];
 
@@ -290,9 +315,32 @@ for (const { name, at, checks } of parsed) {
   }
 }
 
-/** Where a file may declare a `--sb-*` property. */
+/**
+ * Where a file may declare a `--sb-*` property, and that base's other
+ * properties are host variables.
+ */
 function checkDeclared(prop, { name, at, loc }) {
-  if (!prop.startsWith('--sb-')) return;
+  if (!prop.startsWith('--sb-')) {
+    // In base, anything else is a host variable's fallback.
+    if (
+      name === BASE_FILE &&
+      prop.startsWith('--') &&
+      !HOST_VARIABLES.has(prop)
+    ) {
+      errors.push(
+        `${at(loc)}: \`${prop}\` is not an MCP Apps style variable (McpUiStyleVariableKey); base declares host variables' fallbacks and \`--sb-*\` tokens only`
+      );
+    }
+    return;
+  }
+  if (prop.startsWith(SB_COLOR_PREFIX)) {
+    if (name !== BASE_FILE) {
+      errors.push(
+        `${at(loc)}: \`${prop}\` is in the \`${SB_COLOR_PREFIX}*\` namespace, which only ${BASE_FILE} may declare`
+      );
+    }
+    return;
+  }
   const owner = ownerOf(prop);
   if (name === BASE_FILE) {
     if (isReserved(prop)) {
@@ -354,24 +402,41 @@ function checkStyle(style, { layer, top, ownProps, at, name }) {
     errors.push(`${at(loc)}: !important`);
   }
   for (const decl of declarations?.declarations ?? []) {
-    if (decl.property === 'custom') {
-      checkDeclared(decl.value.name, { name, at, loc });
-    }
+    const declared = decl.property === 'custom' ? decl.value.name : null;
+    if (declared) checkDeclared(declared, { name, at, loc });
     for (const ref of vars(decl.value)) {
-      checkRead(ref, { layer, ownProps, at, name, loc });
+      checkRead(ref, { layer, ownProps, at, name, loc, declared });
     }
   }
   for (const child of rules) checkNested(child, { layer, ownProps, at, name });
 }
 
 /** One `var()` read: where its property is declared, whether it may fall back. */
-function checkRead(ref, { layer, ownProps, at, name, loc }) {
+function checkRead(ref, { layer, ownProps, at, name, loc, declared }) {
   const prop = ref.name.ident;
   const fallback = Boolean(ref.fallback);
   if (isReserved(prop) && !ownerOf(prop)) {
     errors.push(
       `${at(loc)}: var(${prop}) matches no component or view file; the name after the reserved prefix must be a file's basename`
     );
+    return;
+  }
+  // Host colours: read only by the bridge in base (inside a `--sb-color-*`
+  // declaration), with the fallback inline.
+  if (prop.startsWith(HOST_COLOR_PREFIX)) {
+    if (!HOST_VARIABLES.has(prop)) {
+      errors.push(
+        `${at(loc)}: var(${prop}) is not an MCP Apps style variable (McpUiStyleVariableKey), so no host sends it`
+      );
+    } else if (layer !== 'base' || !declared?.startsWith(SB_COLOR_PREFIX)) {
+      errors.push(
+        `${at(loc)}: var(${prop}) is a host colour; use the \`${SB_COLOR_PREFIX}*\` token the bridge in base maps it to (host colours are read only inside a \`${SB_COLOR_PREFIX}*\` declaration in base)`
+      );
+    } else if (!fallback) {
+      errors.push(
+        `${at(loc)}: var(${prop}) in the bridge needs an inline fallback for hosts that do not send it`
+      );
+    }
     return;
   }
   // Global tokens (anything `base` declares): fallbacks only in base.

@@ -2,9 +2,14 @@ import {
   EXTENSION_ID,
   RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server';
-import type { Client } from '@modelcontextprotocol/client';
+import {
+  isInputRequiredResult,
+  type Client,
+} from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { createServerHarness } from '../test/server-harness.js';
+import { createOrganization, createProject } from '../test/mocks.js';
+import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import { DASHBOARD_URL_META_KEY } from './apps/index.js';
 import {
   CREATE_BRANCH_UI_URI,
   CREATE_PROJECT_UI_URI,
@@ -140,5 +145,69 @@ describe('MCP Apps', () => {
       expect(html, uri).toContain('<script type="module"');
       expect(html, uri).not.toMatch(/<script[^>]*\ssrc=/);
     }
+  });
+
+  test('view tool results carry the configured dashboard URL', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      dashboardUrl: 'https://supabase.green/dashboard/',
+      clientCapabilities: {
+        ...APPS_CLIENT_CAPABILITIES,
+        elicitation: { form: {} },
+      },
+    });
+    const org = await createOrganization({
+      name: 'Free Org',
+      plan: 'free',
+      allowed_release_channels: ['ga'],
+    });
+
+    const result = await callModernTool(client, {
+      name: 'create_project',
+      arguments: {
+        name: 'New Project',
+        region: 'us-east-1',
+        organization_id: org.id,
+      },
+    });
+    if (isInputRequiredResult(result)) throw new Error('expected a result');
+
+    expect(result._meta?.[DASHBOARD_URL_META_KEY]).toBe(
+      'https://supabase.green/dashboard'
+    );
+    expect(result.content).toEqual([
+      { type: 'text', text: expect.stringContaining('"name":"New Project"') },
+    ]);
+  });
+
+  test('a cost form still reaches the client unchanged', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: {
+        ...APPS_CLIENT_CAPABILITIES,
+        elicitation: { form: {} },
+      },
+    });
+    const org = await createOrganization({
+      name: 'Paid Org',
+      plan: 'pro',
+      allowed_release_channels: ['ga'],
+    });
+    await createProject({
+      name: 'Existing Project',
+      region: 'us-east-1',
+      organization_id: org.id,
+    });
+
+    const result = await callModernTool(client, {
+      name: 'create_project',
+      arguments: {
+        name: 'Paid Project',
+        region: 'us-east-1',
+        organization_id: org.id,
+      },
+    });
+
+    expect(isInputRequiredResult(result)).toBe(true);
   });
 });

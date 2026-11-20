@@ -1,34 +1,50 @@
 @layer components {
+  /*
+   * A pill at the body text size. A fixed height and `text-box` trimmed to the
+   * cap height centre the text optically, and keep the height when a spinner
+   * appears.
+   */
   :where(.badge) {
     display: inline-flex;
     align-items: center;
     gap: var(--sb-space-1);
-    padding: 2px var(--sb-space-2);
-    border: var(--border-width-regular) solid var(--color-border-primary);
+    block-size: calc(1em + var(--sb-space-1) + 2 * var(--border-width-regular));
+    padding: 0 var(--sb-space-2);
+    border: var(--border-width-regular) solid var(--sb-color-input);
     border-radius: var(--border-radius-full);
-    background: var(--color-background-secondary);
-    color: var(--color-text-secondary);
-    font-size: var(--font-text-xs-size);
+    background: var(--sb-color-card);
+    color: var(--sb-color-muted-foreground);
+    font-size: var(--font-text-sm-size);
     font-weight: var(--font-weight-medium);
-    line-height: var(--font-text-xs-line-height);
+    line-height: 1;
     white-space: nowrap;
 
+    /* Not inherited, and a flex container's anonymous text box can't take it,
+       so it sits on the label itself. */
+    :where([data-slot="label"]) {
+      text-box: trim-both cap alphabetic;
+    }
+
     &:where([data-tone="success"]) {
-      color: var(--color-text-success);
-      background: var(--color-background-success);
-      border-color: var(--color-border-success);
+      color: var(--sb-color-primary);
+      background: color-mix(in oklab, var(--sb-color-primary) 10%, transparent);
+      border-color: var(--sb-color-border-primary-bright);
     }
 
     &:where([data-tone="warning"]) {
-      color: var(--color-text-warning);
-      background: var(--color-background-warning);
-      border-color: var(--color-border-warning);
+      color: var(--sb-color-warning);
+      background: color-mix(in oklab, var(--sb-color-warning) 10%, transparent);
+      border-color: var(--sb-color-border-warning);
     }
 
     &:where([data-tone="danger"]) {
-      color: var(--color-text-danger);
-      background: var(--color-background-danger);
-      border-color: var(--color-border-danger);
+      color: var(--sb-color-destructive);
+      background: color-mix(
+        in oklab,
+        var(--sb-color-destructive) 10%,
+        transparent
+      );
+      border-color: var(--sb-color-border-destructive);
     }
   }
 }
