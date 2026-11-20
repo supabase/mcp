@@ -25,7 +25,7 @@ const { app, created, callTool, host } = vi.hoisted(() => {
     region: 'us-east-1',
   };
   return {
-    app: { openLink: vi.fn(() => Promise.resolve({})) },
+    app: { openLink: vi.fn((_: { url: string }) => Promise.resolve({})) },
     created,
     callTool: vi.fn(),
     /** What the host has handed the view; each test starts from a delivered result. */
@@ -39,32 +39,27 @@ const { app, created, callTool, host } = vi.hoisted(() => {
   };
 });
 
-vi.mock('../../shared/call-tool', () => ({ callTool }));
-vi.mock('../../shared/use-mcp-view', async (importOriginal) => {
-  const { mcpViewHelpers } =
-    await importOriginal<typeof import('../../shared/use-mcp-view')>();
-  return {
-    useMcpView: () => {
-      const view = {
-        app,
-        input: host.input,
-        hostCapabilities: { serverTools: {}, openLinks: {} },
-        dashboardUrl: 'https://supabase.green/dashboard',
-      };
-      return {
-        toolCall: host.toolCall,
-        hostContext: undefined,
-        ...view,
-        ...mcpViewHelpers(view as never),
-      };
+vi.mock('../../shared/use-mcp-view', () => ({
+  useMcpView: () => ({
+    toolCall: host.toolCall,
+    hostContext: undefined,
+    app,
+    input: host.input,
+    hostCapabilities: { serverTools: {}, openLinks: {} },
+    dashboardUrl: 'https://supabase.green/dashboard',
+    callTool,
+    inputText: (key: string) => {
+      const value = (host.input as Record<string, unknown> | undefined)?.[key];
+      return typeof value === 'string' ? value : undefined;
     },
-  };
-});
+    openLink: (url: string) => void app.openLink({ url }),
+  }),
+}));
 
 /** `get_project` returns these statuses in turn (an Error rejects); the last repeats. */
 function projectReads(...reads: (string | Error)[]) {
   let call = 0;
-  callTool.mockImplementation(async (_app: unknown, name: string) => {
+  callTool.mockImplementation(async (name: string) => {
     if (name === 'get_organization') {
       if (organizationFails) throw new Error('Organization not found');
       return { name: 'Hobby' };
@@ -238,11 +233,7 @@ describe('CreateProject', () => {
     expect(view.badge()).toBe('Failed');
     expect(view.note()).toBe('Project limit reached for this organization');
     expect(view.dashboardLink()).toBeNull();
-    expect(callTool).not.toHaveBeenCalledWith(
-      expect.anything(),
-      'get_project',
-      expect.anything()
-    );
+    expect(callTool).not.toHaveBeenCalledWith('get_project', expect.anything());
   });
 
   it("stops checking at a status that won't change by itself", async () => {
@@ -253,14 +244,14 @@ describe('CreateProject', () => {
     await advance(POLL_INTERVAL_MS);
     expect(view.badge()).toBe('Paused');
     const reads = callTool.mock.calls.filter(
-      ([, name]) => name === 'get_project'
+      ([name]) => name === 'get_project'
     );
     expect(reads).toHaveLength(2);
 
     await advance(POLL_INTERVAL_MS * 3);
     expect(view.badge()).toBe('Paused');
     expect(
-      callTool.mock.calls.filter(([, name]) => name === 'get_project')
+      callTool.mock.calls.filter(([name]) => name === 'get_project')
     ).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });

@@ -1,5 +1,4 @@
 import type { Project } from '@supabase/mcp-server-supabase/platform';
-import { callTool } from '../../shared/call-tool';
 import { cardName, ProjectCard } from '../../shared/ProjectCard';
 import { ConnectionDetails } from '../../shared/ConnectionDetails';
 import { useCreationStatus } from '../../shared/use-creation-status';
@@ -13,9 +12,8 @@ import { creation } from './status';
  * it's on (see `status.ts` for how steps map to statuses).
  */
 export function CreateProject() {
-  const view = useMcpView<Project>('supabase-create-project');
-  const { toolCall, app, canCallTools, openLink, inputText, dashboardUrl } =
-    view;
+  const { toolCall, callTool, openLink, inputText, dashboardUrl } =
+    useMcpView<Project>('supabase-create-project');
   /** The project's page in the Supabase dashboard (Studio). */
   const studioUrl = (ref: string) =>
     `${dashboardUrl}/project/${encodeURIComponent(ref)}`;
@@ -28,9 +26,9 @@ export function CreateProject() {
   } = useCreationStatus<Project>({
     config: creation,
     toolCall,
-    read: canCallTools
-      ? (created) => callTool<Project>(app!, 'get_project', { id: created.id })
-      : undefined,
+    read:
+      callTool &&
+      ((created) => callTool<Project>('get_project', { id: created.id })),
   });
 
   // The organization's name is a nicety: on failure the card leaves it out.
@@ -39,13 +37,12 @@ export function CreateProject() {
     project?.organization_id ??
     inputText('organization_id');
   const organizationName = useLookup(
-    canCallTools ? organization : undefined,
+    callTool ? organization : undefined,
     async () => {
-      const { name } = await callTool<{ name: string }>(
-        app!,
-        'get_organization',
-        { id: organization }
-      );
+      if (!callTool) return undefined;
+      const { name } = await callTool<{ name: string }>('get_organization', {
+        id: organization,
+      });
       return name;
     }
   );
@@ -85,10 +82,10 @@ export function CreateProject() {
     >
       {isDone && project && (
         <ConnectionDetails
-          view={view}
+          callTool={callTool}
+          openLink={openLink}
           projectRef={project.ref}
           projectUrl={studioUrl(project.ref)}
-          canReachProject={canCallTools}
         />
       )}
     </ProjectCard>

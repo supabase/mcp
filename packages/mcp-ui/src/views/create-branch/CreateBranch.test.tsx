@@ -5,7 +5,7 @@ import { POLL_INTERVAL_MS } from '../../shared/use-creation-status';
 import { CreateBranch } from './CreateBranch';
 
 const { app, created, callTool, host } = vi.hoisted(() => ({
-  app: { openLink: () => Promise.resolve({}) },
+  app: { openLink: (_: { url: string }) => Promise.resolve({}) },
   created: {
     id: 'branch-id',
     name: 'feature-login',
@@ -23,27 +23,22 @@ const { app, created, callTool, host } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../../shared/call-tool', () => ({ callTool }));
-vi.mock('../../shared/use-mcp-view', async (importOriginal) => {
-  const { mcpViewHelpers } =
-    await importOriginal<typeof import('../../shared/use-mcp-view')>();
-  return {
-    useMcpView: () => {
-      const view = {
-        app,
-        input: host.input,
-        hostCapabilities: { serverTools: {}, openLinks: {} },
-        dashboardUrl: 'https://supabase.com/dashboard',
-      };
-      return {
-        toolCall: { status: 'ready', data: created },
-        hostContext: undefined,
-        ...view,
-        ...mcpViewHelpers(view as never),
-      };
+vi.mock('../../shared/use-mcp-view', () => ({
+  useMcpView: () => ({
+    toolCall: { status: 'ready', data: created },
+    hostContext: undefined,
+    app,
+    input: host.input,
+    hostCapabilities: { serverTools: {}, openLinks: {} },
+    dashboardUrl: 'https://supabase.com/dashboard',
+    callTool,
+    inputText: (key: string) => {
+      const value = (host.input as Record<string, unknown> | undefined)?.[key];
+      return typeof value === 'string' ? value : undefined;
     },
-  };
-});
+    openLink: (url: string) => void app.openLink({ url }),
+  }),
+}));
 
 /**
  * `list_branches` returns the branch with these statuses in turn; the last
@@ -54,7 +49,7 @@ function branchReads(
   fail: { project?: boolean; organization?: boolean } = {}
 ) {
   let call = 0;
-  callTool.mockImplementation(async (_app: unknown, name: string) => {
+  callTool.mockImplementation(async (name: string) => {
     if (name === 'get_project') {
       if (fail.project) throw new Error('Unknown tool: get_project');
       return { name: 'Design check', organization_slug: 'hobby' };
@@ -135,11 +130,7 @@ describe('CreateBranch', () => {
     await advance(0);
 
     expect(view.breadcrumbs()).toBeUndefined();
-    expect(callTool).not.toHaveBeenCalledWith(
-      expect.anything(),
-      'get_project',
-      expect.anything()
-    );
+    expect(callTool).not.toHaveBeenCalledWith('get_project', expect.anything());
   });
 
   it('names the step while the branch sets up, then shows Active', async () => {

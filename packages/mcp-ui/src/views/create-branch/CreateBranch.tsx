@@ -1,5 +1,4 @@
 import type { Branch, Project } from '@supabase/mcp-server-supabase/platform';
-import { callTool } from '../../shared/call-tool';
 import { cardName, ProjectCard } from '../../shared/ProjectCard';
 import { ConnectionDetails } from '../../shared/ConnectionDetails';
 import { useCreationStatus } from '../../shared/use-creation-status';
@@ -13,22 +12,15 @@ import { creation } from './status';
  * branch sets up, the badge names the step it's on (see `status.ts`).
  */
 export function CreateBranch() {
-  const view = useMcpView<Branch>('supabase-create-branch');
-  const {
-    toolCall,
-    app,
-    input,
-    canCallTools,
-    openLink,
-    inputText,
-    dashboardUrl,
-  } = view;
+  const { toolCall, input, callTool, openLink, inputText, dashboardUrl } =
+    useMcpView<Branch>('supabase-create-branch');
   /** The branch's page in the Supabase dashboard (Studio). */
   const studioUrl = (ref: string) =>
     `${dashboardUrl}/project/${encodeURIComponent(ref)}`;
   // A server scoped to the parent project takes no `project_id`, and rejects
   // calls for any other project, the branch's own included.
   const serverScoped = input !== undefined && input.project_id === undefined;
+  const projectTools = serverScoped ? undefined : callTool;
 
   const {
     data: branch,
@@ -40,10 +32,9 @@ export function CreateBranch() {
     toolCall,
     // Reading the branch depends on the arguments (whether the server is scoped).
     read:
-      canCallTools && input
+      callTool && input
         ? async (created) => {
             const { branches } = await callTool<{ branches: Branch[] }>(
-              app!,
               'list_branches',
               serverScoped ? {} : { project_id: created.parent_project_ref }
             );
@@ -59,13 +50,13 @@ export function CreateBranch() {
   // asked: the call would only fail, and count as a tool error.
   const parentRef = branch?.parent_project_ref ?? inputText('project_id');
   const breadcrumbs = useLookup(
-    canCallTools && !serverScoped ? parentRef : undefined,
+    projectTools ? parentRef : undefined,
     async () => {
-      const parent = await callTool<Project>(app!, 'get_project', {
+      if (!projectTools) return undefined;
+      const parent = await projectTools<Project>('get_project', {
         id: parentRef,
       });
-      const organization = await callTool<{ name: string }>(
-        app!,
+      const organization = await projectTools<{ name: string }>(
         'get_organization',
         { id: parent.organization_slug ?? parent.organization_id }
       ).catch(() => undefined);
@@ -98,10 +89,10 @@ export function CreateBranch() {
     >
       {isDone && branch && (
         <ConnectionDetails
-          view={view}
+          callTool={projectTools}
+          openLink={openLink}
           projectRef={branch.project_ref}
           projectUrl={studioUrl(branch.project_ref)}
-          canReachProject={canCallTools && !serverScoped}
         />
       )}
     </ProjectCard>

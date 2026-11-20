@@ -5,6 +5,7 @@ import type {
 } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { useEffect, useState } from 'react';
+import { callTool as callServerTool, type CallTool } from './call-tool';
 import { parseToolError, parseToolResult } from './tool-result';
 import { useHostStyles } from './use-host-styles';
 
@@ -15,20 +16,7 @@ export type ToolCallState<T> =
   /** The tool call returned an error, or the view couldn't read its result. */
   | { status: 'error'; message: string };
 
-/** What a view derives from its connection and tool input. */
-export type McpViewHelpers = {
-  /** Whether the host can proxy tool calls, so the view can read and fetch. */
-  canCallTools: boolean;
-  /** A string argument of the tool call, if sent and a string. */
-  inputText: (key: string) => string | undefined;
-  /**
-   * Asks the host to open a link; undefined when the host can't open links
-   * (a sandboxed view can't open them itself).
-   */
-  openLink: ((url: string) => void) | undefined;
-};
-
-export type McpView<T> = McpViewHelpers & {
+export type McpView<T> = {
   toolCall: ToolCallState<T>;
   /** The connected app, `null` until the host handshake completes. */
   app: App | null;
@@ -39,34 +27,25 @@ export type McpView<T> = McpViewHelpers & {
   hostCapabilities: McpUiHostCapabilities;
   /** Dashboard base URL the server links to, from the tool result's `_meta`. */
   dashboardUrl: string;
+  /**
+   * Calls a tool on the originating server; undefined until the app is
+   * connected, and when the host can't proxy tool calls.
+   */
+  callTool: CallTool | undefined;
+  /** A string argument of the tool call, if sent and a string. */
+  inputText: (key: string) => string | undefined;
+  /**
+   * Asks the host to open a link; undefined when the host can't open links
+   * (a sandboxed view can't open them itself).
+   */
+  openLink: ((url: string) => void) | undefined;
 };
-
-export function mcpViewHelpers({
-  app,
-  input,
-  hostCapabilities,
-}: Pick<
-  McpView<unknown>,
-  'app' | 'input' | 'hostCapabilities'
->): McpViewHelpers {
-  return {
-    canCallTools: !!app && !!hostCapabilities.serverTools,
-    inputText: (key) => {
-      const value = input?.[key];
-      return typeof value === 'string' ? value : undefined;
-    },
-    openLink:
-      app && hostCapabilities.openLinks
-        ? (url) => void app.openLink({ url })
-        : undefined,
-  };
-}
 
 /**
  * Connects a view to its host. Returns the state of the tool call the view
  * was opened for (its parsed result once it arrives), the app, the tool input,
- * the host context and capabilities, and helpers built on them (see
- * `McpViewHelpers`). Also applies the host's styles (see `useHostStyles`).
+ * the host context and capabilities, and helpers built on them (`callTool`,
+ * `inputText`, `openLink`). Also applies the host's styles (see `useHostStyles`).
  */
 export function useMcpView<T>(name: string): McpView<T> {
   const [toolCall, setToolCall] = useState<ToolCallState<T>>({
@@ -122,6 +101,17 @@ export function useMcpView<T>(name: string): McpView<T> {
     hostContext,
     hostCapabilities,
     dashboardUrl,
-    ...mcpViewHelpers({ app, input, hostCapabilities }),
+    callTool:
+      app && hostCapabilities.serverTools
+        ? (name, args) => callServerTool(app, name, args)
+        : undefined,
+    inputText: (key) => {
+      const value = input?.[key];
+      return typeof value === 'string' ? value : undefined;
+    },
+    openLink:
+      app && hostCapabilities.openLinks
+        ? (url) => void app.openLink({ url })
+        : undefined,
   };
 }

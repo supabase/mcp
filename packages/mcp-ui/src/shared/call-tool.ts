@@ -1,6 +1,12 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { parseToolError, parseToolResult } from './tool-result';
 
+/** Calls a tool on the originating server and parses its JSON result. */
+export type CallTool = <R>(
+  name: string,
+  args: Record<string, unknown>
+) => Promise<R>;
+
 /**
  * Calls a tool on the originating server and parses its JSON text result.
  * Throws on transport errors and on tool errors (including unknown tools and

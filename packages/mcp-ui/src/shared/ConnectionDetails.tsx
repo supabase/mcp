@@ -2,11 +2,10 @@ import './button.css';
 import './connection-details.css';
 import type { MouseEvent, SyntheticEvent } from 'react';
 import { type Politeness, useAnnounce } from './Announcer';
-import { callTool } from './call-tool';
+import type { CallTool } from './call-tool';
 import { CopyField } from './CopyField';
 import { ChevronIcon, ExternalLinkIcon, SpinnerIcon } from './icons';
 import { Message } from './Message';
-import type { McpView } from './use-mcp-view';
 import { type Transition, useMachine } from './use-machine';
 
 type Key = {
@@ -34,12 +33,12 @@ type Connection =
   | { status: 'dashboard' };
 
 type ConnectionEvent =
-  /** `canFetch` false skips the fetch, which would only fail. */
-  | { type: 'request'; canFetch: boolean }
+  /** Without `callTool` there's nothing to fetch with, so skip the fetch. */
+  | { type: 'request'; callTool: CallTool | undefined }
   | { type: 'loaded'; url: string; key: string }
   | { type: 'unavailable' };
 
-type ConnectionEffect = { type: 'fetchDetails' } | Announce;
+type ConnectionEffect = { type: 'fetchDetails'; callTool: CallTool } | Announce;
 
 const DASHBOARD_ANNOUNCEMENT: Announce = {
   type: 'announce',
@@ -54,8 +53,11 @@ const connectionTransition: Transition<
   switch (event.type) {
     case 'request':
       if (state.status !== 'idle') return null;
-      return event.canFetch
-        ? { state: { status: 'loading' }, effects: [{ type: 'fetchDetails' }] }
+      return event.callTool
+        ? {
+            state: { status: 'loading' },
+            effects: [{ type: 'fetchDetails', callTool: event.callTool }],
+          }
         : { state: { status: 'dashboard' }, effects: [DASHBOARD_ANNOUNCEMENT] };
     // Results only land on a request that is still in flight.
     case 'loaded':
@@ -89,32 +91,31 @@ function pickKey(keys: Key[]): string | undefined {
  * details. UI-only: nothing here is sent to the model's context.
  *
  * Calls always pass `projectRef` as `project_id`. A server scoped to another
- * project (e.g. a branch's parent) would reject it, so callers pass
- * `canReachProject` false then.
+ * project (e.g. a branch's parent) would reject it, so callers pass no
+ * `callTool` then.
  */
 export function ConnectionDetails({
-  view,
+  callTool,
+  openLink,
   projectRef,
   projectUrl,
-  canReachProject = true,
 }: {
   /**
-   * The view's connection: its app for tool calls, and opening links. A host
-   * that can't open links gets the Studio link to copy instead, since a
-   * sandboxed view can't open them itself.
+   * Calls a tool that can reach this project. Undefined when none can: the
+   * server is scoped to another project, or the host can't proxy tool calls.
+   * Connection details then go straight to the dashboard link.
    */
-  view: Pick<McpView<unknown>, 'app' | 'openLink'>;
+  callTool: CallTool | undefined;
+  /**
+   * Asks the host to open a link. A host that can't open links gets the
+   * Studio link to copy instead, since a sandboxed view can't open them
+   * itself.
+   */
+  openLink: ((url: string) => void) | undefined;
   projectRef: string;
   /** The project's page in the Supabase dashboard (Studio), as the view links to it. */
   projectUrl: string;
-  /**
-   * False when no tool call can reach this project: the server is scoped to
-   * another project, or the host can't proxy tool calls. Connection details
-   * then go straight to the dashboard link.
-   */
-  canReachProject?: boolean;
 }) {
-  const { openLink } = view;
   const announce = useAnnounce();
   const connectUrl = `${projectUrl}?showConnect=true`;
 
@@ -127,13 +128,12 @@ export function ConnectionDetails({
           announce(effect.message, effect.politeness);
           return;
         case 'fetchDetails': {
-          // Only requested when `canReachProject`, which needs a connected app.
-          const app = view.app!;
+          const { callTool } = effect;
           Promise.all([
-            callTool<{ url: string }>(app, 'get_project_url', {
+            callTool<{ url: string }>('get_project_url', {
               project_id: projectRef,
             }),
-            callTool<{ keys: Key[] }>(app, 'get_publishable_keys', {
+            callTool<{ keys: Key[] }>('get_publishable_keys', {
               project_id: projectRef,
             }),
           ])
@@ -161,7 +161,7 @@ export function ConnectionDetails({
   // left `idle`, so re-opening never refetches.
   function onToggle(event: SyntheticEvent<HTMLDetailsElement>) {
     if (event.currentTarget.open) {
-      sendConnection({ type: 'request', canFetch: canReachProject });
+      sendConnection({ type: 'request', callTool });
     }
   }
 
