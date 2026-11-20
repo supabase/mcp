@@ -163,6 +163,136 @@ export function checkingTransition<T>(
   }
 }
 
+type Described = {
+  badge?: ProjectCardBadge;
+  note?: ProjectCardNote;
+  /**
+   * What screen readers hear when it changes; danger notes are announced
+   * assertively on their own.
+   */
+  announcement: string;
+};
+
+/**
+ * How the card shows a tool call and the checking of what it created: the
+ * status badge, a note for a problem or for why the status won't update, and
+ * what to announce. `data` is the latest read (see `useCreationStatus`).
+ */
+export function describeCreation<T extends { status: string }>({
+  noun,
+  toolCall,
+  checking,
+  canPollInitial,
+  labels,
+  progress,
+  checkWith,
+}: {
+  noun: string;
+  toolCall: ToolCallState<T>;
+  checking: Checking<T>;
+  canPollInitial: boolean;
+  labels: string[];
+  progress: (status: T['status']) => Progress;
+  checkWith: string;
+}): Described {
+  switch (toolCall.status) {
+    // No tool result yet (the host may still be asking the user to confirm):
+    // the card shows the call's arguments, if sent, and skeletons for the rest.
+    case 'loading':
+      return { announcement: `Loading ${noun}` };
+    case 'error':
+      return {
+        badge: { label: 'Failed', tone: 'danger' },
+        note: { tone: 'danger', text: toolCall.message },
+        announcement: 'Failed',
+      };
+    case 'cancelled':
+      return {
+        badge: { label: 'Cancelled' },
+        note: toolCall.reason
+          ? { tone: 'muted', text: toolCall.reason }
+          : undefined,
+        announcement: 'Cancelled',
+      };
+    case 'ready':
+      break;
+  }
+
+  const data = dataOf(checking) ?? toolCall.data;
+  const current = progress(data.status);
+  const stopReason =
+    checking.status === 'stopped' || checking.status === 'retrying'
+      ? checking.reason
+      : undefined;
+  const isFollowing = checking.status === 'following';
+
+  if (stopReason?.type === 'error') {
+    // A failed check replaces the status: the last one read may no longer be true.
+    return {
+      badge: {
+        label: 'Check failed',
+        tone: 'danger',
+        title: `Failed to check status: ${stopReason.message}`,
+      },
+      note: {
+        tone: 'danger',
+        text: `Can't check status: ${stopReason.message}.`,
+      },
+      announcement: 'Check failed',
+    };
+  }
+
+  let badge: ProjectCardBadge;
+  let note: ProjectCardNote | undefined;
+  let announcement: string;
+  let isChanging = false;
+  switch (current.state) {
+    case 'done':
+      badge = { label: 'Active', tone: 'success' };
+      announcement = 'Active';
+      break;
+    case 'failed':
+      badge = { label: 'Failed', tone: 'danger' };
+      note = {
+        tone: 'danger',
+        text: `Failed while ${labels[current.step]!.toLowerCase()} (${data.status}).`,
+      };
+      announcement = 'Failed';
+      break;
+    case 'step': {
+      // Neutral, with the spinner saying it's in progress: hosts' warning
+      // colours vary (Codex's is orange-red) and read as a problem.
+      const label = labels[current.step]!;
+      badge = { label, isSpinning: isFollowing };
+      announcement = `${label}, step ${current.step + 1} of ${labels.length}`;
+      isChanging = true;
+      break;
+    }
+    case 'other':
+      badge = {
+        label: current.label,
+        tone: current.tone,
+        isSpinning: current.isChanging && isFollowing,
+      };
+      announcement = current.label;
+      isChanging = current.isChanging;
+      break;
+  }
+
+  if (!note) {
+    if (stopReason?.type === 'timeout') {
+      note = { tone: 'muted', text: 'Stopped checking after 10 minutes.' };
+    } else if (!canPollInitial && isChanging) {
+      note = {
+        tone: 'muted',
+        text: `Status won't update here. Ask the assistant to check with ${checkWith}.`,
+      };
+    }
+  }
+
+  return { badge, note, announcement };
+}
+
 /**
  * Follows what a tool call created (a project, a branch) until it's ready,
  * and says how `ProjectCard` should show it: the status badge, a note for a
@@ -245,85 +375,16 @@ export function useCreationStatus<T extends { status: string }>({
 
   const data = dataOf(checking) ?? created;
   const isRetrying = checking.status === 'retrying';
-  const stopReason =
-    checking.status === 'stopped' || checking.status === 'retrying'
-      ? checking.reason
-      : undefined;
 
-  const current = data ? progress(data.status) : undefined;
-  const isFollowing = checking.status === 'following';
-  const isChanging =
-    current?.state === 'step' ||
-    (current?.state === 'other' && current.isChanging);
-
-  const checkError =
-    stopReason?.type === 'error' ? stopReason.message : undefined;
-
-  // No tool result yet (the host may still be asking the user to confirm): the
-  // card shows the call's arguments, if sent, and skeletons for the rest.
-  const isLoading = toolCall.status === 'loading';
-
-  let badge: ProjectCardBadge | undefined;
-  let note: ProjectCardNote | undefined;
-  // What screen readers hear when it changes; danger notes are announced
-  // assertively on their own.
-  let announcement: string;
-  if (isLoading) {
-    announcement = `Loading ${noun}`;
-  } else if (toolCall.status === 'error') {
-    badge = { label: 'Failed', tone: 'danger' };
-    note = { tone: 'danger', text: toolCall.message };
-    announcement = 'Failed';
-  } else if (toolCall.status === 'cancelled') {
-    badge = { label: 'Cancelled' };
-    note = toolCall.reason
-      ? { tone: 'muted', text: toolCall.reason }
-      : undefined;
-    announcement = 'Cancelled';
-  } else if (checkError) {
-    // A failed check replaces the status: the last one read may no longer be true.
-    badge = {
-      label: 'Check failed',
-      tone: 'danger',
-      title: `Failed to check status: ${checkError}`,
-    };
-    note = { tone: 'danger', text: `Can't check status: ${checkError}.` };
-    announcement = 'Check failed';
-  } else if (current?.state === 'done') {
-    badge = { label: 'Active', tone: 'success' };
-    announcement = 'Active';
-  } else if (current?.state === 'failed') {
-    badge = { label: 'Failed', tone: 'danger' };
-    note = {
-      tone: 'danger',
-      text: `Failed while ${labels[current.step]!.toLowerCase()} (${data!.status}).`,
-    };
-    announcement = 'Failed';
-  } else if (current?.state === 'step') {
-    // Neutral, with the spinner saying it's in progress: hosts' warning
-    // colours vary (Codex's is orange-red) and read as a problem.
-    const label = labels[current.step]!;
-    badge = { label, isSpinning: isFollowing };
-    announcement = `${label}, step ${current.step + 1} of ${labels.length}`;
-  } else {
-    const { label, tone, isChanging } = current as Extract<
-      Progress,
-      { state: 'other' }
-    >;
-    badge = { label, tone, isSpinning: isChanging && isFollowing };
-    announcement = label;
-  }
-
-  if (toolCall.status === 'ready' && !note) {
-    if (stopReason?.type === 'timeout') {
-      note = { tone: 'muted', text: 'Stopped checking after 10 minutes.' };
-    } else if (!canPollInitial && isChanging) {
-      note = {
-        tone: 'muted',
-        text: `Status won't update here. Ask the assistant to check with ${checkWith}.`,
-      };
-    }
-  }
+  const { badge, note, announcement } = describeCreation({
+    noun,
+    toolCall,
+    checking,
+    canPollInitial,
+    labels,
+    progress,
+    checkWith,
+  });
 
   useAnnouncement(
     note?.tone === 'muted' ? `${announcement}. ${note.text}` : announcement
@@ -340,8 +401,8 @@ export function useCreationStatus<T extends { status: string }>({
   return {
     /** The latest read, or what the tool call returned until there is one. */
     data,
-    isLoading,
-    isDone: current?.state === 'done',
+    isLoading: toolCall.status === 'loading',
+    isDone: !!data && progress(data.status).state === 'done',
     badge,
     note,
     onRetry: canRetry ? () => dispatch({ type: 'retry' }) : undefined,

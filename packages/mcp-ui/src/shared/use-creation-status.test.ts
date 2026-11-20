@@ -3,6 +3,8 @@ import {
   type Checking,
   type CheckingEvent,
   checkingTransition,
+  describeCreation,
+  type Progress,
   POLL_INTERVAL_MS,
   POLL_MAX_RETRIES,
   POLL_TIMEOUT_MS,
@@ -157,5 +159,161 @@ describe('checkingTransition', () => {
         reason: { type: 'error', message: 'still down' },
       });
     });
+  });
+});
+
+describe('describeCreation', () => {
+  type Created = { status: string };
+  const labels = ['Creating project', 'Creating', 'Checking health'];
+  const progress = (status: string): Progress => {
+    switch (status) {
+      case 'DONE':
+        return { state: 'done' };
+      case 'BROKEN':
+        return { state: 'failed', step: 1 };
+      case 'STEP':
+        return { state: 'step', step: 1 };
+      case 'PAUSED':
+        return { state: 'other', label: 'Paused', isChanging: false };
+      default:
+        return {
+          state: 'other',
+          label: 'Restarting',
+          tone: 'warning',
+          isChanging: true,
+        };
+    }
+  };
+
+  const describeIt = (
+    over: Partial<Parameters<typeof describeCreation<Created>>[0]> = {}
+  ) =>
+    describeCreation<Created>({
+      noun: 'project',
+      toolCall: { status: 'ready', data: { status: 'STEP' } },
+      checking: { status: 'idle' },
+      canPollInitial: true,
+      labels,
+      progress,
+      checkWith: 'get_project',
+      ...over,
+    });
+  const running = (data?: Created): Checking<Created> => ({
+    status: 'following',
+    data,
+    failures: 0,
+    startedAt: 0,
+    delayMs: 0,
+  });
+
+  it('shows skeletons while the tool call is loading', () => {
+    expect(describeIt({ toolCall: { status: 'loading' } })).toEqual({
+      announcement: 'Loading project',
+    });
+  });
+
+  it('shows a failed tool call with its message', () => {
+    expect(
+      describeIt({ toolCall: { status: 'error', message: 'No quota' } })
+    ).toEqual({
+      badge: { label: 'Failed', tone: 'danger' },
+      note: { tone: 'danger', text: 'No quota' },
+      announcement: 'Failed',
+    });
+  });
+
+  it('shows a cancelled tool call, with its reason if any', () => {
+    expect(describeIt({ toolCall: { status: 'cancelled' } }).note).toBe(
+      undefined
+    );
+    expect(
+      describeIt({ toolCall: { status: 'cancelled', reason: 'Declined' } })
+    ).toEqual({
+      badge: { label: 'Cancelled' },
+      note: { tone: 'muted', text: 'Declined' },
+      announcement: 'Cancelled',
+    });
+  });
+
+  it('names the step, with a spinner only while following', () => {
+    expect(describeIt({ checking: running() })).toEqual({
+      badge: { label: 'Creating', isSpinning: true },
+      note: undefined,
+      announcement: 'Creating, step 2 of 3',
+    });
+    expect(describeIt().badge).toEqual({
+      label: 'Creating',
+      isSpinning: false,
+    });
+  });
+
+  it('prefers the latest read to what the tool call returned', () => {
+    const checking = running({ status: 'DONE' });
+    expect(describeIt({ checking }).badge).toEqual({
+      label: 'Active',
+      tone: 'success',
+    });
+  });
+
+  it('says which step failed, with the status', () => {
+    expect(
+      describeIt({ checking: running({ status: 'BROKEN' }) }).note
+    ).toEqual({ tone: 'danger', text: 'Failed while creating (BROKEN).' });
+  });
+
+  it('shows other statuses with their label and tone', () => {
+    expect(describeIt({ checking: running({ status: 'PAUSED' }) })).toEqual({
+      badge: { label: 'Paused', tone: undefined, isSpinning: false },
+      note: undefined,
+      announcement: 'Paused',
+    });
+    expect(describeIt({ checking: running({ status: 'X' }) }).badge).toEqual({
+      label: 'Restarting',
+      tone: 'warning',
+      isSpinning: true,
+    });
+  });
+
+  it('replaces the status when a check failed', () => {
+    const checking: Checking<Created> = {
+      status: 'stopped',
+      data: { status: 'DONE' },
+      reason: { type: 'error', message: 'down' },
+    };
+    expect(describeIt({ checking })).toEqual({
+      badge: {
+        label: 'Check failed',
+        tone: 'danger',
+        title: 'Failed to check status: down',
+      },
+      note: { tone: 'danger', text: "Can't check status: down." },
+      announcement: 'Check failed',
+    });
+  });
+
+  it('notes a timeout, keeping the status', () => {
+    const checking: Checking<Created> = {
+      status: 'stopped',
+      reason: { type: 'timeout' },
+    };
+    const { badge, note } = describeIt({ checking });
+    expect(badge?.label).toBe('Creating');
+    expect(note).toEqual({
+      tone: 'muted',
+      text: 'Stopped checking after 10 minutes.',
+    });
+  });
+
+  it("says when the status won't update here, only if it is changing", () => {
+    expect(describeIt({ canPollInitial: false }).note).toEqual({
+      tone: 'muted',
+      text: "Status won't update here. Ask the assistant to check with get_project.",
+    });
+    expect(
+      describeIt({
+        canPollInitial: false,
+        toolCall: { status: 'ready', data: { status: 'DONE' } },
+      }).note
+    ).toBeUndefined();
   });
 });
