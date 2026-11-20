@@ -17,9 +17,14 @@
  * above). Host colour variables (`--color-*`) are read only by the host
  * bridge in `base`, and only inside the value of a `--sb-color-*` declaration
  * there (each read carries its fallback inline); everything else reads the
- * `--sb-color-*` tokens. Run with `pnpm lint:css`.
+ * `--sb-color-*` tokens. Every host colour the bridge reads, and every
+ * non-`--sb-` property `base.css` declares (the host variables' fallbacks),
+ * must be a name the MCP Apps spec defines (`McpUiStyleVariableKey` in
+ * ext-apps' schema), so a typo can't leave the host's value unused. Run with
+ * `pnpm lint:css`.
  */
 import { readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { transform } from 'lightningcss';
@@ -29,6 +34,13 @@ import { transform } from 'lightningcss';
  * inside the value of a `--sb-color-*` declaration.
  */
 const HOST_COLOR_PREFIX = '--color-';
+
+/** The style variables a host may send, from the MCP Apps spec. */
+const HOST_VARIABLES = new Set(
+  createRequire(import.meta.url)(
+    '@modelcontextprotocol/ext-apps/schema.json'
+  ).$defs.McpUiStyleVariableKey.anyOf.map((key) => key.const)
+);
 
 /** Studio's colour tokens: only `base.css` may declare these. */
 const SB_COLOR_PREFIX = '--sb-color-';
@@ -303,9 +315,24 @@ for (const { name, at, checks } of parsed) {
   }
 }
 
-/** Where a file may declare a `--sb-*` property. */
+/**
+ * Where a file may declare a `--sb-*` property, and that base's other
+ * properties are host variables.
+ */
 function checkDeclared(prop, { name, at, loc }) {
-  if (!prop.startsWith('--sb-')) return;
+  if (!prop.startsWith('--sb-')) {
+    // In base, anything else is a host variable's fallback.
+    if (
+      name === BASE_FILE &&
+      prop.startsWith('--') &&
+      !HOST_VARIABLES.has(prop)
+    ) {
+      errors.push(
+        `${at(loc)}: \`${prop}\` is not an MCP Apps style variable (McpUiStyleVariableKey); base declares host variables' fallbacks and \`--sb-*\` tokens only`
+      );
+    }
+    return;
+  }
   if (prop.startsWith(SB_COLOR_PREFIX)) {
     if (name !== BASE_FILE) {
       errors.push(
@@ -397,7 +424,11 @@ function checkRead(ref, { layer, ownProps, at, name, loc, declared }) {
   // Host colours: read only by the bridge in base (inside a `--sb-color-*`
   // declaration), with the fallback inline.
   if (prop.startsWith(HOST_COLOR_PREFIX)) {
-    if (layer !== 'base' || !declared?.startsWith(SB_COLOR_PREFIX)) {
+    if (!HOST_VARIABLES.has(prop)) {
+      errors.push(
+        `${at(loc)}: var(${prop}) is not an MCP Apps style variable (McpUiStyleVariableKey), so no host sends it`
+      );
+    } else if (layer !== 'base' || !declared?.startsWith(SB_COLOR_PREFIX)) {
       errors.push(
         `${at(loc)}: var(${prop}) is a host colour; use the \`${SB_COLOR_PREFIX}*\` token the bridge in base maps it to (host colours are read only inside a \`${SB_COLOR_PREFIX}*\` declaration in base)`
       );
