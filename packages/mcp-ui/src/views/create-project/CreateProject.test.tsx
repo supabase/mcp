@@ -270,9 +270,9 @@ describe('CreateProject', () => {
     expect(view.retryBesideBadge()).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    // Retry's read, then the first read of the run it starts (a timer set
-    // while time advances waits 1ms).
-    await advance(1);
+    // Retry's read, then the first read of the run it starts.
+    await advance(0);
+    await advance(0);
     expect(view.badge()).toBe('Creating');
     expect(view.note()).toBeUndefined();
 
@@ -285,7 +285,16 @@ describe('CreateProject', () => {
     projectReads('COMING_UP');
     const view = renderView();
 
-    await advance(POLL_TIMEOUT_MS);
+    // One check per interval: each is scheduled once the last one's result
+    // has rendered.
+    await advance(0);
+    for (
+      let elapsed = 0;
+      elapsed < POLL_TIMEOUT_MS;
+      elapsed += POLL_INTERVAL_MS
+    ) {
+      await advance(POLL_INTERVAL_MS);
+    }
     expect(view.badge()).toBe('Creating');
     expect(view.note()).toBe('Stopped checking after 10 minutes.');
     expect(view.retryBesideBadge()).toBe(true);

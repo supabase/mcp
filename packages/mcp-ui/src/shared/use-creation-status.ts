@@ -1,8 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent, useReducer } from 'react';
 import { useAnnouncement } from './Announcer';
 import type { ProjectCardBadge, ProjectCardNote } from './ProjectCard';
 import type { ToolCallState } from './use-mcp-view';
-import { useMachine } from './use-machine';
 
 export const POLL_INTERVAL_MS = 5000;
 export const POLL_TIMEOUT_MS = 10 * 60 * 1000;
@@ -45,6 +44,8 @@ export type Checking<T> =
       /** Consecutive failed reads. */
       failures: number;
       startedAt: number;
+      /** How long to wait before the next read: none for a run's first. */
+      delayMs: number;
     }
   /** The status is final: done, failed, or one that won't change by itself. */
   | { status: 'settled'; data: T }
@@ -64,9 +65,6 @@ export type CheckingEvent<T> =
   | { type: 'readFailed'; message: string; at: number }
   | { type: 'retry' };
 
-/** Read after `delayMs` (0 for now); cancelled if the view goes away. */
-export type CheckingEffect = { type: 'read'; delayMs: number };
-
 /**
  * Whether checking can stop at this progress: done, failed, or a status that
  * won't move on by itself (paused, say), so reading it again would only show
@@ -84,95 +82,84 @@ const outOfTime = (startedAt: number, at: number) =>
 const dataOf = <T>(state: Checking<T>): T | undefined =>
   state.status === 'idle' ? undefined : state.data;
 
-/** Events that don't fit the current state are dropped (`null`). */
+/**
+ * The next state; an event that doesn't fit the current one (a result when
+ * nothing is being read, say) returns `state` itself, so nothing changes.
+ * Reading is not done here: `useCreationStatus` reads whenever the state is
+ * following or retrying.
+ */
 export function checkingTransition<T>(
   state: Checking<T>,
   event: CheckingEvent<T>
-): { state: Checking<T>; effects?: CheckingEffect[] } | null {
+): Checking<T> {
   switch (event.type) {
     case 'start':
-      if (state.status !== 'idle') return null;
+      if (state.status !== 'idle') return state;
       return {
-        state: { status: 'following', failures: 0, startedAt: event.at },
-        effects: [{ type: 'read', delayMs: 0 }],
+        status: 'following',
+        failures: 0,
+        startedAt: event.at,
+        delayMs: 0,
       };
     case 'read':
       if (state.status === 'following') {
-        if (event.terminal) {
-          return { state: { status: 'settled', data: event.data } };
-        }
+        if (event.terminal) return { status: 'settled', data: event.data };
         if (outOfTime(state.startedAt, event.at)) {
           return {
-            state: {
-              status: 'stopped',
-              data: event.data,
-              reason: { type: 'timeout' },
-            },
+            status: 'stopped',
+            data: event.data,
+            reason: { type: 'timeout' },
           };
         }
         return {
-          state: { ...state, data: event.data, failures: 0 },
-          effects: [{ type: 'read', delayMs: POLL_INTERVAL_MS }],
+          ...state,
+          data: event.data,
+          failures: 0,
+          delayMs: POLL_INTERVAL_MS,
         };
       }
       if (state.status === 'retrying') {
-        if (event.terminal) {
-          return { state: { status: 'settled', data: event.data } };
-        }
+        if (event.terminal) return { status: 'settled', data: event.data };
+        // Like starting: the first read of the new run is immediate.
         return {
-          state: {
-            status: 'following',
-            data: event.data,
-            failures: 0,
-            startedAt: event.at,
-          },
-          // Like starting: the first read of the new run is immediate.
-          effects: [{ type: 'read', delayMs: 0 }],
+          status: 'following',
+          data: event.data,
+          failures: 0,
+          startedAt: event.at,
+          delayMs: 0,
         };
       }
-      return null;
+      return state;
     case 'readFailed':
       if (state.status === 'following') {
         const failures = state.failures + 1;
         if (failures > POLL_MAX_RETRIES) {
           return {
-            state: {
-              status: 'stopped',
-              data: state.data,
-              reason: { type: 'error', message: event.message },
-            },
+            status: 'stopped',
+            data: state.data,
+            reason: { type: 'error', message: event.message },
           };
         }
         if (outOfTime(state.startedAt, event.at)) {
           return {
-            state: {
-              status: 'stopped',
-              data: state.data,
-              reason: { type: 'timeout' },
-            },
+            status: 'stopped',
+            data: state.data,
+            reason: { type: 'timeout' },
           };
         }
-        return {
-          state: { ...state, failures },
-          effects: [{ type: 'read', delayMs: POLL_INTERVAL_MS }],
-        };
+        return { ...state, failures, delayMs: POLL_INTERVAL_MS };
       }
       if (state.status === 'retrying') {
         return {
-          state: {
-            status: 'stopped',
-            data: state.data,
-            reason: { type: 'error', message: event.message },
-          },
+          status: 'stopped',
+          data: state.data,
+          reason: { type: 'error', message: event.message },
         };
       }
-      return null;
+      return state;
     case 'retry':
-      if (state.status !== 'stopped') return null;
-      return {
-        state: { ...state, status: 'retrying' },
-        effects: [{ type: 'read', delayMs: 0 }],
-      };
+      if (state.status !== 'stopped') return state;
+      return { ...state, status: 'retrying' };
   }
 }
 
@@ -210,21 +197,35 @@ export function useCreationStatus<T extends { status: string }>({
 }) {
   const created = toolCall.status === 'ready' ? toolCall.data : undefined;
 
-  const [checking, send] = useMachine(
-    checkingTransition<T>,
-    { status: 'idle' },
-    (effect, send, done) => {
-      const timer = setTimeout(async () => {
-        done();
+  const [checking, dispatch] = useReducer(checkingTransition<T>, {
+    status: 'idle',
+  });
+
+  // Starts once there is a tool result to check and the host can read it.
+  useEffect(() => {
+    if (canPollInitial && created) dispatch({ type: 'start', at: Date.now() });
+  }, [canPollInitial, created]);
+
+  // The latest read, without making `read`, `progress` or `created` (which
+  // change every render) dependencies of the effect below.
+  const readLatest = useEffectEvent(async () => {
+    const next = await read(created!);
+    return { data: next, terminal: isFinal(progress(next.status)) };
+  });
+
+  // Reads whenever the state says to: after its delay when following, at once
+  // for Retry. Each state change starts over, so a result from before it (or
+  // after unmounting) is dropped.
+  useEffect(() => {
+    if (checking.status !== 'following' && checking.status !== 'retrying') {
+      return;
+    }
+    let isLive = true;
+    const timer = setTimeout(
+      async () => {
         let event: CheckingEvent<T>;
         try {
-          const next = await read(created!);
-          event = {
-            type: 'read',
-            data: next,
-            terminal: isFinal(progress(next.status)),
-            at: Date.now(),
-          };
+          event = { type: 'read', ...(await readLatest()), at: Date.now() };
         } catch (error) {
           event = {
             type: 'readFailed',
@@ -232,16 +233,15 @@ export function useCreationStatus<T extends { status: string }>({
             at: Date.now(),
           };
         }
-        send(event);
-      }, effect.delayMs);
-      return () => clearTimeout(timer);
-    }
-  );
-
-  // Starts once there is a tool result to check and the host can read it.
-  useEffect(() => {
-    if (canPollInitial && created) send({ type: 'start', at: Date.now() });
-  }, [canPollInitial, created, send]);
+        if (isLive) dispatch(event);
+      },
+      checking.status === 'following' ? checking.delayMs : 0
+    );
+    return () => {
+      isLive = false;
+      clearTimeout(timer);
+    };
+  }, [checking]);
 
   const data = dataOf(checking) ?? created;
   const isRetrying = checking.status === 'retrying';
@@ -344,7 +344,7 @@ export function useCreationStatus<T extends { status: string }>({
     isDone: current?.state === 'done',
     badge,
     note,
-    onRetry: canRetry ? () => send({ type: 'retry' }) : undefined,
+    onRetry: canRetry ? () => dispatch({ type: 'retry' }) : undefined,
     isRetrying,
   };
 }
