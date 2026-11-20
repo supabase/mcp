@@ -1,6 +1,6 @@
 import './project-card.css';
 import { Fragment, type ReactNode } from 'react';
-import { Badge } from './Badge';
+import { Badge, type Tone } from './Badge';
 import {
   ExternalLinkIcon,
   RefreshIcon,
@@ -10,7 +10,7 @@ import {
 
 export type ProjectCardBadge = {
   label: string;
-  tone?: 'success' | 'warning' | 'danger';
+  tone?: Tone;
   /** Shows a spinner while the view follows a status that is changing. */
   isSpinning?: boolean;
   /** Extra detail on hover. */

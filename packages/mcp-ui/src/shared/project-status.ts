@@ -1,3 +1,5 @@
+import type { Tone } from './Badge';
+
 /**
  * How a project's status reads in a badge, matching Studio's project list
  * (and the project card in the Supabase surfaces): healthy projects read as
@@ -6,7 +8,7 @@
  */
 export type ProjectStatusBadge = {
   label: string;
-  tone?: 'success' | 'warning';
+  tone?: Exclude<Tone, 'danger'>;
 };
 
 const LABELS: Record<string, string> = {

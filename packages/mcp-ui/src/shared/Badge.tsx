@@ -1,6 +1,9 @@
 import './badge.css';
 import type { ReactNode } from 'react';
 
+/** How a badge is coloured; none is neutral. */
+export type Tone = 'success' | 'warning' | 'danger';
+
 /** A small pill label; `tone` colours it for success, warning or danger. */
 export function Badge({
   tone,
@@ -8,7 +11,7 @@ export function Badge({
   icon,
   children,
 }: {
-  tone?: 'success' | 'warning' | 'danger';
+  tone?: Tone;
   /** Extra detail on hover, e.g. why a check failed. */
   title?: string;
   /** Shown before the label, e.g. a spinner. */

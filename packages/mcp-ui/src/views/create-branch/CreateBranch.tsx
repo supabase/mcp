@@ -34,7 +34,7 @@ export function CreateBranch() {
     data: branch,
     isLoading,
     isDone,
-    ...status
+    card,
   } = useCreationStatus<Branch>({
     config: creation,
     toolCall,
@@ -75,8 +75,7 @@ export function CreateBranch() {
 
   return (
     <ProjectCard
-      {...status}
-      isLoading={isLoading}
+      {...card}
       breadcrumbs={breadcrumbs}
       name={cardName({
         created: branch?.name,

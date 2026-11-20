@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useReducer } from 'react';
 import { useAnnouncement } from './Announcer';
+import type { Tone } from './Badge';
 import type { ProjectCardBadge, ProjectCardNote } from './ProjectCard';
 import type { ToolCallState } from './use-mcp-view';
 
@@ -17,7 +18,7 @@ export type Progress =
   | {
       state: 'other';
       label: string;
-      tone?: 'success' | 'warning';
+      tone?: Exclude<Tone, 'danger'>;
       /** Whether it moves on by itself, so the view keeps checking it. */
       isChanging: boolean;
     };
@@ -392,14 +393,20 @@ export function useCreationStatus<T extends { status: string }>({
     canRead &&
     (checking.status === 'stopped' || isRetrying);
 
+  const isLoading = toolCall.status === 'loading';
+
   return {
     /** The latest read, or what the tool call returned until there is one. */
     data,
-    isLoading: toolCall.status === 'loading',
+    isLoading,
     isDone: !!data && config.progress(data.status).state === 'done',
-    badge,
-    note,
-    onRetry: canRetry ? () => dispatch({ type: 'retry' }) : undefined,
-    isRetrying,
+    /** What the status gives `ProjectCard`: spread it in. */
+    card: {
+      isLoading,
+      badge,
+      note,
+      onRetry: canRetry ? () => dispatch({ type: 'retry' }) : undefined,
+      isRetrying,
+    },
   };
 }

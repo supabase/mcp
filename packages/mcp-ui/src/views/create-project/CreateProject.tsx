@@ -24,7 +24,7 @@ export function CreateProject() {
     data: project,
     isLoading,
     isDone,
-    ...status
+    card,
   } = useCreationStatus<Project>({
     config: creation,
     toolCall,
@@ -68,8 +68,7 @@ export function CreateProject() {
 
   return (
     <ProjectCard
-      {...status}
-      isLoading={isLoading}
+      {...card}
       breadcrumbs={organizationName ? [organizationName] : undefined}
       name={cardName({
         created: project?.name,
