@@ -235,6 +235,26 @@ describe('CreateProject', () => {
     );
   });
 
+  it("stops checking at a status that won't change by itself", async () => {
+    projectReads('COMING_UP', 'INACTIVE', 'ACTIVE_HEALTHY');
+    const view = renderView();
+
+    await advance(0);
+    await advance(POLL_INTERVAL_MS);
+    expect(view.badge()).toBe('Paused');
+    const reads = callTool.mock.calls.filter(
+      ([, name]) => name === 'get_project'
+    );
+    expect(reads).toHaveLength(2);
+
+    await advance(POLL_INTERVAL_MS * 3);
+    expect(view.badge()).toBe('Paused');
+    expect(
+      callTool.mock.calls.filter(([, name]) => name === 'get_project')
+    ).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
   it('offers Retry when the checks keep failing, and resumes', async () => {
     const down = new Error('Service temporarily unavailable');
     projectReads(down, down, down, 'COMING_UP', 'COMING_UP', 'ACTIVE_HEALTHY');

@@ -47,7 +47,7 @@ export type Checking<T> =
       failures: number;
       startedAt: number;
     }
-  /** The status is final (done or failed). */
+  /** The status is final: done, failed, or one that won't change by itself. */
   | { status: 'settled'; data: T }
   /** Checking gave up; Retry is offered. */
   | { status: 'stopped'; round: number; data?: T; reason: StopReason }
@@ -56,7 +56,7 @@ export type Checking<T> =
 
 export type CheckingEvent<T> =
   | { type: 'start'; at: number }
-  /** `terminal`: the status read is final (done or failed). */
+  /** `terminal`: the status read is final (see `isFinal`). */
   | { type: 'read'; round: number; data: T; terminal: boolean; at: number }
   | { type: 'readFailed'; round: number; message: string; at: number }
   | { type: 'retry' }
@@ -68,6 +68,16 @@ export type CheckingEffect =
   | { type: 'read'; round: number; delayMs: number }
   /** Read once now, for Retry. */
   | { type: 'readOnce'; round: number };
+
+/**
+ * Whether checking can stop at this progress: done, failed, or a status that
+ * won't move on by itself (paused, say), so reading it again would only show
+ * the same thing.
+ */
+const isFinal = (progress: Progress) =>
+  progress.state === 'done' ||
+  progress.state === 'failed' ||
+  (progress.state === 'other' && !progress.isChanging);
 
 /** The next tick would pass the timeout. */
 const outOfTime = (startedAt: number, at: number) =>
@@ -235,8 +245,7 @@ export function useCreationStatus<T extends { status: string }>({
         let event: CheckingEvent<T>;
         try {
           const next = await read(created!);
-          const { state } = progress(next.status);
-          event = ok(next, state === 'done' || state === 'failed');
+          event = ok(next, isFinal(progress(next.status)));
         } catch (error) {
           event = fail(error instanceof Error ? error.message : String(error));
         }
