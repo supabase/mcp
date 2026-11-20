@@ -40,16 +40,26 @@ const { app, created, callTool, host } = vi.hoisted(() => {
 });
 
 vi.mock('../../shared/call-tool', () => ({ callTool }));
-vi.mock('../../shared/use-mcp-view', () => ({
-  useMcpView: () => ({
-    toolCall: host.toolCall,
-    app,
-    input: host.input,
-    hostContext: undefined,
-    hostCapabilities: { serverTools: {}, openLinks: {} },
-    dashboardUrl: 'https://supabase.green/dashboard',
-  }),
-}));
+vi.mock('../../shared/use-mcp-view', async (importOriginal) => {
+  const { mcpViewHelpers } =
+    await importOriginal<typeof import('../../shared/use-mcp-view')>();
+  return {
+    useMcpView: () => {
+      const view = {
+        app,
+        input: host.input,
+        hostCapabilities: { serverTools: {}, openLinks: {} },
+        dashboardUrl: 'https://supabase.green/dashboard',
+      };
+      return {
+        toolCall: host.toolCall,
+        hostContext: undefined,
+        ...view,
+        ...mcpViewHelpers(view as never),
+      };
+    },
+  };
+});
 
 /** `get_project` returns these statuses in turn (an Error rejects); the last repeats. */
 function projectReads(...reads: (string | Error)[]) {

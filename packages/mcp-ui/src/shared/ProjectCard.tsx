@@ -23,6 +23,27 @@ export type ProjectCardNote = { tone: 'danger' | 'muted'; text: string };
 /** The section is labelled by the project name. */
 const NAME_ID = 'project-card-name';
 
+/**
+ * The name for the card: the created one, else the one asked for in the
+ * tool call's arguments. A call that failed or was cancelled before the host
+ * sent its arguments has nothing more coming, so it gets a generic name
+ * instead of a skeleton.
+ */
+export function cardName({
+  created,
+  requested,
+  isLoading,
+  noun,
+}: {
+  created?: string;
+  requested?: string;
+  isLoading: boolean;
+  /** What is being created: "project" or "branch". */
+  noun: string;
+}) {
+  return created ?? requested ?? (isLoading ? undefined : `New ${noun}`);
+}
+
 /** Stands in for data the card doesn't have yet, in the same place and size. */
 function Skeleton({
   shape = 'text',

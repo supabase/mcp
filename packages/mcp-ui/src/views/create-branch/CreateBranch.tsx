@@ -1,14 +1,11 @@
 import type { Branch, Project } from '@supabase/mcp-server-supabase/platform';
 import { callTool } from '../../shared/call-tool';
-import { ProjectCard } from '../../shared/ProjectCard';
-import { ConnectionDetails, studioUrl } from '../../shared/ConnectionDetails';
+import { cardName, ProjectCard } from '../../shared/ProjectCard';
+import { ConnectionDetails } from '../../shared/ConnectionDetails';
 import { useCreationStatus } from '../../shared/use-creation-status';
 import { useLookup } from '../../shared/use-lookup';
 import { useMcpView } from '../../shared/use-mcp-view';
 import { creation } from './status';
-
-const text = (value: unknown) =>
-  typeof value === 'string' ? value : undefined;
 
 /**
  * View for the `create_branch` tool: the same card as `create_project`, kept
@@ -16,10 +13,19 @@ const text = (value: unknown) =>
  * branch sets up, the badge names the step it's on (see `status.ts`).
  */
 export function CreateBranch() {
-  const { toolCall, app, input, hostCapabilities, dashboardUrl } =
-    useMcpView<Branch>('supabase-create-branch');
-  const canPoll = !!app && !!hostCapabilities.serverTools;
-  const canOpenLinks = !!app && !!hostCapabilities.openLinks;
+  const view = useMcpView<Branch>('supabase-create-branch');
+  const {
+    toolCall,
+    app,
+    input,
+    canCallTools,
+    openLink,
+    inputText,
+    dashboardUrl,
+  } = view;
+  /** The branch's page in the Supabase dashboard (Studio). */
+  const studioUrl = (ref: string) =>
+    `${dashboardUrl}/project/${encodeURIComponent(ref)}`;
   // A server scoped to the parent project takes no `project_id`, and rejects
   // calls for any other project, the branch's own included.
   const serverScoped = input !== undefined && input.project_id === undefined;
@@ -34,7 +40,7 @@ export function CreateBranch() {
     toolCall,
     // Reading the branch depends on the arguments (whether the server is scoped).
     read:
-      canPoll && input
+      canCallTools && input
         ? async (created) => {
             const { branches } = await callTool<{ branches: Branch[] }>(
               app!,
@@ -51,9 +57,9 @@ export function CreateBranch() {
   // Organization and project names are a nicety: if they can't be read, the
   // card leaves them out. A scoped server has no `get_project`, so it isn't
   // asked: the call would only fail, and count as a tool error.
-  const parentRef = branch?.parent_project_ref ?? text(input?.project_id);
+  const parentRef = branch?.parent_project_ref ?? inputText('project_id');
   const breadcrumbs = useLookup(
-    canPoll && !serverScoped ? parentRef : undefined,
+    canCallTools && !serverScoped ? parentRef : undefined,
     async () => {
       const parent = await callTool<Project>(app!, 'get_project', {
         id: parentRef,
@@ -72,13 +78,12 @@ export function CreateBranch() {
       {...status}
       isLoading={isLoading}
       breadcrumbs={breadcrumbs}
-      name={
-        branch?.name ??
-        text(input?.name) ??
-        // A call that failed or was cancelled before the host sent its
-        // arguments: nothing more is coming, so no skeleton.
-        (isLoading ? undefined : 'New branch')
-      }
+      name={cardName({
+        created: branch?.name,
+        requested: inputText('name'),
+        isLoading,
+        noun: 'branch',
+      })}
       details={
         branch
           ? [{ label: 'Branch project ref', value: branch.project_ref }]
@@ -87,21 +92,17 @@ export function CreateBranch() {
             : []
       }
       onOpenDashboard={
-        branch && canOpenLinks
-          ? () =>
-              void app!.openLink({
-                url: studioUrl(dashboardUrl, branch.project_ref),
-              })
+        branch && openLink
+          ? () => openLink(studioUrl(branch.project_ref))
           : undefined
       }
     >
-      {isDone && branch && app && (
+      {isDone && branch && (
         <ConnectionDetails
-          app={app}
+          view={view}
           projectRef={branch.project_ref}
-          dashboardUrl={dashboardUrl}
-          canReachProject={canPoll && !serverScoped}
-          canOpenLinks={canOpenLinks}
+          projectUrl={studioUrl(branch.project_ref)}
+          canReachProject={canCallTools && !serverScoped}
         />
       )}
     </ProjectCard>

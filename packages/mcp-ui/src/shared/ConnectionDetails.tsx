@@ -1,12 +1,12 @@
 import './button.css';
 import './connection-details.css';
-import type { App } from '@modelcontextprotocol/ext-apps';
 import type { MouseEvent, SyntheticEvent } from 'react';
 import { type Politeness, useAnnounce } from './Announcer';
 import { callTool } from './call-tool';
 import { CopyField } from './CopyField';
 import { ChevronIcon, ExternalLinkIcon, SpinnerIcon } from './icons';
 import { Message } from './Message';
+import type { McpView } from './use-mcp-view';
 import { type Transition, useMachine } from './use-machine';
 
 type Key = {
@@ -84,10 +84,6 @@ function pickKey(keys: Key[]): string | undefined {
   )?.api_key;
 }
 
-/** The project's page in the Supabase dashboard (Studio) the server links to. */
-export const studioUrl = (dashboardUrl: string, projectRef: string) =>
-  `${dashboardUrl}/project/${encodeURIComponent(projectRef)}`;
-
 /**
  * For a project that is ready: a collapsible disclosure with its connection
  * details. UI-only: nothing here is sent to the model's context.
@@ -97,30 +93,29 @@ export const studioUrl = (dashboardUrl: string, projectRef: string) =>
  * `canReachProject` false then.
  */
 export function ConnectionDetails({
-  app,
+  view,
   projectRef,
-  dashboardUrl,
+  projectUrl,
   canReachProject = true,
-  canOpenLinks = true,
 }: {
-  app: App;
+  /**
+   * The view's connection: its app for tool calls, and opening links. A host
+   * that can't open links gets the Studio link to copy instead, since a
+   * sandboxed view can't open them itself.
+   */
+  view: Pick<McpView<unknown>, 'app' | 'openLink'>;
   projectRef: string;
-  /** Dashboard base URL from the tool result (see `useMcpView`). */
-  dashboardUrl: string;
+  /** The project's page in the Supabase dashboard (Studio), as the view links to it. */
+  projectUrl: string;
   /**
    * False when no tool call can reach this project: the server is scoped to
    * another project, or the host can't proxy tool calls. Connection details
    * then go straight to the dashboard link.
    */
   canReachProject?: boolean;
-  /**
-   * False when the host can't open links. A sandboxed view can't open them
-   * itself, so connection details offer the Studio link to copy instead.
-   */
-  canOpenLinks?: boolean;
 }) {
+  const { openLink } = view;
   const announce = useAnnounce();
-  const projectUrl = studioUrl(dashboardUrl, projectRef);
   const connectUrl = `${projectUrl}?showConnect=true`;
 
   const [connection, sendConnection] = useMachine(
@@ -131,7 +126,9 @@ export function ConnectionDetails({
         case 'announce':
           announce(effect.message, effect.politeness);
           return;
-        case 'fetchDetails':
+        case 'fetchDetails': {
+          // Only requested when `canReachProject`, which needs a connected app.
+          const app = view.app!;
           Promise.all([
             callTool<{ url: string }>(app, 'get_project_url', {
               project_id: projectRef,
@@ -148,15 +145,16 @@ export function ConnectionDetails({
             })
             .catch(() => send({ type: 'unavailable' }));
           return;
+        }
       }
     }
   );
 
   // Sandboxed views can't navigate, so the host opens the link. `href` keeps
   // it a real link for assistive tech, copying and middle-click.
-  function openLink(event: MouseEvent<HTMLAnchorElement>) {
+  function onLinkClick(event: MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
-    void app.openLink({ url: event.currentTarget.href });
+    openLink?.(event.currentTarget.href);
   }
 
   // Only opening requests details; the machine ignores requests once it has
@@ -181,8 +179,12 @@ export function ConnectionDetails({
           </div>
         )}
         {connection.status === 'dashboard' &&
-          (canOpenLinks ? (
-            <a data-slot="dashboard-link" href={connectUrl} onClick={openLink}>
+          (openLink ? (
+            <a
+              data-slot="dashboard-link"
+              href={connectUrl}
+              onClick={onLinkClick}
+            >
               Open in Studio
               <ExternalLinkIcon />
             </a>
@@ -193,9 +195,7 @@ export function ConnectionDetails({
           <>
             <CopyField label="Project URL" value={connection.url} />
             <CopyField label="Publishable key" value={connection.key} />
-            {!canOpenLinks && (
-              <CopyField label="Studio link" value={projectUrl} />
-            )}
+            {!openLink && <CopyField label="Studio link" value={projectUrl} />}
           </>
         )}
       </div>

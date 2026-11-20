@@ -24,16 +24,26 @@ const { app, created, callTool, host } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../shared/call-tool', () => ({ callTool }));
-vi.mock('../../shared/use-mcp-view', () => ({
-  useMcpView: () => ({
-    toolCall: { status: 'ready', data: created },
-    app,
-    input: host.input,
-    hostContext: undefined,
-    hostCapabilities: { serverTools: {}, openLinks: {} },
-    dashboardUrl: 'https://supabase.com/dashboard',
-  }),
-}));
+vi.mock('../../shared/use-mcp-view', async (importOriginal) => {
+  const { mcpViewHelpers } =
+    await importOriginal<typeof import('../../shared/use-mcp-view')>();
+  return {
+    useMcpView: () => {
+      const view = {
+        app,
+        input: host.input,
+        hostCapabilities: { serverTools: {}, openLinks: {} },
+        dashboardUrl: 'https://supabase.com/dashboard',
+      };
+      return {
+        toolCall: { status: 'ready', data: created },
+        hostContext: undefined,
+        ...view,
+        ...mcpViewHelpers(view as never),
+      };
+    },
+  };
+});
 
 /**
  * `list_branches` returns the branch with these statuses in turn; the last
