@@ -55,12 +55,18 @@ vi.mock('../../shared/use-mcp-view', () => ({
 function projectReads(...reads: (string | Error)[]) {
   let call = 0;
   callTool.mockImplementation(async (_app: unknown, name: string) => {
-    if (name === 'get_organization') return { name: 'Hobby' };
+    if (name === 'get_organization') {
+      if (organizationFails) throw new Error('Organization not found');
+      return { name: 'Hobby' };
+    }
     const read = reads[Math.min(call++, reads.length - 1)]!;
     if (read instanceof Error) throw read;
     return { ...created, status: read };
   });
 }
+
+/** Makes `get_organization` reject, for the breadcrumb lookup. */
+let organizationFails = false;
 
 const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 
@@ -101,6 +107,7 @@ beforeEach(() => {
   callTool.mockReset();
   host.toolCall = { status: 'ready', data: created };
   host.input = undefined;
+  organizationFails = false;
 });
 afterEach(() => {
   cleanup();
@@ -123,6 +130,16 @@ describe('CreateProject', () => {
     expect(view.skeletons('pill')).toBe(1);
     expect(view.skeletons('square')).toBe(1);
     expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it("leaves the organization out when it can't be read", async () => {
+    organizationFails = true;
+    projectReads('COMING_UP');
+    const view = renderView();
+    await advance(0);
+
+    expect(view.breadcrumbs()).toBeUndefined();
+    expect(view.badge()).toBe('Creating');
   });
 
   it('fills in what the arguments tell it while waiting for the result', async () => {

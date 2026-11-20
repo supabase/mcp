@@ -49,20 +49,24 @@ export function CreateBranch() {
     checkWith: 'list_branches',
   });
 
-  // Organization and project names are a nicety: if they can't be read (a
-  // scoped server has no `get_project`, say), the card leaves them out.
+  // Organization and project names are a nicety: if they can't be read, the
+  // card leaves them out. A scoped server has no `get_project`, so it isn't
+  // asked: the call would only fail, and count as a tool error.
   const parentRef = branch?.parent_project_ref ?? text(input?.project_id);
-  const breadcrumbs = useLookup(canPoll ? parentRef : undefined, async () => {
-    const parent = await callTool<Project>(app!, 'get_project', {
-      id: parentRef,
-    });
-    const organization = await callTool<{ name: string }>(
-      app!,
-      'get_organization',
-      { id: parent.organization_slug ?? parent.organization_id }
-    ).catch(() => undefined);
-    return organization ? [organization.name, parent.name] : [parent.name];
-  });
+  const breadcrumbs = useLookup(
+    canPoll && !serverScoped ? parentRef : undefined,
+    async () => {
+      const parent = await callTool<Project>(app!, 'get_project', {
+        id: parentRef,
+      });
+      const organization = await callTool<{ name: string }>(
+        app!,
+        'get_organization',
+        { id: parent.organization_slug ?? parent.organization_id }
+      ).catch(() => undefined);
+      return organization ? [organization.name, parent.name] : [parent.name];
+    }
+  );
 
   return (
     <ProjectCard
