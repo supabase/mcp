@@ -16,7 +16,6 @@ const following = (
 ) =>
   ({
     status: 'following',
-    round: 1,
     failures: 0,
     startedAt: 0,
     ...over,
@@ -28,15 +27,13 @@ const read = (
   over: Partial<Extract<CheckingEvent<Data>, { type: 'read' }>> = {}
 ): CheckingEvent<Data> => ({
   type: 'read',
-  round: 1,
   data,
   terminal: false,
   at,
   ...over,
 });
-const failed = (at = 0, round = 1): CheckingEvent<Data> => ({
+const failed = (at = 0): CheckingEvent<Data> => ({
   type: 'readFailed',
-  round,
   message: 'down',
   at,
 });
@@ -49,7 +46,7 @@ describe('checkingTransition', () => {
     const next = step({ status: 'idle' }, { type: 'start', at: 5 });
     expect(next).toEqual({
       state: following({ startedAt: 5 }),
-      effects: [{ type: 'read', round: 1, delayMs: 0 }],
+      effects: [{ type: 'read', delayMs: 0 }],
     });
     expect(step(next!.state, { type: 'start', at: 6 })).toBeNull();
   });
@@ -57,7 +54,7 @@ describe('checkingTransition', () => {
   it('keeps the latest data and reads again after the interval', () => {
     expect(step(following(), read(1))).toEqual({
       state: following({ data: 1 }),
-      effects: [{ type: 'read', round: 1, delayMs: POLL_INTERVAL_MS }],
+      effects: [{ type: 'read', delayMs: POLL_INTERVAL_MS }],
     });
   });
 
@@ -74,7 +71,7 @@ describe('checkingTransition', () => {
     for (let i = 1; i <= POLL_MAX_RETRIES; i++) {
       const next = step(state, failed());
       expect(next?.effects).toEqual([
-        { type: 'read', round: 1, delayMs: POLL_INTERVAL_MS },
+        { type: 'read', delayMs: POLL_INTERVAL_MS },
       ]);
       state = next!.state;
       expect(state).toMatchObject({
@@ -97,7 +94,6 @@ describe('checkingTransition', () => {
     expect(next).toEqual({
       state: {
         status: 'stopped',
-        round: 1,
         data: 1,
         reason: { type: 'error', message: 'down' },
       },
@@ -111,7 +107,6 @@ describe('checkingTransition', () => {
     );
     const stopped = {
       status: 'stopped',
-      round: 1,
       data: 1,
       reason: { type: 'timeout' },
     };
@@ -131,16 +126,14 @@ describe('checkingTransition', () => {
     ).toBe('settled');
   });
 
-  it('ignores results from another round or state', () => {
-    expect(step(following({ round: 2 }), read(1))).toBeNull();
-    expect(step(following({ round: 2 }), failed())).toBeNull();
+  it('ignores results when nothing is being read', () => {
     expect(step({ status: 'idle' }, read(1))).toBeNull();
+    expect(step({ status: 'idle' }, failed())).toBeNull();
   });
 
   describe('Retry', () => {
     const stopped: State = {
       status: 'stopped',
-      round: 1,
       data: 1,
       reason: { type: 'error', message: 'down' },
     };
@@ -151,65 +144,37 @@ describe('checkingTransition', () => {
       const next = step(stopped, { type: 'retry' });
       expect(next).toEqual({
         state: { ...stopped, status: 'retrying' },
-        effects: [{ type: 'readOnce', round: 1 }],
+        effects: [{ type: 'read', delayMs: 0 }],
       });
       // Not again while in flight.
       expect(step(next!.state, { type: 'retry' })).toBeNull();
     });
 
-    it('follows again in a new round with fresh timing on success', () => {
+    it('follows again with fresh timing on success', () => {
       const retrying = step(stopped, { type: 'retry' })!.state;
-      const next = step(retrying, {
-        type: 'retryRead',
-        round: 1,
-        data: 2,
-        terminal: false,
-        at: 99,
+      expect(step(retrying, read(2, 99))).toEqual({
+        state: following({ data: 2, startedAt: 99 }),
+        effects: [{ type: 'read', delayMs: 0 }],
       });
-      expect(next).toEqual({
-        state: following({ round: 2, data: 2, startedAt: 99 }),
-        effects: [{ type: 'read', round: 2, delayMs: 0 }],
-      });
-      // The old round's results are dropped.
-      expect(step(next!.state, read(7))).toBeNull();
     });
 
     it('settles on a terminal retry read', () => {
       const retrying = step(stopped, { type: 'retry' })!.state;
-      expect(
-        step(retrying, {
-          type: 'retryRead',
-          round: 1,
-          data: 3,
-          terminal: true,
-          at: 0,
-        })
-      ).toEqual({ state: { status: 'settled', data: 3 } });
+      expect(step(retrying, read(3, 0, { terminal: true }))).toEqual({
+        state: { status: 'settled', data: 3 },
+      });
     });
 
     it('goes back to stopped with the new error on failure', () => {
       const retrying = step(stopped, { type: 'retry' })!.state;
       expect(
-        step(retrying, { type: 'retryFailed', round: 1, message: 'still down' })
+        step(retrying, { type: 'readFailed', message: 'still down', at: 0 })
       ).toEqual({
         state: {
           ...stopped,
           reason: { type: 'error', message: 'still down' },
         },
       });
-    });
-
-    it('ignores a stale retry result', () => {
-      const retrying = step(stopped, { type: 'retry' })!.state;
-      expect(
-        step(retrying, {
-          type: 'retryRead',
-          round: 0,
-          data: 2,
-          terminal: false,
-          at: 0,
-        })
-      ).toBeNull();
     });
   });
 });

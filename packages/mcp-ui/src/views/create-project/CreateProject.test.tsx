@@ -270,7 +270,9 @@ describe('CreateProject', () => {
     expect(view.retryBesideBadge()).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    await advance(0);
+    // Retry's read, then the first read of the run it starts (a timer set
+    // while time advances waits 1ms).
+    await advance(1);
     expect(view.badge()).toBe('Creating');
     expect(view.note()).toBeUndefined();
 

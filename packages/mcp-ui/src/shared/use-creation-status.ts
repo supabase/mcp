@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useAnnouncement } from './Announcer';
 import type { ProjectCardBadge, ProjectCardNote } from './ProjectCard';
 import type { ToolCallState } from './use-mcp-view';
-import { type Transition, useMachine } from './use-machine';
+import { useMachine } from './use-machine';
 
 export const POLL_INTERVAL_MS = 5000;
 export const POLL_TIMEOUT_MS = 10 * 60 * 1000;
@@ -31,9 +31,9 @@ export type StopReason =
 /**
  * Checking what a tool call created (the call's own status is separate).
  * `data` is the latest successful read: always there once settled, and there in
- * the other states once any read has succeeded. `round` numbers the stretches
- * of checking, so a result from an earlier one (before Retry) is recognised
- * and dropped.
+ * the other states once any read has succeeded. At most one read is in flight
+ * at a time: the next is only scheduled once a result arrives, and checking
+ * only stops on a result, so a result always belongs to the current state.
  */
 export type Checking<T> =
   /** Nothing to check yet (no tool result, or the host can't read it). */
@@ -41,7 +41,6 @@ export type Checking<T> =
   /** Reading now and then, until the status is final. */
   | {
       status: 'following';
-      round: number;
       data?: T;
       /** Consecutive failed reads. */
       failures: number;
@@ -50,24 +49,23 @@ export type Checking<T> =
   /** The status is final: done, failed, or one that won't change by itself. */
   | { status: 'settled'; data: T }
   /** Checking gave up; Retry is offered. */
-  | { status: 'stopped'; round: number; data?: T; reason: StopReason }
+  | { status: 'stopped'; data?: T; reason: StopReason }
   /** Retry's read is in flight; the reason it replaces stays shown. */
-  | { status: 'retrying'; round: number; data?: T; reason: StopReason };
+  | { status: 'retrying'; data?: T; reason: StopReason };
 
+/**
+ * `read` and `readFailed` are the result of the read in flight: part of
+ * following the status, or of Retry, depending on the state.
+ */
 export type CheckingEvent<T> =
   | { type: 'start'; at: number }
   /** `terminal`: the status read is final (see `isFinal`). */
-  | { type: 'read'; round: number; data: T; terminal: boolean; at: number }
-  | { type: 'readFailed'; round: number; message: string; at: number }
-  | { type: 'retry' }
-  | { type: 'retryRead'; round: number; data: T; terminal: boolean; at: number }
-  | { type: 'retryFailed'; round: number; message: string };
+  | { type: 'read'; data: T; terminal: boolean; at: number }
+  | { type: 'readFailed'; message: string; at: number }
+  | { type: 'retry' };
 
-export type CheckingEffect =
-  /** Read after `delayMs` (0 for now); cancelled if the view goes away. */
-  | { type: 'read'; round: number; delayMs: number }
-  /** Read once now, for Retry. */
-  | { type: 'readOnce'; round: number };
+/** Read after `delayMs` (0 for now); cancelled if the view goes away. */
+export type CheckingEffect = { type: 'read'; delayMs: number };
 
 /**
  * Whether checking can stop at this progress: done, failed, or a status that
@@ -86,7 +84,7 @@ const outOfTime = (startedAt: number, at: number) =>
 const dataOf = <T>(state: Checking<T>): T | undefined =>
   state.status === 'idle' ? undefined : state.data;
 
-/** Events carry the `round` they belong to; others are dropped (`null`). */
+/** Events that don't fit the current state are dropped (`null`). */
 export function checkingTransition<T>(
   state: Checking<T>,
   event: CheckingEvent<T>
@@ -95,107 +93,85 @@ export function checkingTransition<T>(
     case 'start':
       if (state.status !== 'idle') return null;
       return {
-        state: {
-          status: 'following',
-          round: 1,
-          failures: 0,
-          startedAt: event.at,
-        },
-        effects: [{ type: 'read', round: 1, delayMs: 0 }],
+        state: { status: 'following', failures: 0, startedAt: event.at },
+        effects: [{ type: 'read', delayMs: 0 }],
       };
-    case 'read': {
-      if (state.status !== 'following' || event.round !== state.round) {
-        return null;
-      }
-      if (event.terminal) {
-        return { state: { status: 'settled', data: event.data } };
-      }
-      if (outOfTime(state.startedAt, event.at)) {
+    case 'read':
+      if (state.status === 'following') {
+        if (event.terminal) {
+          return { state: { status: 'settled', data: event.data } };
+        }
+        if (outOfTime(state.startedAt, event.at)) {
+          return {
+            state: {
+              status: 'stopped',
+              data: event.data,
+              reason: { type: 'timeout' },
+            },
+          };
+        }
         return {
-          state: {
-            status: 'stopped',
-            round: state.round,
-            data: event.data,
-            reason: { type: 'timeout' },
-          },
+          state: { ...state, data: event.data, failures: 0 },
+          effects: [{ type: 'read', delayMs: POLL_INTERVAL_MS }],
         };
       }
-      return {
-        state: { ...state, data: event.data, failures: 0 },
-        effects: [
-          { type: 'read', round: state.round, delayMs: POLL_INTERVAL_MS },
-        ],
-      };
-    }
-    case 'readFailed': {
-      if (state.status !== 'following' || event.round !== state.round) {
-        return null;
+      if (state.status === 'retrying') {
+        if (event.terminal) {
+          return { state: { status: 'settled', data: event.data } };
+        }
+        return {
+          state: {
+            status: 'following',
+            data: event.data,
+            failures: 0,
+            startedAt: event.at,
+          },
+          // Like starting: the first read of the new run is immediate.
+          effects: [{ type: 'read', delayMs: 0 }],
+        };
       }
-      const failures = state.failures + 1;
-      if (failures > POLL_MAX_RETRIES) {
+      return null;
+    case 'readFailed':
+      if (state.status === 'following') {
+        const failures = state.failures + 1;
+        if (failures > POLL_MAX_RETRIES) {
+          return {
+            state: {
+              status: 'stopped',
+              data: state.data,
+              reason: { type: 'error', message: event.message },
+            },
+          };
+        }
+        if (outOfTime(state.startedAt, event.at)) {
+          return {
+            state: {
+              status: 'stopped',
+              data: state.data,
+              reason: { type: 'timeout' },
+            },
+          };
+        }
+        return {
+          state: { ...state, failures },
+          effects: [{ type: 'read', delayMs: POLL_INTERVAL_MS }],
+        };
+      }
+      if (state.status === 'retrying') {
         return {
           state: {
             status: 'stopped',
-            round: state.round,
             data: state.data,
             reason: { type: 'error', message: event.message },
           },
         };
       }
-      if (outOfTime(state.startedAt, event.at)) {
-        return {
-          state: {
-            status: 'stopped',
-            round: state.round,
-            data: state.data,
-            reason: { type: 'timeout' },
-          },
-        };
-      }
-      return {
-        state: { ...state, failures },
-        effects: [
-          { type: 'read', round: state.round, delayMs: POLL_INTERVAL_MS },
-        ],
-      };
-    }
+      return null;
     case 'retry':
       if (state.status !== 'stopped') return null;
       return {
         state: { ...state, status: 'retrying' },
-        effects: [{ type: 'readOnce', round: state.round }],
-      };
-    case 'retryRead': {
-      if (state.status !== 'retrying' || event.round !== state.round) {
-        return null;
-      }
-      if (event.terminal) {
-        return { state: { status: 'settled', data: event.data } };
-      }
-      const round = state.round + 1;
-      return {
-        state: {
-          status: 'following',
-          round,
-          data: event.data,
-          failures: 0,
-          startedAt: event.at,
-        },
-        // Like starting: the first read of the new round is immediate.
-        effects: [{ type: 'read', round, delayMs: 0 }],
-      };
-    }
-    case 'retryFailed':
-      if (state.status !== 'retrying' || event.round !== state.round) {
-        return null;
-      }
-      return {
-        state: {
-          status: 'stopped',
-          round: state.round,
-          data: state.data,
-          reason: { type: 'error', message: event.message },
-        },
+        effects: [{ type: 'read', delayMs: 0 }],
       };
   }
 }
@@ -238,51 +214,27 @@ export function useCreationStatus<T extends { status: string }>({
     checkingTransition<T>,
     { status: 'idle' },
     (effect, send, done) => {
-      async function readNow(
-        ok: (data: T, terminal: boolean) => CheckingEvent<T>,
-        fail: (message: string) => CheckingEvent<T>
-      ) {
+      const timer = setTimeout(async () => {
+        done();
         let event: CheckingEvent<T>;
         try {
           const next = await read(created!);
-          event = ok(next, isFinal(progress(next.status)));
+          event = {
+            type: 'read',
+            data: next,
+            terminal: isFinal(progress(next.status)),
+            at: Date.now(),
+          };
         } catch (error) {
-          event = fail(error instanceof Error ? error.message : String(error));
+          event = {
+            type: 'readFailed',
+            message: error instanceof Error ? error.message : String(error),
+            at: Date.now(),
+          };
         }
         send(event);
-      }
-      const { round } = effect;
-      const at = () => Date.now();
-      switch (effect.type) {
-        case 'read': {
-          const timer = setTimeout(() => {
-            done();
-            void readNow(
-              (data, terminal) => ({
-                type: 'read',
-                round,
-                data,
-                terminal,
-                at: at(),
-              }),
-              (message) => ({ type: 'readFailed', round, message, at: at() })
-            );
-          }, effect.delayMs);
-          return () => clearTimeout(timer);
-        }
-        case 'readOnce':
-          void readNow(
-            (data, terminal) => ({
-              type: 'retryRead',
-              round,
-              data,
-              terminal,
-              at: at(),
-            }),
-            (message) => ({ type: 'retryFailed', round, message })
-          );
-          return;
-      }
+      }, effect.delayMs);
+      return () => clearTimeout(timer);
     }
   );
 
