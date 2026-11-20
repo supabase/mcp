@@ -22,7 +22,10 @@ import {
   appsEnabled,
   DASHBOARD_URL_META_KEY,
 } from './apps/index.js';
-import { createContentApiClient } from './content-api/index.js';
+import {
+  CONTENT_API_SCHEMA_TTL_MS,
+  createContentApiClient,
+} from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getResources } from './resources/index.js';
 import { getAccountTools } from './tools/account-tools.js';
@@ -307,6 +310,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         }
       },
     },
+    toolsListTtlMs: CONTENT_API_SCHEMA_TTL_MS,
     tools: async (ctx) => {
       const clientInfo =
         getRequestClientInfo(ctx) ?? handshakeClientInfo ?? options.clientInfo;
