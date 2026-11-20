@@ -22,6 +22,17 @@ export type Progress =
       isChanging: boolean;
     };
 
+/** What a view says about the thing it creates; each view's `status.ts` has one. */
+export type CreationConfig<T extends { status: string }> = {
+  /** What is being created, for announcements: "project" or "branch". */
+  noun: string;
+  /** The steps of creating it; `progress` returns indexes into these. */
+  labels: string[];
+  progress: (status: T['status']) => Progress;
+  /** Tool the model can use to check the status when the view can't. */
+  checkWith: string;
+};
+
 /** Why checking stopped without an answer. */
 export type StopReason =
   | { type: 'timeout' }
@@ -179,21 +190,16 @@ type Described = {
  * what to announce. `data` is the latest read (see `useCreationStatus`).
  */
 export function describeCreation<T extends { status: string }>({
-  noun,
+  config: { noun, labels, progress, checkWith },
   toolCall,
   checking,
-  canPollInitial,
-  labels,
-  progress,
-  checkWith,
+  canRead,
 }: {
-  noun: string;
+  config: CreationConfig<T>;
   toolCall: ToolCallState<T>;
   checking: Checking<T>;
-  canPollInitial: boolean;
-  labels: string[];
-  progress: (status: T['status']) => Progress;
-  checkWith: string;
+  /** Whether the view can read the status (see `useCreationStatus`'s `read`). */
+  canRead: boolean;
 }): Described {
   switch (toolCall.status) {
     // No tool result yet (the host may still be asking the user to confirm):
@@ -282,7 +288,7 @@ export function describeCreation<T extends { status: string }>({
   if (!note) {
     if (stopReason?.type === 'timeout') {
       note = { tone: 'muted', text: 'Stopped checking after 10 minutes.' };
-    } else if (!canPollInitial && isChanging) {
+    } else if (!canRead && isChanging) {
       note = {
         tone: 'muted',
         text: `Status won't update here. Ask the assistant to check with ${checkWith}.`,
@@ -300,30 +306,19 @@ export function describeCreation<T extends { status: string }>({
  * stopped without an answer. Changes are announced to screen readers.
  */
 export function useCreationStatus<T extends { status: string }>({
-  noun,
+  config,
   toolCall,
-  canPollInitial,
   read,
-  labels,
-  progress,
-  checkWith,
 }: {
-  /** What is being created, for announcements: "project" or "branch". */
-  noun: string;
+  config: CreationConfig<T>;
   toolCall: ToolCallState<T>;
   /**
-   * False when the status can't be read, e.g. the host can't proxy tool
-   * calls. Checking starts once this is true and there is a tool result; it
-   * only matters until then: turning false later doesn't stop checking.
+   * Reads the latest version of what the tool call returned. Leave it out
+   * when the status can't be read, e.g. the host can't proxy tool calls:
+   * checking then never starts. It only matters until checking starts:
+   * checking keeps going if `read` goes away, and its reads then fail.
    */
-  canPollInitial: boolean;
-  /** Reads the latest version of what the tool call returned. */
-  read: (created: T) => Promise<T>;
-  /** The steps of creating it; `progress` returns indexes into these. */
-  labels: string[];
-  progress: (status: T['status']) => Progress;
-  /** Tool the model can use to check the status when the view can't. */
-  checkWith: string;
+  read?: (created: T) => Promise<T>;
 }) {
   const created = toolCall.status === 'ready' ? toolCall.data : undefined;
 
@@ -332,15 +327,17 @@ export function useCreationStatus<T extends { status: string }>({
   });
 
   // Starts once there is a tool result to check and the host can read it.
+  const canRead = !!read;
   useEffect(() => {
-    if (canPollInitial && created) dispatch({ type: 'start', at: Date.now() });
-  }, [canPollInitial, created]);
+    if (canRead && created) dispatch({ type: 'start', at: Date.now() });
+  }, [canRead, created]);
 
-  // The latest read, without making `read`, `progress` or `created` (which
+  // The latest read, without making `read`, `config` or `created` (which
   // change every render) dependencies of the effect below.
   const readLatest = useEffectEvent(async () => {
+    if (!read) throw new Error("Can't read the status");
     const next = await read(created!);
-    return { data: next, terminal: isFinal(progress(next.status)) };
+    return { data: next, terminal: isFinal(config.progress(next.status)) };
   });
 
   // Reads whenever the state says to: after its delay when following, at once
@@ -377,13 +374,10 @@ export function useCreationStatus<T extends { status: string }>({
   const isRetrying = checking.status === 'retrying';
 
   const { badge, note, announcement } = describeCreation({
-    noun,
+    config,
     toolCall,
     checking,
-    canPollInitial,
-    labels,
-    progress,
-    checkWith,
+    canRead,
   });
 
   useAnnouncement(
@@ -395,14 +389,14 @@ export function useCreationStatus<T extends { status: string }>({
   // timeout passed) and can start again.
   const canRetry =
     toolCall.status === 'ready' &&
-    canPollInitial &&
+    canRead &&
     (checking.status === 'stopped' || isRetrying);
 
   return {
     /** The latest read, or what the tool call returned until there is one. */
     data,
     isLoading: toolCall.status === 'loading',
-    isDone: !!data && progress(data.status).state === 'done',
+    isDone: !!data && config.progress(data.status).state === 'done',
     badge,
     note,
     onRetry: canRetry ? () => dispatch({ type: 'retry' }) : undefined,

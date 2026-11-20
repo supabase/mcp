@@ -189,13 +189,10 @@ describe('describeCreation', () => {
     over: Partial<Parameters<typeof describeCreation<Created>>[0]> = {}
   ) =>
     describeCreation<Created>({
-      noun: 'project',
+      config: { noun: 'project', labels, progress, checkWith: 'get_project' },
       toolCall: { status: 'ready', data: { status: 'STEP' } },
       checking: { status: 'idle' },
-      canPollInitial: true,
-      labels,
-      progress,
-      checkWith: 'get_project',
+      canRead: true,
       ...over,
     });
   const running = (data?: Created): Checking<Created> => ({
@@ -305,13 +302,13 @@ describe('describeCreation', () => {
   });
 
   it("says when the status won't update here, only if it is changing", () => {
-    expect(describeIt({ canPollInitial: false }).note).toEqual({
+    expect(describeIt({ canRead: false }).note).toEqual({
       tone: 'muted',
       text: "Status won't update here. Ask the assistant to check with get_project.",
     });
     expect(
       describeIt({
-        canPollInitial: false,
+        canRead: false,
         toolCall: { status: 'ready', data: { status: 'DONE' } },
       }).note
     ).toBeUndefined();

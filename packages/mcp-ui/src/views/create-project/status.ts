@@ -2,14 +2,18 @@ import {
   isProjectChanging,
   projectStatusBadge,
 } from '../../shared/project-status';
-import type { Progress } from '../../shared/use-creation-status';
+import type { Project } from '@supabase/mcp-server-supabase/platform';
+import type {
+  CreationConfig,
+  Progress,
+} from '../../shared/use-creation-status';
 
 /**
  * The steps of creating a project. The Management API reports only the
  * project's status, so the step is inferred from it (see `progress`). The
  * first is the create call itself, done by the time the view has a project.
  */
-export const LABELS = ['Creating project', 'Creating', 'Checking health'];
+const LABELS = ['Creating project', 'Creating', 'Checking health'];
 
 const isFailed = (status: string) =>
   status === 'REMOVED' || status.endsWith('_FAILED');
@@ -36,3 +40,10 @@ export function progress(status: string): Progress {
     isChanging,
   };
 }
+
+export const creation: CreationConfig<Project> = {
+  noun: 'project',
+  labels: LABELS,
+  progress,
+  checkWith: 'get_project',
+};

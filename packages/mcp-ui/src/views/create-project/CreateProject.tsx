@@ -5,7 +5,7 @@ import { ConnectionDetails, studioUrl } from '../../shared/ConnectionDetails';
 import { useCreationStatus } from '../../shared/use-creation-status';
 import { useLookup } from '../../shared/use-lookup';
 import { useMcpView } from '../../shared/use-mcp-view';
-import { LABELS, progress } from './status';
+import { creation } from './status';
 
 const text = (value: unknown) =>
   typeof value === 'string' ? value : undefined;
@@ -27,14 +27,11 @@ export function CreateProject() {
     isDone,
     ...status
   } = useCreationStatus<Project>({
-    noun: 'project',
+    config: creation,
     toolCall,
-    canPollInitial: canPoll,
-    read: (created) =>
-      callTool<Project>(app!, 'get_project', { id: created.id }),
-    labels: LABELS,
-    progress,
-    checkWith: 'get_project',
+    read: canPoll
+      ? (created) => callTool<Project>(app!, 'get_project', { id: created.id })
+      : undefined,
   });
 
   // The organization's name is a nicety: on failure the card leaves it out.

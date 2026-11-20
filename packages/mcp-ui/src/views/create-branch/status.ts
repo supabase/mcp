@@ -1,11 +1,14 @@
 import type { Branch } from '@supabase/mcp-server-supabase/platform';
-import type { Progress } from '../../shared/use-creation-status';
+import type {
+  CreationConfig,
+  Progress,
+} from '../../shared/use-creation-status';
 
 /**
  * The steps of creating a branch. The first is the create call itself, done
  * by the time the view has a branch.
  */
-export const LABELS = [
+const LABELS = [
   'Creating branch',
   'Creating',
   'Running migrations',
@@ -31,3 +34,10 @@ export function progress(status: Branch['status']): Progress {
       return { state: 'step', step: 1 };
   }
 }
+
+export const creation: CreationConfig<Branch> = {
+  noun: 'branch',
+  labels: LABELS,
+  progress,
+  checkWith: 'list_branches',
+};

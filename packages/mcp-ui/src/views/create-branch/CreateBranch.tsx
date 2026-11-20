@@ -5,7 +5,7 @@ import { ConnectionDetails, studioUrl } from '../../shared/ConnectionDetails';
 import { useCreationStatus } from '../../shared/use-creation-status';
 import { useLookup } from '../../shared/use-lookup';
 import { useMcpView } from '../../shared/use-mcp-view';
-import { LABELS, progress } from './status';
+import { creation } from './status';
 
 const text = (value: unknown) =>
   typeof value === 'string' ? value : undefined;
@@ -30,23 +30,22 @@ export function CreateBranch() {
     isDone,
     ...status
   } = useCreationStatus<Branch>({
-    noun: 'branch',
+    config: creation,
     toolCall,
     // Reading the branch depends on the arguments (whether the server is scoped).
-    canPollInitial: canPoll && !!input,
-    read: async (created) => {
-      const { branches } = await callTool<{ branches: Branch[] }>(
-        app!,
-        'list_branches',
-        serverScoped ? {} : { project_id: created.parent_project_ref }
-      );
-      const found = branches.find((b) => b.id === created.id);
-      if (!found) throw new Error('Branch not found in list_branches');
-      return found;
-    },
-    labels: LABELS,
-    progress,
-    checkWith: 'list_branches',
+    read:
+      canPoll && input
+        ? async (created) => {
+            const { branches } = await callTool<{ branches: Branch[] }>(
+              app!,
+              'list_branches',
+              serverScoped ? {} : { project_id: created.parent_project_ref }
+            );
+            const found = branches.find((b) => b.id === created.id);
+            if (!found) throw new Error('Branch not found in list_branches');
+            return found;
+          }
+        : undefined,
   });
 
   // Organization and project names are a nicety: if they can't be read, the
