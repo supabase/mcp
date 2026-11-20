@@ -43,7 +43,7 @@ Later layers win over earlier ones regardless of specificity, so never reach for
 - `native`: a bare element selector. States go inside `:where()` so the rule stays at one element: `&:where(:hover:not(:disabled))`, `&:where(:disabled)` (not `:where(&:disabled)`, which drops to zero specificity and loses to the bare element).
   - One exception: a link that looks like a button (`<a class="button">`) shares the native button rule through a selector list, `:is(button, a:where(.button))`. `:is()` takes its heaviest argument, so it stays at one element. Button variants use the same list (`:is(button, a:where(.button)):where(.primary)`), and the text-link rule excludes it (`a:where(:not(.button))`) so neither depends on source order. Plain CSS has no mixins; a selector list is how two selectors share one set of styles. Don't copy button declarations into a separate link rule.
 - `components`: wrap the class in `:where()`: `:where(.badge)`. A variant of an element is element plus `:where(.class)`: `button:where(.primary)` (written `:is(button, a:where(.button)):where(.primary)` so button-styled links get it too). Parts and states nested inside also use `:where()`.
-- `view`: one bare class (`.create-project-view`); everything nested uses `:where()`.
+- `view`: at most one class, chosen by the view; everything nested uses `:where()`.
 - `utilities`: `:where(.sr-only)`. It is the last layer, so it wins without any specificity.
 - Never chain classes, never use ids, never nest without `:where()` (a nested `code` inside `.x` becomes `.x code` and raises specificity).
 
@@ -72,13 +72,13 @@ Later layers win over earlier ones regardless of specificity, so never reach for
 
 **A variant restates every state of a property it changes.** `button:where(.primary)` sets `background`, so it needs its own hover and its own `&:where(:disabled)`. Otherwise its background, sitting in a later layer, overrides the native button's disabled background.
 
-### 3. A view's own styles are one nested block under its wrapper
+### 3. A view's own styles go in its `view.css`, in the `view` layer
 
-Each view component renders a wrapper element with a class ending in `-view`. Most views need no CSS of their own. When one does, create `src/views/<view>/view.css`, import it in that view's `main.tsx` after `base.css`, and give it exactly this shape:
+Most views need no CSS of their own. When one does, create `src/views/<view>/view.css`, import it in that view's `main.tsx` after `base.css`, and put its rules in `@layer view`. A view ships only its own CSS, so its rules apply on that view alone; it needs no wrapper element and chooses its own selectors, within the layer's cap. The `view` layer comes after `components`, so its rules win without extra specificity. Custom properties it declares are namespaced `--sb-view-<view>-*`.
 
 ```css
 @layer view {
-  .create-project-view {
+  :where(.project-card) {
     :where([data-slot="header"]) {
       align-items: center;
     }
@@ -131,7 +131,7 @@ Add a local token when a value is reused or carries meaning. Do not add one for 
 - **State and tone use attributes**, not modifier classes: `data-state="failed"`, `data-tone="success" | "warning" | "danger"`, or the ARIA attribute where one exists (`aria-busy`, `aria-current`). Tone names are `success`, `warning` and `danger`; the CSS maps them to `--sb-color-primary`, `--sb-color-warning` and `--sb-color-destructive`.
 - **Target the part, not the tag.** Avoid descendant selectors on bare tags (`svg`, `p`, `span`) inside a component; they style content added later by accident.
 - **No inline `style` props**, except custom properties set from JS for values CSS cannot know.
-- Class names are kebab-case; view wrappers end in `-view`.
+- Class names are kebab-case.
 
 ## Secondary patterns
 

@@ -72,38 +72,36 @@ export function CreateProject() {
         : [];
 
   return (
-    <div className="create-project-view">
-      <ProjectCard
-        {...status}
-        isLoading={isLoading}
-        breadcrumbs={organizationName ? [organizationName] : undefined}
-        name={
-          project?.name ??
-          text(input?.name) ??
-          // A call that failed or was cancelled before the host sent its
-          // arguments: nothing more is coming, so no skeleton.
-          (isLoading ? undefined : 'New project')
-        }
-        details={details}
-        onOpenDashboard={
-          canOpenDashboard
-            ? () =>
-                void app!.openLink({
-                  url: studioUrl(dashboardUrl, project.ref),
-                })
-            : undefined
-        }
-      >
-        {isDone && project && app && (
-          <ConnectionDetails
-            app={app}
-            projectRef={project.ref}
-            dashboardUrl={dashboardUrl}
-            canReachProject={canPoll}
-            canOpenLinks={canOpenLinks}
-          />
-        )}
-      </ProjectCard>
-    </div>
+    <ProjectCard
+      {...status}
+      isLoading={isLoading}
+      breadcrumbs={organizationName ? [organizationName] : undefined}
+      name={
+        project?.name ??
+        text(input?.name) ??
+        // A call that failed or was cancelled before the host sent its
+        // arguments: nothing more is coming, so no skeleton.
+        (isLoading ? undefined : 'New project')
+      }
+      details={details}
+      onOpenDashboard={
+        canOpenDashboard
+          ? () =>
+              void app!.openLink({
+                url: studioUrl(dashboardUrl, project.ref),
+              })
+          : undefined
+      }
+    >
+      {isDone && project && app && (
+        <ConnectionDetails
+          app={app}
+          projectRef={project.ref}
+          dashboardUrl={dashboardUrl}
+          canReachProject={canPoll}
+          canOpenLinks={canOpenLinks}
+        />
+      )}
+    </ProjectCard>
   );
 }

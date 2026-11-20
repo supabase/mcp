@@ -65,44 +65,42 @@ export function CreateBranch() {
   });
 
   return (
-    <div className="create-branch-view">
-      <ProjectCard
-        {...status}
-        isLoading={isLoading}
-        breadcrumbs={breadcrumbs}
-        name={
-          branch?.name ??
-          text(input?.name) ??
-          // A call that failed or was cancelled before the host sent its
-          // arguments: nothing more is coming, so no skeleton.
-          (isLoading ? undefined : 'New branch')
-        }
-        details={
-          branch
-            ? [{ label: 'Branch project ref', value: branch.project_ref }]
-            : isLoading
-              ? [{ label: 'Branch project ref' }]
-              : []
-        }
-        onOpenDashboard={
-          branch && canOpenLinks
-            ? () =>
-                void app!.openLink({
-                  url: studioUrl(dashboardUrl, branch.project_ref),
-                })
-            : undefined
-        }
-      >
-        {isDone && branch && app && (
-          <ConnectionDetails
-            app={app}
-            projectRef={branch.project_ref}
-            dashboardUrl={dashboardUrl}
-            canReachProject={canPoll && !serverScoped}
-            canOpenLinks={canOpenLinks}
-          />
-        )}
-      </ProjectCard>
-    </div>
+    <ProjectCard
+      {...status}
+      isLoading={isLoading}
+      breadcrumbs={breadcrumbs}
+      name={
+        branch?.name ??
+        text(input?.name) ??
+        // A call that failed or was cancelled before the host sent its
+        // arguments: nothing more is coming, so no skeleton.
+        (isLoading ? undefined : 'New branch')
+      }
+      details={
+        branch
+          ? [{ label: 'Branch project ref', value: branch.project_ref }]
+          : isLoading
+            ? [{ label: 'Branch project ref' }]
+            : []
+      }
+      onOpenDashboard={
+        branch && canOpenLinks
+          ? () =>
+              void app!.openLink({
+                url: studioUrl(dashboardUrl, branch.project_ref),
+              })
+          : undefined
+      }
+    >
+      {isDone && branch && app && (
+        <ConnectionDetails
+          app={app}
+          projectRef={branch.project_ref}
+          dashboardUrl={dashboardUrl}
+          canReachProject={canPoll && !serverScoped}
+          canOpenLinks={canOpenLinks}
+        />
+      )}
+    </ProjectCard>
   );
 }
