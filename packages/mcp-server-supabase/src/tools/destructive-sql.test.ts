@@ -76,6 +76,22 @@ describe('isUpdateWithoutWhere', () => {
     ).toBe(true);
   });
 
+  test.each([
+    'UPDATE films SET elsewhere = 1;',
+    'UPDATE films SET nowhere = 1;',
+    'UPDATE films SET elsewhere = 1, title = nowhere;',
+  ])('identifier containing where without WHERE matches: %s', (sql) => {
+    expect(isUpdateWithoutWhere(sql)).toBe(true);
+  });
+
+  test.each([
+    'UPDATE films SET elsewhere = 1 WHERE id = 1;',
+    'UPDATE films SET kind = 1 WHERE(id = 1);',
+    'UPDATE films SET kind = 1\nWHERE id = 1;',
+  ])('WHERE clause is detected: %s', (sql) => {
+    expect(isUpdateWithoutWhere(sql)).toBe(false);
+  });
+
   test('quoted identifier containing where without WHERE matches', () => {
     expect(isUpdateWithoutWhere('UPDATE "where table" SET id = 1;')).toBe(true);
   });
