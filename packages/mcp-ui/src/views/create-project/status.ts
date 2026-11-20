@@ -11,9 +11,18 @@ import type {
 /**
  * The steps of creating a project. The Management API reports only the
  * project's status, so the step is inferred from it (see `progress`). The
- * first is the create call itself, done by the time the view has a project.
+ * create call itself counts as the first step, done by the time the view has
+ * a project, so the steps it can show are the later ones.
  */
-const LABELS = ['Creating project', 'Creating', 'Checking health'];
+const STEP_COUNT = 3;
+
+/** On step `n` of creating a project, the create call being step 1. */
+const step = (label: string, n: number): Progress => ({
+  state: 'step',
+  label,
+  step: n,
+  of: STEP_COUNT,
+});
 
 const isFailed = (status: string) =>
   status === 'REMOVED' || status.endsWith('_FAILED');
@@ -22,12 +31,12 @@ const isFailed = (status: string) =>
 export function progress(status: string): Progress {
   if (status === 'ACTIVE_HEALTHY') return { state: 'done' };
   // The API doesn't say which step failed.
-  if (isFailed(status)) return { state: 'failed', step: 1 };
+  if (isFailed(status)) return { state: 'failed', during: 'Creating' };
   if (status === 'COMING_UP' || status === 'UNKNOWN') {
-    return { state: 'step', step: 1 };
+    return step('Creating', 2);
   }
   // Left COMING_UP but not healthy yet.
-  if (status === 'ACTIVE_UNHEALTHY') return { state: 'step', step: 2 };
+  if (status === 'ACTIVE_UNHEALTHY') return step('Checking health', 3);
 
   // A status a new project shouldn't reach (paused, restarting, …), with
   // Studio's label. Ones still in progress are neutral, like the steps.
@@ -43,7 +52,6 @@ export function progress(status: string): Progress {
 
 export const creation: CreationConfig<Project> = {
   noun: 'project',
-  labels: LABELS,
   progress,
   checkWith: 'get_project',
 };

@@ -12,8 +12,10 @@ export const POLL_MAX_RETRIES = 2;
 /** Where the thing being created is, for one of its statuses. */
 export type Progress =
   | { state: 'done' }
-  /** On, or failed at, this index of the view's step labels. */
-  | { state: 'step' | 'failed'; step: number }
+  /** On a step of creating it: `step` of `of`, counting from 1. */
+  | { state: 'step'; label: string; step: number; of: number }
+  /** Failed `during` a step, named as `label` is. */
+  | { state: 'failed'; during: string }
   /** A status outside creation (paused, restarting, …), with its own label. */
   | {
       state: 'other';
@@ -27,8 +29,6 @@ export type Progress =
 export type CreationConfig<T extends { status: string }> = {
   /** What is being created, for announcements: "project" or "branch". */
   noun: string;
-  /** The steps of creating it; `progress` returns indexes into these. */
-  labels: string[];
   progress: (status: T['status']) => Progress;
   /** Tool the model can use to check the status when the view can't. */
   checkWith: string;
@@ -191,7 +191,7 @@ type Described = {
  * what to announce. `data` is the latest read (see `useCreationStatus`).
  */
 export function describeCreation<T extends { status: string }>({
-  config: { noun, labels, progress, checkWith },
+  config: { noun, progress, checkWith },
   toolCall,
   checking,
   canRead,
@@ -262,16 +262,15 @@ export function describeCreation<T extends { status: string }>({
       badge = { label: 'Failed', tone: 'danger' };
       note = {
         tone: 'danger',
-        text: `Failed while ${labels[current.step]!.toLowerCase()} (${data.status}).`,
+        text: `Failed while ${current.during.toLowerCase()} (${data.status}).`,
       };
       announcement = 'Failed';
       break;
     case 'step': {
       // Neutral, with the spinner saying it's in progress: hosts' warning
       // colours vary (Codex's is orange-red) and read as a problem.
-      const label = labels[current.step]!;
-      badge = { label, isSpinning: isFollowing };
-      announcement = `${label}, step ${current.step + 1} of ${labels.length}`;
+      badge = { label: current.label, isSpinning: isFollowing };
+      announcement = `${current.label}, step ${current.step} of ${current.of}`;
       isChanging = true;
       break;
     }

@@ -164,15 +164,14 @@ describe('checkingTransition', () => {
 
 describe('describeCreation', () => {
   type Created = { status: string };
-  const labels = ['Creating project', 'Creating', 'Checking health'];
   const progress = (status: string): Progress => {
     switch (status) {
       case 'DONE':
         return { state: 'done' };
       case 'BROKEN':
-        return { state: 'failed', step: 1 };
+        return { state: 'failed', during: 'Creating' };
       case 'STEP':
-        return { state: 'step', step: 1 };
+        return { state: 'step', label: 'Creating', step: 2, of: 3 };
       case 'PAUSED':
         return { state: 'other', label: 'Paused', isChanging: false };
       default:
@@ -189,7 +188,7 @@ describe('describeCreation', () => {
     over: Partial<Parameters<typeof describeCreation<Created>>[0]> = {}
   ) =>
     describeCreation<Created>({
-      config: { noun: 'project', labels, progress, checkWith: 'get_project' },
+      config: { noun: 'project', progress, checkWith: 'get_project' },
       toolCall: { status: 'ready', data: { status: 'STEP' } },
       checking: { status: 'idle' },
       canRead: true,

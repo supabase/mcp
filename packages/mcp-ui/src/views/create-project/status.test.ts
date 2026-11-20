@@ -4,15 +4,26 @@ import { progress } from './status';
 describe('create-project status', () => {
   it.each(['REMOVED', 'INIT_FAILED', 'RESTORE_FAILED', 'UPGRADE_FAILED'])(
     '%s fails the creating step',
-    (status) => expect(progress(status)).toEqual({ state: 'failed', step: 1 })
+    (status) =>
+      expect(progress(status)).toEqual({ state: 'failed', during: 'Creating' })
   );
 
   it.each(['COMING_UP', 'UNKNOWN'])('%s is creating', (status) =>
-    expect(progress(status)).toEqual({ state: 'step', step: 1 })
+    expect(progress(status)).toEqual({
+      state: 'step',
+      label: 'Creating',
+      step: 2,
+      of: 3,
+    })
   );
 
   it('ACTIVE_UNHEALTHY is checking health', () => {
-    expect(progress('ACTIVE_UNHEALTHY')).toEqual({ state: 'step', step: 2 });
+    expect(progress('ACTIVE_UNHEALTHY')).toEqual({
+      state: 'step',
+      label: 'Checking health',
+      step: 3,
+      of: 3,
+    });
   });
 
   it('ACTIVE_HEALTHY is done', () => {
