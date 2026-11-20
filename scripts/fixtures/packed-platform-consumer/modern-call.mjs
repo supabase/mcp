@@ -5,6 +5,7 @@ import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client';
 import { createSupabaseMcpHandler } from '@supabase/mcp-server-supabase';
+import * as sqlConfirmation from '@supabase/mcp-server-supabase/sql-confirmation';
 
 // https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/
 const MODERN_PROTOCOL_VERSION = '2026-07-28';
@@ -36,6 +37,32 @@ const issuance = {
   mode: 'form',
   reason: 'initial',
 };
+
+// A host imports the SQL classifier contract from its own subpath, for example
+// in a worker that never loads the server. cjs-check.cjs runs this against the
+// require()-loaded subpath too.
+export function checkSqlConfirmationExports(exports) {
+  const publicNames = [
+    'SqlClassifierCallError',
+    'SqlClassifierUnavailableError',
+    'regexClassifier',
+    'withFallback',
+  ];
+  // The published surface is exactly these names: an extra export becomes a
+  // contract with every host.
+  assert.deepEqual(
+    Object.keys(exports).sort(),
+    publicNames,
+    './sql-confirmation must export exactly its public names'
+  );
+  for (const name of publicNames) {
+    assert.equal(
+      typeof exports[name],
+      'function',
+      `./sql-confirmation does not export ${name}`
+    );
+  }
+}
 
 // CJS calls this same scenario with its require()-loaded constructor. The SDK
 // transport stays fetch-in-process: no listener, credentials or backend.
@@ -246,5 +273,6 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
+  checkSqlConfirmationExports(sqlConfirmation);
   console.log(`MODERN_CALL_OK tools=${await runConsumer()}`);
 }
