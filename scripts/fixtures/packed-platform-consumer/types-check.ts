@@ -70,7 +70,7 @@ const optionsWithElicitation: SupabaseMcpServerOptions = {
       key: 'a'.repeat(32),
       principal: 'packed-consumer-fixture',
     },
-    confirmation: { enabledTools, ttlSeconds: 600 },
+    confirmation: { enabledTools, ttlSeconds: 600, classifier },
     secretCollection: {
       connectUrlTemplate:
         'https://example.com/dashboard/mcp/secrets?ref={ref}&name={name}',

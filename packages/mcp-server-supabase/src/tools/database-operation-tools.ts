@@ -33,7 +33,7 @@ import {
   isFormCapable,
   observeOperation,
 } from './confirmation.js';
-import { isDestructiveSql } from './destructive-sql.js';
+import type { SqlClassifyReason, SqlClassifyStep } from './classify-sql.js';
 import {
   injectableTool,
   type ToolDefs,
@@ -44,21 +44,29 @@ type DatabaseOperationToolsOptions = {
   database: DatabaseOperations;
   projectId?: string;
   readOnly?: boolean;
+  /** The server's one classify step. Required, so no caller can skip it. */
+  classifySql: SqlClassifyStep;
   confirmation?: {
     codec: RequestStateCodec<ElicitationState>;
     enabledTools: readonly ('execute_sql' | 'apply_migration')[];
   };
 };
 
-// Why a SQL call needs confirmation, as shown in the prompt. `reconfirm` is a
-// resend of a confirmation this server already issued for SQL that no longer
-// classifies as destructive.
-type SqlConfirmationPromptReason = 'destructive' | 'reconfirm';
+// Why a SQL call needs confirmation, as shown in the prompt. Adds `reconfirm`
+// to the classify step's reasons, for a resend of a confirmation this server
+// already issued that the classifier no longer flags.
+type SqlConfirmationPromptReason = SqlClassifyReason | 'reconfirm';
 
 function sqlConfirmationFirstLine(reason: SqlConfirmationPromptReason) {
   switch (reason) {
     case 'destructive':
       return 'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).';
+    case 'do-heuristic':
+      return 'This SQL contains a DO block whose body contains text suggesting potentially destructive operations.';
+    case 'unclassified':
+      return 'Could not check for destructive operations because the SQL syntax could not be classified. Approving will allow an attempt to execute the original SQL.';
+    case 'oversized':
+      return 'Could not check for destructive operations because the SQL is too large to check. Approving will allow an attempt to execute the original SQL.';
     case 'reconfirm':
       return 'This SQL was flagged for confirmation earlier and still needs your approval.';
   }
@@ -67,12 +75,13 @@ function sqlConfirmationFirstLine(reason: SqlConfirmationPromptReason) {
 async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
   query: string,
   options: ConfirmationStateOptions<S> & {
+    classifySql: SqlClassifyStep;
     askForConfirmation: (
       reason: SqlConfirmationPromptReason
     ) => Promise<InputRequiredResult>;
   }
 ): Promise<CallToolResult | InputRequiredResult | undefined> {
-  const { observation, askForConfirmation } = options;
+  const { ctx, observation, classifySql, askForConfirmation } = options;
   const record = observation?.record;
   // State facts and outcome count only when the inspected decision applies.
   const stagedFacts: ObservationFact[] | undefined = observation
@@ -104,11 +113,8 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
   // Once this server has issued a confirmation for this exact SQL, only an
   // accepted resend runs it, whatever the classifier says now.
   const reason: SqlConfirmationPromptReason | undefined = classify
-    ? isDestructiveSql(query)
-      ? 'destructive'
-      : hasMatchingState
-        ? 'reconfirm'
-        : undefined
+    ? ((await classifySql(query, ctx)) ??
+      (hasMatchingState ? 'reconfirm' : undefined))
     : undefined;
   if (classify && !reason) {
     record?.({
@@ -324,6 +330,7 @@ export function getDatabaseTools({
   database,
   projectId,
   readOnly,
+  classifySql,
   confirmation,
 }: DatabaseOperationToolsOptions) {
   const project_id = projectId;
@@ -572,6 +579,7 @@ export function getDatabaseTools({
               state.queryHash === queryHash,
             declinedText: 'Migration was declined.',
             observation,
+            classifySql,
             askForConfirmation,
           });
 
@@ -661,6 +669,7 @@ export function getDatabaseTools({
               state.project_id === project_id && state.queryHash === queryHash,
             declinedText: 'SQL execution was declined.',
             observation,
+            classifySql,
             askForConfirmation,
           });
 
