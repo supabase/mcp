@@ -458,6 +458,69 @@ describe('tools', () => {
     });
   });
 
+  test('get advisors filters by level and caps findings per lint', async () => {
+    const platform: SupabasePlatform = {
+      debugging: {
+        getLogs() {
+          throw new Error('Not implemented');
+        },
+        async getSecurityAdvisors() {
+          return {
+            lints: [
+              { name: 'rls_disabled_in_public', level: 'ERROR', detail: 'a' },
+              { name: 'rls_disabled_in_public', level: 'ERROR', detail: 'b' },
+              { name: 'rls_disabled_in_public', level: 'ERROR', detail: 'c' },
+              { name: 'auth_users_exposed', level: 'ERROR', detail: 'd' },
+              {
+                name: 'function_search_path_mutable',
+                level: 'WARN',
+                detail: 'e',
+              },
+            ],
+          };
+        },
+        async getPerformanceAdvisors() {
+          throw new Error('Not implemented');
+        },
+      },
+    };
+
+    const { callTool } = await setup({ platform, features: ['debugging'] });
+
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    const { result } = await callTool({
+      name: 'get_advisors',
+      arguments: {
+        project_id: project.id,
+        type: 'security',
+        level: 'ERROR',
+        max_findings_per_lint: 2,
+      },
+    });
+
+    expect(result).toEqual({
+      lints: [
+        {
+          name: 'rls_disabled_in_public',
+          level: 'ERROR',
+          count: 3,
+          findings: [{ detail: 'a' }, { detail: 'b' }],
+          findings_omitted: 1,
+        },
+        {
+          name: 'auth_users_exposed',
+          level: 'ERROR',
+          count: 1,
+          findings: [{ detail: 'd' }],
+        },
+      ],
+    });
+  });
+
   test('get performance advisors', async () => {
     const { callTool } = await setup();
 

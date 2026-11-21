@@ -125,6 +125,18 @@ const getAdvisorsInputSchema = z.object({
   type: z
     .enum(['security', 'performance', 'health'])
     .describe('The type of advisors to fetch'),
+  level: z
+    .enum(['ERROR', 'WARN', 'INFO'])
+    .optional()
+    .describe('Only return lints at this level. Omit to return every level.'),
+  max_findings_per_lint: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(
+      'Caps how many findings are listed under each lint. `count` still reports the total and `findings_omitted` says how many were left out. Pass this when the full response is too large.'
+    ),
 });
 
 const legacyAdvisorsInputSchema = getAdvisorsInputSchema.extend({
@@ -206,12 +218,42 @@ export function groupAdvisorLints(lints: AdvisorLint[]): GroupedAdvisorLint[] {
   return Array.from(groups.values());
 }
 
+type AdvisorLevel = 'ERROR' | 'WARN' | 'INFO';
+
+type AdvisorsResultOptions = {
+  /** Keep only lints at this level. */
+  level?: AdvisorLevel;
+  /**
+   * Keep at most this many findings per grouped lint. Applied per lint rather
+   * than across the response so a long tail of one lint can't push other lints
+   * out entirely.
+   */
+  maxFindingsPerLint?: number;
+};
+
+function capFindings(
+  group: GroupedAdvisorLint,
+  max: number
+): GroupedAdvisorLint {
+  if (group.findings.length <= max) {
+    return group;
+  }
+  return {
+    ...group,
+    findings: group.findings.slice(0, max),
+    findings_omitted: group.findings.length - max,
+  };
+}
+
 /**
  * Groups the lints in an advisors response and leaves the rest of the payload
  * alone. An unrecognised shape passes through, so an API change degrades to the
  * ungrouped response instead of throwing.
  */
-export function groupAdvisorsResult(result: unknown): unknown {
+export function groupAdvisorsResult(
+  result: unknown,
+  options: AdvisorsResultOptions = {}
+): unknown {
   if (typeof result !== 'object' || result === null || !('lints' in result)) {
     return result;
   }
@@ -221,7 +263,17 @@ export function groupAdvisorsResult(result: unknown): unknown {
     return result;
   }
 
-  return { ...result, lints: groupAdvisorLints(lints) };
+  const { level, maxFindingsPerLint } = options;
+
+  const filtered = level ? lints.filter((lint) => lint.level === level) : lints;
+
+  let grouped = groupAdvisorLints(filtered);
+
+  if (maxFindingsPerLint !== undefined) {
+    grouped = grouped.map((group) => capFindings(group, maxFindingsPerLint));
+  }
+
+  return { ...result, lints: grouped };
 }
 
 export const debuggingToolDefs = {
@@ -324,6 +376,8 @@ export function getDebuggingTools({
       execute: async ({
         project_id,
         type,
+        level,
+        max_findings_per_lint,
       }: z.infer<typeof getAdvisorsInputSchema>) => {
         let result: unknown;
         switch (type) {
@@ -344,7 +398,12 @@ export function getDebuggingTools({
           default:
             throw new Error(`Unknown advisor type: ${type}`);
         }
-        return { result: groupAdvisorsResult(result) };
+        return {
+          result: groupAdvisorsResult(result, {
+            level,
+            maxFindingsPerLint: max_findings_per_lint,
+          }),
+        };
       },
     }),
   };
