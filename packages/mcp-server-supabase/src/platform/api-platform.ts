@@ -475,7 +475,7 @@ export function createSupabaseApiPlatform(
         id: key.id ?? undefined,
       }));
     },
-    async generateTypescriptTypes(projectId: string) {
+    async generateTypescriptTypes(projectId: string, { schemas } = {}) {
       const response = await managementApiClient.GET(
         '/v1/projects/{ref}/types/typescript',
         {
@@ -483,6 +483,11 @@ export function createSupabaseApiPlatform(
             path: {
               ref: projectId,
             },
+            // Omit the query when no schemas are given so the API applies its
+            // default (`public`), exactly as before this option existed.
+            ...(schemas && {
+              query: { included_schemas: schemas.join(',') },
+            }),
           },
         }
       );

@@ -421,11 +421,17 @@ export type ApiKey = {
   disabled?: boolean;
 };
 
+export type GenerateTypescriptTypesOptions = {
+  /** Schemas to generate types for. Omitted means the API default (`public`). */
+  schemas?: string[];
+};
+
 export type DevelopmentOperations = {
   getProjectUrl(projectId: string): Promise<string>;
   getPublishableKeys(projectId: string): Promise<ApiKey[]>;
   generateTypescriptTypes(
-    projectId: string
+    projectId: string,
+    options?: GenerateTypescriptTypesOptions
   ): Promise<GenerateTypescriptTypesResult>;
 };
 

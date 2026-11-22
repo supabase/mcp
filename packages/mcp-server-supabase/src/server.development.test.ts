@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { createOrganization, createProject } from '../test/mocks.js';
+import {
+  createOrganization,
+  createProject,
+  createProjectFixture,
+} from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
 
 const harness = createServerHarness();
@@ -74,5 +78,61 @@ describe('tools', () => {
     expect(publishableKey.api_key).toEqual('sb_publishable_dummy_key_1');
     expect(publishableKey.type).toEqual('publishable');
     expect(publishableKey.description).toEqual('Main publishable key');
+  });
+});
+
+describe('generate_typescript_types', () => {
+  test('omits included_schemas when schemas is not given', async () => {
+    const { project } = await createProjectFixture();
+    const { callTool } = await setup();
+
+    const result = await callTool({
+      name: 'generate_typescript_types',
+      arguments: { project_id: project.id },
+    });
+
+    expect(result.types).toContain('// included_schemas: (not sent)');
+  });
+
+  test('passes schemas through as included_schemas', async () => {
+    const { project } = await createProjectFixture();
+    const { callTool } = await setup();
+
+    const result = await callTool({
+      name: 'generate_typescript_types',
+      arguments: { project_id: project.id, schemas: ['public', 'mcp_types'] },
+    });
+
+    expect(result.types).toContain('// included_schemas: public,mcp_types');
+  });
+
+  test('rejects an empty schemas list', async () => {
+    const { project } = await createProjectFixture();
+    const { callTool } = await setup();
+
+    const result = callTool({
+      name: 'generate_typescript_types',
+      arguments: { project_id: project.id, schemas: [] },
+    });
+
+    await expect(result).rejects.toThrow(
+      'Too small: expected array to have >=1 items'
+    );
+  });
+
+  test('advertises schemas as an optional array of schema names', async () => {
+    const { client } = await setup();
+
+    const { tools } = await client.listTools();
+    const tool = tools.find(
+      (tool) => tool.name === 'generate_typescript_types'
+    );
+
+    expect(tool?.inputSchema.properties?.schemas).toMatchObject({
+      type: 'array',
+      minItems: 1,
+      items: { type: 'string', minLength: 1 },
+    });
+    expect(tool?.inputSchema.required ?? []).not.toContain('schemas');
   });
 });
