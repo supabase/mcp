@@ -37,6 +37,14 @@ export type SuccessResponseType<
   response: Response;
 };
 
+/**
+ * Shown for a 401 from the Management API. The token's source depends on the
+ * transport: the HTTP entry reads only each request's `Authorization` header
+ * and ignores `--access-token` and `SUPABASE_ACCESS_TOKEN`, so name both.
+ */
+export const UNAUTHORIZED_MESSAGE =
+  'Unauthorized. Please provide a valid access token to the MCP server. Over HTTP, send it in the "Authorization: Bearer <token>" header on each request; over stdio, use the --access-token flag or the SUPABASE_ACCESS_TOKEN environment variable.';
+
 const errorSchema = z.object({
   message: z.string(),
 });
@@ -54,9 +62,7 @@ export function assertSuccess<
 ): asserts response is SuccessResponseType<T, Options, Media> {
   if ('error' in response) {
     if (response.response.status === 401) {
-      throw new Error(
-        'Unauthorized. Please provide a valid access token to the MCP server via the --access-token flag or SUPABASE_ACCESS_TOKEN.'
-      );
+      throw new Error(UNAUTHORIZED_MESSAGE);
     }
 
     const { data: errorContent } = errorSchema.safeParse(response.error);

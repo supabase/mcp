@@ -1,5 +1,7 @@
+import { ToolCallerError } from '@supabase/mcp-utils';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { createManagementApiV2Client } from './index.js';
+import { UNAUTHORIZED_MESSAGE } from '../management-api/index.js';
+import { assertSuccessV2, createManagementApiV2Client } from './index.js';
 
 describe('createManagementApiV2Client', () => {
   afterEach(() => {
@@ -40,5 +42,34 @@ describe('createManagementApiV2Client', () => {
         attributes: { lints: [{ name: 'instance_db_down' }] },
       },
     });
+  });
+});
+
+describe('assertSuccessV2', () => {
+  test('a 401 names the token sources for both transports', () => {
+    // Only `error` and `response.status` matter to assertSuccessV2.
+    const response = {
+      error: { error: { message: 'Unauthorized' } },
+      response: new Response(null, { status: 401 }),
+    } as never;
+
+    let error: unknown;
+    try {
+      assertSuccessV2(response, 'Failed to list notebooks');
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    const { message, name } = error as Error;
+    expect(message).toBe(UNAUTHORIZED_MESSAGE);
+    expect(message).toMatch(
+      /^Unauthorized\. Please provide a valid access token/
+    );
+    expect(message).toContain('"Authorization: Bearer <token>" header');
+    expect(message).toContain('SUPABASE_ACCESS_TOKEN');
+    // A 401 stays a plain Error rather than a caller error.
+    expect(error).not.toBeInstanceOf(ToolCallerError);
+    expect(name).toBe('Error');
   });
 });

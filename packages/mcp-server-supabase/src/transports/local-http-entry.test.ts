@@ -473,6 +473,35 @@ describe('startLocalHttpEntry', () => {
     }
   );
 
+  test('a rejected bearer token points to the Authorization header', async () => {
+    // The HTTP entry reads only this header, never --access-token or env.
+    const transport = new StreamableHTTPClientTransport(
+      new URL(`${entry.url}?project_ref=project&features=storage`),
+      { requestInit: { headers: { Authorization: 'Bearer <your token>' } } }
+    );
+    const client = new Client(
+      { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      { versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } } }
+    );
+    await client.connect(transport);
+    cleanups.push(() => client.close());
+
+    const result = (await client.callTool({
+      name: 'list_storage_buckets',
+      arguments: {},
+    })) as CallToolResult;
+
+    expect(result.isError).toBe(true);
+    const [content] = result.content;
+    if (content?.type !== 'text')
+      throw new Error('expected a text tool result');
+    const { error } = JSON.parse(content.text);
+    expect(error.message).toMatch(
+      /^Unauthorized\. Please provide a valid access token/
+    );
+    expect(error.message).toContain('"Authorization: Bearer <token>" header');
+  });
+
   test('keeps URL capability and metadata permission checks on the HTTP path', async () => {
     const unsupported = await connect(
       { pin: MODERN_PROTOCOL_VERSION },

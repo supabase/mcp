@@ -10,6 +10,7 @@ import type {
 } from 'openapi-typescript-helpers';
 import { z } from 'zod/v4';
 import { ToolCallerError } from '@supabase/mcp-utils';
+import { UNAUTHORIZED_MESSAGE } from '../management-api/index.js';
 import type { paths } from './types.js';
 
 export function createManagementApiV2Client(
@@ -62,9 +63,7 @@ export function assertSuccessV2<
 ): asserts response is SuccessResponseType<T, Options, Media> {
   if ('error' in response) {
     if (response.response.status === 401) {
-      throw new Error(
-        'Unauthorized. Please provide a valid access token to the MCP server via the --access-token flag or SUPABASE_ACCESS_TOKEN.'
-      );
+      throw new Error(UNAUTHORIZED_MESSAGE);
     }
 
     const { data: errorContent } = errorSchema.safeParse(response.error);
