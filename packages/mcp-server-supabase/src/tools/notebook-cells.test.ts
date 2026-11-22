@@ -11,6 +11,15 @@ describe('applyRowLimit', () => {
     ['select * from users;', 'select * from users limit 10;'],
     ['  select *\nfrom users\n', 'select *\nfrom users limit 10;'],
     ['SELECT id FROM users', 'SELECT id FROM users limit 10;'],
+    // Semicolons inside literals and quoted bodies are not statement breaks.
+    ["select 'a;b' as s", "select 'a;b' as s limit 10;"],
+    ['select $$a;b$$ as body;', 'select $$a;b$$ as body limit 10;'],
+    [
+      'select $fn$ x; y $fn$ as tagged',
+      'select $fn$ x; y $fn$ as tagged limit 10;',
+    ],
+    ['select "a;b" from t', 'select "a;b" from t limit 10;'],
+    ["select E'it\\'s; ok' as s", "select E'it\\'s; ok' as s limit 10;"],
   ])('limits %j', (sql, expected) => {
     expect(applyRowLimit(sql, 10)).toBe(expected);
   });
@@ -34,6 +43,8 @@ describe('applyRowLimit', () => {
     ['comments', 'select * from users -- all of them'],
     ['a non-select statement', 'insert into users default values'],
     ['a with query', 'with u as (select 1) select * from u'],
+    ['an unterminated string', "select 'a;b"],
+    ['a statement after a string literal', "select 'a'; select 2"],
   ])('leaves %s unchanged', (_, sql) => {
     expect(applyRowLimit(sql, 10)).toBe(sql);
   });

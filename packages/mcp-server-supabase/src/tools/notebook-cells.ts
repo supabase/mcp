@@ -1,4 +1,5 @@
 import type { NotebookCell } from '../platform/types.js';
+import { lexSql } from './sql-lexer.js';
 
 type LogTimeRange = Extract<NotebookCell, { type: 'log' }>['time_range'];
 
@@ -23,13 +24,19 @@ export function isQueryCell(cell: NotebookCell): cell is QueryCell {
  * comments, non-selects, or any LIMIT/FETCH token) is returned unchanged.
  */
 export function applyRowLimit(sql: string, limit: number): string {
+  const { spans, unterminated } = lexSql(sql);
+  if (unterminated) return sql;
+
   const cleanedSql = sql.trim().replaceAll('\n', ' ').replaceAll(/\s+/g, ' ');
 
-  const statements = [...cleanedSql.matchAll(/[a-zA-Z]*[0-9]*[;]+/g)];
-  const lastSemicolon = cleanedSql.lastIndexOf(';');
-  const hasMultipleStatements =
-    statements.length > 1 ||
-    (lastSemicolon > 0 && lastSemicolon !== cleanedSql.length - 1);
+  // Only semicolons in code separate statements. Ones inside string
+  // literals, quoted identifiers, or dollar-quoted bodies do not.
+  const code = spans
+    .map((span) =>
+      span.kind === 'code' ? sql.slice(span.start, span.end) : ' '
+    )
+    .join('');
+  const hasMultipleStatements = code.trim().replace(/;+$/, '').includes(';');
 
   const shouldLimit =
     limit > 0 &&

@@ -239,9 +239,18 @@ type CellResult =
     } & (
       | { status: 'success'; rows: unknown }
       | { status: 'error'; error: string }
-      | { status: 'skipped'; reason: 'run result budget spent' }
+      | { status: 'skipped'; reason: BudgetSkipReason }
     ))
   | InvalidSelectionResult;
+
+/**
+ * Why a query cell was skipped once the run's result budget reached zero:
+ * earlier rows used it up, or an earlier cell's oversized result forfeited
+ * what was left (its rows were not returned, so the budget was not "spent").
+ */
+type BudgetSkipReason =
+  | 'run result budget spent'
+  | "an earlier cell's result was too large for this run";
 
 /**
  * Most bytes of JSON rows one run returns across all its cells. Each cell may
@@ -293,8 +302,9 @@ function withSkippedNotice(message: string, hasLaterCell: boolean): string {
 }
 
 /**
- * Runs one query cell, returning its rows or the error it failed with, and how
- * many bytes of the run's result budget it spent.
+ * Runs one query cell, returning its rows or the error it failed with, how
+ * many bytes of the run's result budget it spent, and whether its result was
+ * too large to return.
  */
 async function runQueryCell(
   cell: QueryCell,
@@ -313,7 +323,7 @@ async function runQueryCell(
     maxResultBytes: number;
     hasLaterCell: boolean;
   }
-): Promise<{ result: CellResult; bytes: number }> {
+): Promise<{ result: CellResult; bytes: number; oversized: boolean }> {
   const base = {
     cell_id: cell.id,
     ...(cell.title && { title: cell.title }),
@@ -338,6 +348,16 @@ async function runQueryCell(
         read_only: readOnly,
         max_result_bytes: maxResultBytes,
       });
+      // applyRowLimit only rewrites SQL it can reason about, so CTEs,
+      // commented SQL, and other shapes come back unlimited. Cap the rows here
+      // too, so row_limit always bounds what the cell returns.
+      if (
+        Array.isArray(rows) &&
+        cell.row_limit > 0 &&
+        rows.length > cell.row_limit
+      ) {
+        rows = rows.slice(0, cell.row_limit);
+      }
     } else {
       if (!debugging?.queryLogs) {
         throw new Error(
@@ -368,9 +388,14 @@ async function runQueryCell(
           ),
         },
         bytes: maxResultBytes,
+        oversized: true,
       };
     }
-    return { result: { ...base, status: 'success', rows }, bytes };
+    return {
+      result: { ...base, status: 'success', rows },
+      bytes,
+      oversized: false,
+    };
   } catch (error) {
     const oversized =
       typeof error === 'object' &&
@@ -389,6 +414,7 @@ async function runQueryCell(
     return {
       result: { ...base, status: 'error', error: errorMessage },
       bytes: oversized ? maxResultBytes : 0,
+      oversized,
     };
   }
 }
@@ -663,6 +689,7 @@ export function getNotebookTools({
             let skipped = 0;
             let errored = 0;
             let remainingBytes = MAX_RUN_RESULT_BYTES;
+            let budgetSkipReason: BudgetSkipReason = 'run result budget spent';
             for (let index = 0; index < queryCells.length; index++) {
               const cell = queryCells[index]!;
               ctx.mcpReq.signal.throwIfAborted();
@@ -672,13 +699,13 @@ export function getNotebookTools({
                   ...(cell.title && { title: cell.title }),
                   type: cell.type,
                   status: 'skipped',
-                  reason: 'run result budget spent',
+                  reason: budgetSkipReason,
                 });
                 skipped++;
                 continue;
               }
 
-              const { result, bytes } = await runQueryCell(cell, {
+              const { result, bytes, oversized } = await runQueryCell(cell, {
                 projectId: project_id,
                 database,
                 debugging,
@@ -691,6 +718,10 @@ export function getNotebookTools({
               results.push(result);
               executed++;
               if (result.status === 'error') errored++;
+              if (oversized) {
+                budgetSkipReason =
+                  "an earlier cell's result was too large for this run";
+              }
               remainingBytes = Math.max(0, remainingBytes - bytes);
             }
             if (invalidResults) {
