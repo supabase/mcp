@@ -410,7 +410,7 @@ export const databaseToolDefs = {
       'Shows the user a SQL query and its results in an editor, where they can change the SQL and run it again. Use it only when the user wants to see results, such as "show me the newest users"; to read data yourself, use `execute_sql` or `query_logs`. Runs read-only and returns only a row count: the rows go to the user, not to you. Never use it for writes. Include an ORDER BY and a LIMIT. For source "logs", write the SQL as for `query_logs`, and pass iso_timestamp_start and iso_timestamp_end for a requested range (at most 24 hours).',
     parameters: showQueryInputSchema,
     outputSchema: showQueryOutputSchema,
-    _meta: viewToolMeta(SHOW_QUERY_UI_URI, 'inline'),
+    _meta: viewToolMeta(SHOW_QUERY_UI_URI, 'expandable'),
     annotations: {
       title: 'Show query',
       readOnlyHint: true,

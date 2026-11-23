@@ -8,6 +8,7 @@ import {
   CodeSquareIcon,
   EyeIcon,
   EyeOffIcon,
+  Maximize2Icon,
   PlayIcon,
   SpinnerIcon,
 } from './icons';
@@ -55,6 +56,7 @@ export function QueryEditor({
   onRun,
   source = 'database',
   footerDetail,
+  onExpand,
 }: {
   title: string;
   /** The SQL to start from; undefined until the host sends it. */
@@ -65,12 +67,16 @@ export function QueryEditor({
   source?: 'database' | 'logs';
   /** On the footer's right, e.g. the log window, with its full text on hover. */
   footerDetail?: { label: string; title?: string };
+  /** Asks the host for more room, e.g. its side panel. Omit to hide Expand. */
+  onExpand?: () => Promise<void>;
 }) {
   const titleId = useId();
   const [draft, setDraft] = useState<string>();
   const [ownRun, setOwnRun] = useState<QueryRun>();
   const [isRunning, setIsRunning] = useState(false);
   const [isQueryShown, setIsQueryShown] = useState<boolean>();
+  const [isExpanding, setIsExpanding] = useState(false);
+  const [expandError, setExpandError] = useState('');
   const lock = useRef(false);
 
   const sql = draft ?? initialSql ?? '';
@@ -108,6 +114,19 @@ export function QueryEditor({
     }
   }
 
+  async function handleExpand() {
+    if (!onExpand || isExpanding) return;
+    setIsExpanding(true);
+    setExpandError('');
+    try {
+      await onExpand();
+    } catch (error) {
+      setExpandError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsExpanding(false);
+    }
+  }
+
   return (
     <section
       className="query-editor"
@@ -129,6 +148,18 @@ export function QueryEditor({
           >
             {showQuery ? <EyeOffIcon /> : <EyeIcon />}
           </button>
+          {onExpand && (
+            <button
+              type="button"
+              data-slot="action"
+              aria-label="Expand query"
+              title="Expand query"
+              disabled={isExpanding}
+              onClick={() => void handleExpand()}
+            >
+              <Maximize2Icon />
+            </button>
+          )}
           {onRun && (
             <button
               type="button"
@@ -155,6 +186,14 @@ export function QueryEditor({
         </div>
       )}
       <div data-slot="results">
+        {expandError && (
+          <Admonition
+            type="warning"
+            layout="full-bleed"
+            title="Failed to open query"
+            description={`Error: ${expandError}`}
+          />
+        )}
         {run.status === 'error' && (
           <Admonition
             type="warning"

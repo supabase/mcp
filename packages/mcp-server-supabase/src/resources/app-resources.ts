@@ -30,22 +30,33 @@ const BASE_VIEW_UI: McpUiResourceMeta = {
 
 /**
  * Where a host shows a view, as the Supabase surfaces define it: `inline` in
- * the conversation (a card, a query block), or a `panel` beside it (logs, a
- * row) that the user works in. A panel prefers fullscreen, which Claude
- * opens in its side panel without a click and ChatGPT opens fullscreen.
+ * the conversation (a card), `expandable` inline with a way to open it in a
+ * panel (a query block), or a `panel` beside the conversation (logs, a row)
+ * that the user works in. A panel prefers fullscreen, which Claude opens in
+ * its side panel without a click and ChatGPT opens fullscreen.
  */
-export type ViewPresentation = 'inline' | 'panel';
+export type ViewPresentation = 'inline' | 'expandable' | 'panel';
+
+type DisplayMode = 'inline' | 'fullscreen';
+
+const DISPLAY_MODES: Record<
+  ViewPresentation,
+  { preferred: DisplayMode; available: DisplayMode[] }
+> = {
+  inline: { preferred: 'inline', available: ['inline'] },
+  expandable: { preferred: 'inline', available: ['inline', 'fullscreen'] },
+  panel: { preferred: 'fullscreen', available: ['fullscreen'] },
+};
 
 /** Resource `_meta` for a view, for every host. */
 export function viewResourceMeta(presentation: ViewPresentation) {
-  const preferredDisplayMode =
-    presentation === 'panel' ? 'fullscreen' : 'inline';
+  const { preferred, available } = DISPLAY_MODES[presentation];
   return {
     // `preferredDisplayMode` is Claude's extension to the MCP Apps standard.
-    ui: { ...BASE_VIEW_UI, preferredDisplayMode },
+    ui: { ...BASE_VIEW_UI, preferredDisplayMode: preferred },
     'openai/ui': {
-      preferredDisplayMode,
-      availableDisplayModes: [preferredDisplayMode],
+      preferredDisplayMode: preferred,
+      availableDisplayModes: available,
     },
   };
 }
@@ -61,8 +72,7 @@ export function viewToolMeta(
   return {
     ui: { resourceUri },
     'openai/ui': {
-      preferredModelDisplayMode:
-        presentation === 'panel' ? 'fullscreen' : 'inline',
+      preferredModelDisplayMode: DISPLAY_MODES[presentation].preferred,
     },
   };
 }
@@ -108,7 +118,8 @@ export function getAppResources(): Resource[] {
       SHOW_QUERY_UI_URI,
       'Query view',
       'A SQL query and its results, editable and runnable, for the show_query tool.',
-      showQueryHtml
+      showQueryHtml,
+      'expandable'
     ),
     appResource(
       SHOW_ROW_UI_URI,
