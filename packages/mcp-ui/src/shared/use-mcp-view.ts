@@ -47,7 +47,17 @@ export type McpView<T> = {
  * the host context and capabilities, and helpers built on them (`callTool`,
  * `inputText`, `openLink`). Also applies the host's styles (see `useHostStyles`).
  */
-export function useMcpView<T>(name: string): McpView<T> {
+export function useMcpView<T>(
+  name: string,
+  options: {
+    /**
+     * Where the view can show, declared in the handshake: the server's
+     * presentation for it (`viewResourceMeta`). A panel lists only
+     * `fullscreen`, so Claude opens it in its side panel. Inline by default.
+     */
+    displayModes?: ('inline' | 'fullscreen')[];
+  } = {}
+): McpView<T> {
   const [toolCall, setToolCall] = useState<ToolCallState<T>>({
     status: 'loading',
   });
@@ -60,7 +70,9 @@ export function useMcpView<T>(name: string): McpView<T> {
 
   const { app, error } = useApp({
     appInfo: { name, version: '0.0.0' },
-    capabilities: {},
+    capabilities: options.displayModes
+      ? { availableDisplayModes: options.displayModes }
+      : {},
     onAppCreated: (app) => {
       app.ontoolinput = ({ arguments: args }) => setInput(args);
       app.ontoolresult = (result) => {

@@ -70,7 +70,10 @@
 
     :where([data-slot="fields"]) {
       display: flex;
+      flex: 1;
       flex-direction: column;
+      min-block-size: 0;
+      overflow-y: auto;
       gap: var(--sb-space-4);
       padding: var(--sb-space-4) 20px;
     }

@@ -122,23 +122,50 @@ describe('MCP Apps', () => {
       clientCapabilities: APPS_CLIENT_CAPABILITIES,
     });
 
-    const expectedMeta = {
-      ui: {
-        csp: { connectDomains: [], resourceDomains: [] },
-        prefersBorder: false,
-        permissions: { clipboardWrite: {} },
-      },
+    const baseUi = {
+      csp: { connectDomains: [], resourceDomains: [] },
+      prefersBorder: false,
+      permissions: { clipboardWrite: {} },
+    };
+    // Panels (a row) open beside the conversation; the rest stay inline.
+    const panels = [SHOW_ROW_UI_URI];
+    const expectedMeta = (uri: string) => {
+      const mode = panels.includes(uri) ? 'fullscreen' : 'inline';
+      return {
+        ui: { ...baseUi, preferredDisplayMode: mode },
+        'openai/ui': {
+          preferredDisplayMode: mode,
+          availableDisplayModes: [mode],
+        },
+      };
     };
 
     const { resources } = await client.listResources();
     for (const uri of VIEW_URIS) {
       const resource = resources.find((r) => r.uri === uri);
-      expect(resource?._meta, uri).toEqual(expectedMeta);
+      expect(resource?._meta, uri).toEqual(expectedMeta(uri));
       expect(resource?.description, uri).toBeTruthy();
 
       const { contents } = await client.readResource({ uri });
-      expect(contents[0]?._meta, uri).toEqual(expectedMeta);
+      expect(contents[0]?._meta, uri).toEqual(expectedMeta(uri));
     }
+  });
+
+  test('tools that open a panel ask ChatGPT to open it fullscreen', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+
+    const { tools } = await client.listTools();
+    const openaiUi = (name: string) =>
+      tools.find((tool) => tool.name === name)?._meta?.['openai/ui'];
+    expect(openaiUi('show_row')).toEqual({
+      preferredModelDisplayMode: 'fullscreen',
+    });
+    expect(openaiUi('show_query')).toEqual({
+      preferredModelDisplayMode: 'inline',
+    });
   });
 
   test('views are self-contained HTML', async () => {
