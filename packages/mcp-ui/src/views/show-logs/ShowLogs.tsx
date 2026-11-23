@@ -47,6 +47,8 @@ export function ShowLogs() {
   const view = useRef<OpenLogs | undefined>(undefined);
   const { toolCall, app, input, inputText, hostCapabilities, hostContext } =
     useMcpView<ShowLogsViewData>('supabase-show-logs', {
+      // A panel, like the surfaces' logs panel (`viewResourceMeta`).
+      displayModes: ['fullscreen'],
       onAppCreated: (app) =>
         registerViewTools(
           app,

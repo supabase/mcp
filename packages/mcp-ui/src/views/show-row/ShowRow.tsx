@@ -19,8 +19,13 @@ type ShowRowViewData = { table: RowTable; row: Row };
  * read-only.
  */
 export function ShowRow() {
-  const { toolCall, callTool, inputText } =
-    useMcpView<ShowRowViewData>('supabase-show-row');
+  const { toolCall, callTool, inputText } = useMcpView<ShowRowViewData>(
+    'supabase-show-row',
+    {
+      // A panel, like the surfaces' row panel (`viewResourceMeta`).
+      displayModes: ['fullscreen'],
+    }
+  );
 
   if (toolCall.status === 'loading') return <Message>Loading row…</Message>;
   if (toolCall.status !== 'ready') {

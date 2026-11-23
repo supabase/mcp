@@ -18,7 +18,7 @@ import {
   wrapWithUntrustedDataBoundary,
 } from './util.js';
 import { getLogCellRows } from './notebook-cells.js';
-import { SHOW_LOGS_UI_URI } from '../resources/app-resources.js';
+import { SHOW_LOGS_UI_URI, viewToolMeta } from '../resources/app-resources.js';
 
 export const DEFAULT_LOGS_DIALECT: LogsDialect = 'clickhouse';
 
@@ -299,7 +299,7 @@ export const debuggingToolDefs = {
       "Shows the user their project's latest logs, which they can search, filter by severity and source, and select to send back to you. Use it when the user wants to see logs, such as \"show me the auth errors from the last hour\"; to read logs yourself, use `query_logs`. Shows the latest 100 matching events and returns only how many there were: the logs go to the user, not to you. An open logs view shares its filters and the user's selection with you; to change it or read the selected events, use the view's `edit_logs_view` and `read_logs_view` tools where the host offers them, rather than showing new logs.",
     parameters: showLogsInputSchema,
     outputSchema: showLogsOutputSchema,
-    _meta: { ui: { resourceUri: SHOW_LOGS_UI_URI } },
+    _meta: viewToolMeta(SHOW_LOGS_UI_URI, 'panel'),
     annotations: {
       title: 'Show logs',
       readOnlyHint: true,

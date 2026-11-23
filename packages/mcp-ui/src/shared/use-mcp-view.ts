@@ -56,6 +56,12 @@ export function useMcpView<T>(
      * declared during the handshake.
      */
     onAppCreated?: (app: App) => void;
+    /**
+     * Where the view can show, declared in the handshake: the server's
+     * presentation for it (`viewResourceMeta`). A panel lists only
+     * `fullscreen`, so Claude opens it in its side panel. Inline by default.
+     */
+    displayModes?: ('inline' | 'fullscreen')[];
   } = {}
 ): McpView<T> {
   const [toolCall, setToolCall] = useState<ToolCallState<T>>({
@@ -70,7 +76,9 @@ export function useMcpView<T>(
 
   const { app, error } = useApp({
     appInfo: { name, version: '0.0.0' },
-    capabilities: {},
+    capabilities: options.displayModes
+      ? { availableDisplayModes: options.displayModes }
+      : {},
     onAppCreated: (app) => {
       app.ontoolinput = ({ arguments: args }) => setInput(args);
       app.ontoolresult = (result) => {
