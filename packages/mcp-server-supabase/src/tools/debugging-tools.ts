@@ -1,3 +1,4 @@
+import { ToolCallerError } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
 import {
   filterAndSortIssues,
@@ -238,9 +239,37 @@ const getIssuesInputSchema = z.object({
   severity: issueSeveritySchema
     .default('info')
     .describe(
-      'Minimum severity; filtering retains all findings of a matching issue'
+      'Minimum issue severity; each issue includes up to 20 findings, highest severity first, and affected_count gives the total'
     ),
 });
+
+const legacyIssuesInputSchema = getIssuesInputSchema.extend({
+  type: z.enum(['all', 'security', 'performance']).default('all'),
+});
+
+function mustPropagateCheckFailure(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const value = error as {
+    status?: unknown;
+    statusCode?: unknown;
+    code?: unknown;
+    response?: { status?: unknown };
+    cause?: unknown;
+  };
+  return (
+    [value.status, value.statusCode, value.response?.status].some(
+      (status) => status === 401 || status === 403
+    ) ||
+    (typeof value.code === 'number' &&
+      value.code >= -32768 &&
+      value.code <= -32000) ||
+    value.code === 'UNAUTHORIZED' ||
+    value.code === 'FORBIDDEN' ||
+    (value.cause !== error &&
+      value.cause !== undefined &&
+      mustPropagateCheckFailure(value.cause))
+  );
+}
 
 export const debuggingToolDefs = {
   get_issues: {
@@ -283,7 +312,7 @@ export const debuggingToolDefs = {
   },
   get_advisors: {
     description:
-      "Planned for future deprecation in favor of get_issues; remains available. Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
+      'Planned for future deprecation in favor of get_issues; remains available. Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves.',
     parameters: getAdvisorsInputSchema,
     outputSchema: getAdvisorsOutputSchema,
     annotations: {
@@ -302,6 +331,11 @@ export function getDebuggingTools({
 }: DebuggingToolsOptions) {
   const project_id = projectId;
   const { queryLogs } = debugging;
+  const advisorAdapters = {
+    security: debugging.getSecurityAdvisors.bind(debugging),
+    performance: debugging.getPerformanceAdvisors.bind(debugging),
+    health: debugging.getHealthAdvisors?.bind(debugging),
+  };
   const logsDialect = debugging.logsDialect ?? DEFAULT_LOGS_DIALECT;
 
   return {
@@ -348,30 +382,17 @@ export function getDebuggingTools({
     }),
     get_issues: injectableTool({
       ...debuggingToolDefs.get_issues,
+      parameters: advisorAdapters.health
+        ? getIssuesInputSchema
+        : legacyIssuesInputSchema,
       inject: { project_id },
       execute: async ({ project_id, type, severity }) => {
         const categories: IssueCategory[] =
           type === 'all' ? ['security', 'performance', 'health'] : [type];
         const results = await Promise.all(
           categories.map(async (category): Promise<IssuesResult> => {
-            let response: unknown;
-            if (category === 'security') {
-              response = await debugging.getSecurityAdvisors(project_id, {
-                includeUnavailable: true,
-              });
-            } else if (category === 'performance') {
-              response = await debugging.getPerformanceAdvisors(project_id, {
-                includeUnavailable: true,
-              });
-            } else if (debugging.getHealthAdvisors) {
-              response = await debugging.getHealthAdvisors(project_id, {
-                includeUnavailable: true,
-              });
-            } else {
-              if (type === 'health')
-                throw new Error(
-                  'Health issues are not supported by this platform'
-                );
+            const adapter = advisorAdapters[category];
+            if (!adapter) {
               return {
                 issues: [],
                 checks: [
@@ -383,7 +404,27 @@ export function getDebuggingTools({
                 ],
               };
             }
-            return normalizeIssues(response, category);
+            try {
+              const response = await adapter(project_id, {
+                includeUnavailable: true,
+              });
+              return normalizeIssues(response, category);
+            } catch (error) {
+              if (mustPropagateCheckFailure(error)) throw error;
+              return {
+                issues: [],
+                checks: [
+                  {
+                    type: category,
+                    status: 'unavailable',
+                    reason:
+                      error instanceof Error
+                        ? error.message
+                        : 'Advisor check failed',
+                  },
+                ],
+              };
+            }
           })
         );
         const result: IssuesResult = {
@@ -406,25 +447,12 @@ export function getDebuggingTools({
         project_id,
         type,
       }: z.infer<typeof getAdvisorsInputSchema>) => {
-        let result: unknown;
-        switch (type) {
-          case 'security':
-            result = await debugging.getSecurityAdvisors(project_id);
-            break;
-          case 'performance':
-            result = await debugging.getPerformanceAdvisors(project_id);
-            break;
-          case 'health':
-            if (!debugging.getHealthAdvisors) {
-              throw new Error(
-                'Health advisors are not supported by this platform'
-              );
-            }
-            result = await debugging.getHealthAdvisors(project_id);
-            break;
-          default:
-            throw new Error(`Unknown advisor type: ${type}`);
-        }
+        const adapter = advisorAdapters[type];
+        if (!adapter)
+          throw new ToolCallerError(
+            'Health advisors are not supported by this platform'
+          );
+        const result = await adapter(project_id);
         return { result: groupAdvisorsResult(result) };
       },
     }),

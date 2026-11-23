@@ -1,3 +1,4 @@
+import { ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import { API_URL, createProjectFixture } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
 import type { SupabasePlatform } from './platform/types.js';
@@ -559,6 +560,25 @@ describe('tools', () => {
 });
 
 test('issues defaults to all checks and reports unavailable health without losing real findings', async () => {
+  const distinctLint = {
+    title: 'Finding',
+    description: 'Description',
+    detail: 'Affected resource',
+  };
+  harness.mockServer?.use(
+    http.get(`${API_URL}/v1/projects/:projectId/advisors/security`, () =>
+      HttpResponse.json({
+        lints: [{ ...distinctLint, name: 'security_finding', level: 'WARN' }],
+      })
+    ),
+    http.get(`${API_URL}/v1/projects/:projectId/advisors/performance`, () =>
+      HttpResponse.json({
+        lints: [
+          { ...distinctLint, name: 'performance_finding', level: 'INFO' },
+        ],
+      })
+    )
+  );
   const { project } = await createProjectFixture();
   const { client, callTool } = await setup({
     projectId: project.id,
@@ -584,6 +604,8 @@ test('issues defaults to all checks and reports unavailable health without losin
       severity: 'critical',
       category: 'health',
     },
+    { id: 'security_finding', category: 'security', severity: 'warning' },
+    { id: 'performance_finding', category: 'performance', severity: 'info' },
   ]);
 });
 
@@ -601,7 +623,15 @@ test('issues distinguishes unsupported health from completed checks on legacy pl
       },
     },
   };
-  const { callTool } = await setup({ platform, features: ['debugging'] });
+  const { client, callTool } = await setup({
+    platform,
+    features: ['debugging'],
+  });
+  const { tools } = await client.listTools();
+  expect(
+    tools.find(({ name }) => name === 'get_issues')?.inputSchema.properties
+      ?.type
+  ).toMatchObject({ enum: ['all', 'security', 'performance'] });
   expect(
     await callTool({ name: 'get_issues', arguments: { project_id: 'legacy' } })
   ).toEqual({
@@ -621,21 +651,24 @@ test('issues distinguishes unsupported health from completed checks on legacy pl
       name: 'get_issues',
       arguments: { project_id: 'legacy', type: 'health' },
     })
-  ).rejects.toThrow('not supported');
+  ).rejects.toThrow('Invalid option');
 });
 
-test('issues propagates API authorization failures instead of presenting clean checks', async () => {
-  const { project } = await createProjectFixture();
-  const { callTool } = await setup();
-  harness.mockServer?.use(
-    http.get(`${API_URL}/v1/projects/:projectId/advisors/security`, () =>
-      HttpResponse.json({ message: 'Access denied' }, { status: 403 })
-    )
-  );
-  await expect(
-    callTool({ name: 'get_issues', arguments: { project_id: project.id } })
-  ).rejects.toThrow('Access denied');
-});
+test.each([401, 403])(
+  'issues propagates API authorization failure %s instead of presenting clean checks',
+  async (status) => {
+    const { project } = await createProjectFixture();
+    const { callTool } = await setup();
+    harness.mockServer?.use(
+      http.get(`${API_URL}/v1/projects/:projectId/advisors/security`, () =>
+        HttpResponse.json({ message: 'Access denied' }, { status })
+      )
+    );
+    await expect(
+      callTool({ name: 'get_issues', arguments: { project_id: project.id } })
+    ).rejects.toThrow(status === 401 ? 'Unauthorized' : 'Access denied');
+  }
+);
 
 test('explicit issue filters only run the requested check and retain lower severity evidence', async () => {
   const { project } = await createProjectFixture();
@@ -683,9 +716,10 @@ test('explicit issue filters only run the requested check and retain lower sever
       id: 'mixed_severity',
       severity: 'critical',
       category: 'security',
+      affected_count: 2,
       affected: [
-        { id: 'low', severity: 'info' },
         { id: 'high', severity: 'critical' },
+        { id: 'low', severity: 'info' },
       ],
     },
   ]);
@@ -744,3 +778,134 @@ test.each(['security', 'performance'] as const)(
     ).toEqual({ result: { lints: [] } });
   }
 );
+
+test.each([500, 429])(
+  'issues preserve security findings when health fails with %s',
+  async (status) => {
+    const { project } = await createProjectFixture();
+    const { callTool } = await setup();
+    harness.mockServer?.use(
+      http.get(`${API_URL}/v1/projects/:projectId/advisors/security`, () =>
+        HttpResponse.json({
+          lints: [
+            {
+              name: 'critical_security',
+              title: 'Critical security',
+              description: 'Description',
+              detail: 'Resource',
+              level: 'ERROR',
+            },
+          ],
+        })
+      ),
+      http.post(`${API_URL}/v2/projects/:projectId/advisors/run`, () =>
+        HttpResponse.json(
+          { error: { message: 'Health unavailable' } },
+          { status }
+        )
+      )
+    );
+    const result = await callTool({
+      name: 'get_issues',
+      arguments: { project_id: project.id },
+    });
+    expect(result.issues).toMatchObject([
+      { id: 'critical_security', category: 'security' },
+    ]);
+    expect(result.checks).toEqual([
+      { type: 'security', status: 'complete' },
+      { type: 'performance', status: 'complete' },
+      { type: 'health', status: 'unavailable', reason: 'Health unavailable' },
+    ]);
+  }
+);
+
+test.each([401, 403])(
+  'issues propagate health authorization failure %s',
+  async (status) => {
+    const { project } = await createProjectFixture();
+    const { callTool } = await setup();
+    harness.mockServer?.use(
+      http.post(`${API_URL}/v2/projects/:projectId/advisors/run`, () =>
+        HttpResponse.json({ error: { message: 'Access denied' } }, { status })
+      )
+    );
+    await expect(
+      callTool({ name: 'get_issues', arguments: { project_id: project.id } })
+    ).rejects.toThrow(status === 401 ? 'Unauthorized' : 'Access denied');
+  }
+);
+
+test.each([
+  new ProtocolError(
+    ProtocolErrorCode.InvalidRequest,
+    'OAuth permission denied'
+  ),
+  Object.assign(new Error('FGA permission denied'), { statusCode: 403 }),
+  Object.assign(new Error('Permission denied'), { response: { status: 401 } }),
+])('issues preserve platform authorization errors: %s', async (error) => {
+  const platform: SupabasePlatform = {
+    debugging: {
+      async getLogs() {
+        return [];
+      },
+      async getSecurityAdvisors() {
+        throw error;
+      },
+      async getPerformanceAdvisors() {
+        return { lints: [] };
+      },
+    },
+  };
+  const { callTool } = await setup({ platform, features: ['debugging'] });
+  await expect(
+    callTool({ name: 'get_issues', arguments: { project_id: 'denied' } })
+  ).rejects.toThrow(error.message.replace(/^MCP error [^:]+: /, ''));
+});
+
+test('issues keep self-hosted findings when another adapter times out or returns malformed data', async () => {
+  const lints = [
+    {
+      name: 'security_finding',
+      title: 'Security finding',
+      description: 'Description',
+      detail: 'Resource',
+      level: 'ERROR',
+    },
+  ];
+  const platform: SupabasePlatform = {
+    debugging: {
+      async getLogs() {
+        return [];
+      },
+      async getSecurityAdvisors() {
+        return lints;
+      },
+      async getPerformanceAdvisors() {
+        return { lints: null };
+      },
+      async getHealthAdvisors() {
+        throw new Error('Health check timed out');
+      },
+    },
+  };
+  const { callTool } = await setup({ platform, features: ['debugging'] });
+  const result = await callTool({
+    name: 'get_issues',
+    arguments: { project_id: 'self-hosted' },
+  });
+  expect(result.issues).toMatchObject([
+    { id: 'security_finding', category: 'security', affected_count: 1 },
+  ]);
+  expect(result.checks).toMatchObject([
+    { type: 'security', status: 'complete' },
+    { type: 'performance', status: 'unavailable', reason: expect.any(String) },
+    { type: 'health', status: 'unavailable', reason: 'Health check timed out' },
+  ]);
+  expect(
+    await callTool({
+      name: 'get_advisors',
+      arguments: { project_id: 'self-hosted', type: 'security' },
+    })
+  ).toEqual({ result: lints });
+});
