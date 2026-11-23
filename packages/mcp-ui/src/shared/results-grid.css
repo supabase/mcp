@@ -1,0 +1,83 @@
+@layer components {
+  /*
+   * Query results (see ResultsGrid), after the surfaces' QueryResultsGrid:
+   * xs monospace on hairlines, a muted sticky header, and row numbers in a
+   * sticky first column. Sticky cells are opaque so rows scroll under them:
+   * the header is the muted surface over the host's background.
+   */
+  :where(.results-grid) {
+    inline-size: max-content;
+    min-inline-size: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: var(--font-text-xs-size);
+    line-height: var(--font-text-xs-line-height);
+
+    :where(th, td) {
+      border-block-end: var(--border-width-regular) solid var(--sb-color-border);
+      border-inline-end: var(--border-width-regular) solid
+        var(--sb-color-border);
+      text-align: start;
+    }
+
+    :where(th) {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: 1;
+      padding: 6px var(--sb-space-2);
+      background: linear-gradient(var(--sb-color-muted), var(--sb-color-muted)),
+        var(--sb-color-background);
+      color: var(--sb-color-foreground);
+      font-weight: var(--font-weight-normal);
+      white-space: nowrap;
+    }
+
+    :where(td) {
+      max-inline-size: 20rem;
+      padding: var(--sb-space-1) var(--sb-space-2);
+      overflow: hidden;
+      color: var(--sb-color-foreground);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      &:where([data-type="null"]) {
+        color: var(--sb-color-tertiary-foreground);
+      }
+
+      &:where([data-type="number"]) {
+        font-variant-numeric: tabular-nums;
+        text-align: end;
+      }
+
+      &:where([data-type="true"]) {
+        color: var(--sb-color-primary);
+      }
+
+      &:where([data-type="false"]) {
+        color: var(--sb-color-muted-foreground);
+      }
+    }
+
+    /* 40px, numbers to the right, pinned while the columns scroll. */
+    :where([data-slot="row-number"]) {
+      position: sticky;
+      inset-inline-start: 0;
+      inline-size: 40px;
+      color: var(--sb-color-tertiary-foreground);
+      text-align: end;
+    }
+
+    :where(td[data-slot="row-number"]) {
+      background: var(--sb-color-background);
+    }
+
+    :where(th[data-slot="row-number"]) {
+      z-index: 2;
+    }
+
+    :where(tbody tr:hover > td) {
+      background: linear-gradient(var(--sb-color-muted), var(--sb-color-muted)),
+        var(--sb-color-background);
+    }
+  }
+}

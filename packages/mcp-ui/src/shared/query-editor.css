@@ -1,0 +1,138 @@
+@layer components {
+  /*
+   * The embedded query editor of the Supabase surfaces (see QueryEditor),
+   * after ExplorerQuery: a md-radius frame with no padding, rows divided by
+   * hairlines. The frame keeps the host's surface, as the project card does
+   * (see the host bridge in base.css), so no card fill or shadow.
+   */
+  :where(.query-editor) {
+    display: flex;
+    flex-direction: column;
+    min-block-size: 256px;
+    overflow: hidden;
+    border: var(--border-width-regular) solid var(--sb-color-border);
+    border-radius: var(--border-radius-md);
+    background: var(--sb-color-card);
+
+    /* ExplorerToolbar: 40px, 12px sides, icon, title, then actions. */
+    :where([data-slot="toolbar"]) {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: var(--sb-space-2);
+      block-size: 40px;
+      padding-inline: var(--sb-space-3);
+      border-block-end: var(--border-width-regular) solid var(--sb-color-border);
+    }
+
+    :where([data-slot="toolbar"] [data-slot="toolbar-icon"]) {
+      color: var(--sb-color-tertiary-foreground);
+    }
+
+    :where([data-slot="toolbar"] [data-slot="title"]) {
+      flex: 1;
+      min-inline-size: 0;
+      margin: 0;
+      overflow: hidden;
+      font-size: var(--font-text-sm-size);
+      font-weight: var(--font-weight-normal);
+      line-height: var(--font-text-sm-line-height);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    :where([data-slot="toolbar"] [data-slot="actions"]) {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: 1px;
+      margin-inline-start: auto;
+    }
+
+    /* ExplorerToolbarAction: a tiny text button, 28px wide when it's only
+       an icon, tertiary until hovered. Restates the hover it changes. */
+    :where([data-slot="actions"] [data-slot="action"]) {
+      justify-content: center;
+      inline-size: 28px;
+      block-size: 26px;
+      padding: 0;
+      border-color: transparent;
+      color: var(--sb-color-tertiary-foreground);
+
+      &:where(:hover:not(:disabled)) {
+        color: var(--sb-color-foreground);
+      }
+    }
+
+    /* QueryRunButton sits 4px clear of the icon actions. */
+    :where([data-slot="actions"] [data-slot="run"]) {
+      margin-inline-start: var(--sb-space-1);
+    }
+
+    /* ExplorerQueryEditor. */
+    :where([data-slot="editor"]) {
+      flex: none;
+      min-block-size: 80px;
+      overflow: hidden;
+      border-block-end: var(--border-width-regular) solid var(--sb-color-border);
+    }
+
+    /* ExplorerQueryResults, at the embedded variant's 320px cap. Banners,
+       messages and the grid scroll together. */
+    :where([data-slot="results"]) {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-block-size: 0;
+      max-block-size: 320px;
+      overflow: auto;
+    }
+
+    :where([data-slot="results"] [data-slot="notice"]) {
+      padding: var(--sb-space-2) var(--sb-space-3);
+      color: var(--sb-color-muted-foreground);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+    }
+
+    :where([data-slot="results"] [data-slot="empty"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-2);
+      padding: var(--sb-space-3);
+      color: var(--sb-color-tertiary-foreground);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+    }
+
+    :where([data-slot="empty"] [data-slot="empty-icon"]) {
+      color: var(--sb-color-tertiary-foreground);
+    }
+
+    /* ExplorerQueryFooter: the row count and run time, then any detail. */
+    :where([data-slot="footer"]) {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sb-space-2);
+      padding: var(--sb-space-1) var(--sb-space-3);
+      border-block-start: var(--border-width-regular) solid
+        var(--sb-color-border);
+      color: var(--sb-color-tertiary-foreground);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+    }
+
+    :where([data-slot="footer"] [data-slot="footer-status"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-2);
+      font-variant-numeric: tabular-nums;
+    }
+
+    :where([data-slot="footer-status"] [data-slot="footer-running"]) {
+      color: var(--sb-color-muted-foreground);
+    }
+  }
+}

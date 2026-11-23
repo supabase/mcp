@@ -11,9 +11,11 @@ import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { resource, type Resource } from '@supabase/mcp-utils';
 import createBranchHtml from '@supabase/mcp-ui/create-branch.html';
 import createProjectHtml from '@supabase/mcp-ui/create-project.html';
+import showQueryHtml from '@supabase/mcp-ui/show-query.html';
 
 export const CREATE_PROJECT_UI_URI = 'ui://supabase/create-project';
 export const CREATE_BRANCH_UI_URI = 'ui://supabase/create-branch';
+export const SHOW_QUERY_UI_URI = 'ui://supabase/show-query';
 
 const VIEW_META: { ui: McpUiResourceMeta } = {
   ui: {
@@ -60,6 +62,12 @@ export function getAppResources(): Resource[] {
       'Create branch view',
       'Live setup progress for the create_branch tool.',
       createBranchHtml
+    ),
+    appResource(
+      SHOW_QUERY_UI_URI,
+      'Query view',
+      'A SQL query and its results, editable and runnable, for the show_query tool.',
+      showQueryHtml
     ),
   ];
 }

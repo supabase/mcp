@@ -21,6 +21,7 @@ import {
   APPS_EXTENSIONS,
   appsEnabled,
   DASHBOARD_URL_META_KEY,
+  VIEW_TOOLS,
 } from './apps/index.js';
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
@@ -352,6 +353,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
           tools,
           getDatabaseTools({
             database,
+            debugging: enabledFeatures.has('debugging') ? debugging : undefined,
             projectId,
             readOnly,
             confirmation:
@@ -526,7 +528,9 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
       if (!appsEnabled(experimentalApps, ctx)) {
         for (const [name, tool] of Object.entries(tools)) {
-          if (tool._meta?.ui) {
+          if (VIEW_TOOLS.has(name)) {
+            delete tools[name];
+          } else if (tool._meta?.ui) {
             const { ui: _, ...meta } = tool._meta;
             tools[name] = {
               ...tool,

@@ -1,0 +1,92 @@
+@layer components {
+  /*
+   * A boxed message (see Admonition), after ui-patterns' Admonition on
+   * Studio's Alert: a lg-radius box at 16px padding, tinted and outlined in
+   * the status colour (10% and 30%), with the glyph in a small solid badge.
+   */
+  :where(.admonition) {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sb-space-3);
+    padding: var(--sb-space-4);
+    overflow: hidden;
+    border: var(--border-width-regular) solid var(--sb-color-border);
+    border-radius: var(--border-radius-lg);
+    color: var(--sb-color-foreground);
+    font-size: var(--font-text-sm-size);
+    line-height: var(--font-text-sm-line-height);
+
+    &:where([data-tone="warning"]) {
+      border-color: var(--sb-color-border-warning);
+      background: color-mix(in oklab, var(--sb-color-warning) 10%, transparent);
+    }
+
+    &:where([data-tone="danger"]) {
+      border-color: var(--sb-color-border-destructive);
+      background: color-mix(
+        in oklab,
+        var(--sb-color-destructive) 10%,
+        transparent
+      );
+    }
+
+    /* Sandwiched between other content: edge to edge, the top border left to
+       whatever divides the content above. */
+    &:where([data-layout="full-bleed"]) {
+      border-block-start: none;
+      border-inline: none;
+      border-radius: 0;
+    }
+
+    /* 23px square, 4px inset, sm radius: the Admonition's icon badge. */
+    :where([data-slot="icon"]) {
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      inline-size: 23px;
+      block-size: 23px;
+      padding: var(--sb-space-1);
+      border-radius: 4px;
+      color: var(--sb-color-foreground-contrast);
+    }
+
+    &:where([data-tone="warning"]) :where([data-slot="icon"]) {
+      background: var(--sb-color-warning);
+    }
+
+    &:where([data-tone="danger"]) :where([data-slot="icon"]) {
+      background: var(--sb-color-destructive);
+    }
+
+    :where([data-slot="icon"] .icon) {
+      inline-size: 100%;
+      block-size: 100%;
+    }
+
+    :where([data-slot="body"]) {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-inline-size: 0;
+      margin-block-start: 3px;
+    }
+
+    :where([data-slot="body"] [data-slot="title"]) {
+      margin-block-end: 2px;
+      font-weight: var(--font-weight-medium);
+    }
+
+    :where([data-slot="body"] [data-slot="description"]) {
+      color: var(--sb-color-muted-foreground);
+      line-height: 1.625;
+      overflow-wrap: anywhere;
+    }
+
+    :where([data-slot="body"] [data-slot="actions"]) {
+      display: flex;
+      gap: var(--sb-space-2);
+      margin-block-start: var(--sb-space-3);
+    }
+  }
+}

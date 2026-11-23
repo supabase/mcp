@@ -65,5 +65,12 @@ parameters on the MCP URL (CLI flags like `--features` don't apply). Set
 Orgs `acme` (pro plan, so a new project quotes $10/month and shows cost
 confirmation) and `hobby` (free, $0 so no confirmation). Project
 `abcdefghijklmnopqrst` ("Acme production") with a branch named `other`; use it
-as `project_id` for `create_branch`. Unknown routes log `!! UNHANDLED ROUTE`
+as `project_id` for `create_branch`.
+
+Each project's SQL runs against its own in-memory Postgres (PGlite), created
+on first use with sample `customers` and `orders` tables, so `execute_sql` and
+`show_query` return real rows; `read_only` queries run as a read-only role.
+The logs endpoint returns 60 sample events spread over the requested window,
+shaped like the source the SQL names (`postgres_logs` gets severities, anything
+else HTTP requests), whatever the rest of the SQL says. Unknown routes log `!! UNHANDLED ROUTE`
 and return 404.

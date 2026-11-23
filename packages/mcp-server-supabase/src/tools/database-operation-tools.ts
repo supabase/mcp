@@ -13,14 +13,20 @@ import {
   selectAdvisory,
 } from '../advisories/index.js';
 import { ToolCallerError } from '@supabase/mcp-utils';
+import { VIEW_DATA_META_KEY } from '../apps/index.js';
+import { resolveLogWindow } from '../logs.js';
 import type { ObservationFact } from '../observation.js';
 import { listExtensionsSql, listTablesSql } from '../pg-meta/index.js';
 import {
   postgresExtensionSchema,
   postgresTableSchema,
 } from '../pg-meta/types.js';
-import type { DatabaseOperations } from '../platform/types.js';
+import type {
+  DatabaseOperations,
+  DebuggingOperations,
+} from '../platform/types.js';
 import { migrationSchema } from '../platform/types.js';
+import { SHOW_QUERY_UI_URI } from '../resources/app-resources.js';
 import { hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
@@ -34,6 +40,7 @@ import {
   observeOperation,
 } from './confirmation.js';
 import { isDestructiveSql } from './destructive-sql.js';
+import { getLogCellRows } from './notebook-cells.js';
 import {
   injectableTool,
   type ToolDefs,
@@ -42,6 +49,8 @@ import {
 
 type DatabaseOperationToolsOptions = {
   database: DatabaseOperations;
+  /** Runs `show_query`'s log queries. Omit when logs are off. */
+  debugging?: DebuggingOperations;
   projectId?: string;
   readOnly?: boolean;
   confirmation?: {
@@ -206,6 +215,66 @@ const executeSqlOutputSchema = z.object({
   result: z.string(),
 });
 
+/** Most rows `show_query` sends to its view. */
+export const SHOW_QUERY_ROW_LIMIT = 1000;
+
+/** Most bytes of JSON rows `show_query` reads for its view. */
+const SHOW_QUERY_MAX_RESULT_BYTES = 1_000_000;
+
+const logWindowFields = {
+  iso_timestamp_start: z.iso
+    .datetime({ offset: true })
+    .optional()
+    .describe(
+      'For source "logs": the start of the log window as an ISO 8601 timestamp, including a UTC "Z" suffix or explicit offset. Defaults to 24 hours before the end of the window, which may be at most 24 hours after it.'
+    ),
+  iso_timestamp_end: z.iso
+    .datetime({ offset: true })
+    .optional()
+    .describe(
+      'For source "logs": the end of the log window as an ISO 8601 timestamp, including a UTC "Z" suffix or explicit offset. Defaults to the current time.'
+    ),
+};
+
+const showQueryInputSchema = z.object({
+  project_id: z.string(),
+  sql: z
+    .string()
+    .min(1)
+    .describe(
+      'The read-only SQL to show and run. Include an ORDER BY and a LIMIT.'
+    ),
+  source: z
+    .enum(['database', 'logs'])
+    .optional()
+    .describe(
+      'What the SQL runs against: "database" (default) for Postgres, "logs" for the project\'s logs, in the query_logs dialect.'
+    ),
+  title: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('A short title for the query, such as "Newest users".'),
+  ...logWindowFields,
+});
+
+const showQueryOutputSchema = z.object({
+  row_count: z.number(),
+  truncated: z.boolean(),
+});
+
+/** What `show_query` sends its view in result `_meta`, beside the model's summary. */
+export type ShowQueryViewData = {
+  rows: unknown[];
+  /** More rows came back than `SHOW_QUERY_ROW_LIMIT`, so the rest were dropped. */
+  truncated: boolean;
+  /** The resolved log window, for source "logs", so a rerun reads the same one. */
+  iso_timestamp_start?: string;
+  iso_timestamp_end?: string;
+};
+
 // Appended to both raw-SQL tool descriptions (execute_sql, apply_migration),
 // which forward arbitrary SQL. Shared to prevent drift. Discourages using SQL to
 // read server-side files or run OS commands on the database host. Deployment-
@@ -280,10 +349,25 @@ export const databaseToolDefs = {
       openWorldHint: true,
     },
   },
+  show_query: {
+    description:
+      'Shows the user a SQL query and its results in an editor, where they can change the SQL and run it again. Use it only when the user wants to see results, such as "show me the newest users"; to read data yourself, use `execute_sql` or `query_logs`. Runs read-only and returns only a row count: the rows go to the user, not to you. Never use it for writes. Include an ORDER BY and a LIMIT. For source "logs", write the SQL as for `query_logs`, and pass iso_timestamp_start and iso_timestamp_end for a requested range (at most 24 hours).',
+    parameters: showQueryInputSchema,
+    outputSchema: showQueryOutputSchema,
+    _meta: { ui: { resourceUri: SHOW_QUERY_UI_URI } },
+    annotations: {
+      title: 'Show query',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
 } as const satisfies ToolDefs;
 
 export function getDatabaseTools({
   database,
+  debugging,
   projectId,
   readOnly,
   confirmation,
@@ -644,6 +728,72 @@ export function getDatabaseTools({
 
         return {
           result: wrapWithUntrustedDataBoundary(result),
+        };
+      },
+    }),
+    show_query: injectableTool({
+      ...databaseToolDefs.show_query,
+      inject: { project_id },
+      execute: async ({
+        project_id,
+        sql,
+        source = 'database',
+        iso_timestamp_start,
+        iso_timestamp_end,
+      }): Promise<CallToolResult> => {
+        let rows: unknown;
+        let window: ReturnType<typeof resolveLogWindow> | undefined;
+        if (source === 'logs') {
+          if (!debugging?.queryLogs) {
+            throw new ToolCallerError(
+              'Log queries are not available on this server.'
+            );
+          }
+          window = resolveLogWindow(iso_timestamp_start, iso_timestamp_end);
+          rows = getLogCellRows(
+            await debugging.queryLogs(project_id, {
+              sql,
+              ...window,
+              max_result_bytes: SHOW_QUERY_MAX_RESULT_BYTES,
+            })
+          );
+        } else {
+          // Read-only whatever the server's mode: the user runs anything
+          // else themselves, from the view, through `execute_sql`.
+          rows = await database.executeSql(project_id, {
+            query: sql,
+            read_only: true,
+            max_result_bytes: SHOW_QUERY_MAX_RESULT_BYTES,
+          });
+        }
+        if (!Array.isArray(rows)) {
+          throw new Error('The query did not return rows.');
+        }
+        if (
+          new TextEncoder().encode(JSON.stringify(rows)).byteLength >
+          SHOW_QUERY_MAX_RESULT_BYTES
+        ) {
+          throw new ToolCallerError(
+            'The result is larger than 1 MB. Add a LIMIT or select fewer columns.'
+          );
+        }
+
+        const shown = rows.slice(0, SHOW_QUERY_ROW_LIMIT);
+        const truncated = rows.length > shown.length;
+        const viewData: ShowQueryViewData = {
+          rows: shown,
+          truncated,
+          ...window,
+        };
+        return {
+          // The model gets a summary; the rows go to the view alone.
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ row_count: shown.length, truncated }),
+            },
+          ],
+          _meta: { [VIEW_DATA_META_KEY]: viewData },
         };
       },
     }),

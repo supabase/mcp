@@ -6,15 +6,23 @@ import {
   isInputRequiredResult,
   type Client,
 } from '@modelcontextprotocol/client';
+import { HttpResponse, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { createOrganization, createProject } from '../test/mocks.js';
+import {
+  API_URL,
+  createOrganization,
+  createProject,
+  createProjectFixture,
+} from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
-import { DASHBOARD_URL_META_KEY } from './apps/index.js';
+import { DASHBOARD_URL_META_KEY, VIEW_DATA_META_KEY } from './apps/index.js';
 import {
   CREATE_BRANCH_UI_URI,
   CREATE_PROJECT_UI_URI,
   getAppResources,
+  SHOW_QUERY_UI_URI,
 } from './resources/app-resources.js';
+import { SHOW_QUERY_ROW_LIMIT } from './tools/database-operation-tools.js';
 
 const harness = createServerHarness();
 
@@ -100,6 +108,7 @@ describe('MCP Apps', () => {
       )?.resourceUri;
     expect(linkOf('create_project')).toBe(CREATE_PROJECT_UI_URI);
     expect(linkOf('create_branch')).toBe(CREATE_BRANCH_UI_URI);
+    expect(linkOf('show_query')).toBe(SHOW_QUERY_UI_URI);
 
     expect(await listedViewUris(client)).toEqual([...VIEW_URIS].sort());
     expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
@@ -209,5 +218,142 @@ describe('MCP Apps', () => {
     });
 
     expect(isInputRequiredResult(result)).toBe(true);
+  });
+});
+
+describe('show_query', () => {
+  async function setupApps(options: { readOnly?: boolean } = {}) {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+      ...options,
+    });
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+    const show = async (args: Record<string, unknown>) => {
+      const result = await callModernTool(client, {
+        name: 'show_query',
+        arguments: { project_id: project.id, ...args },
+      });
+      if (isInputRequiredResult(result)) throw new Error('expected a result');
+      return result;
+    };
+    return { client, project, show };
+  }
+
+  const textOf = (result: { content: unknown[] }) =>
+    (result.content[0] as { text: string }).text;
+
+  test('is listed only for clients that can render its view', async () => {
+    const { client: plain } = await harness.setupModern({
+      experimentalApps: true,
+    });
+    const { tools } = await plain.listTools();
+    // execute_sql already gives the model the rows; the view is the point.
+    expect(tools.map((tool) => tool.name)).toContain('execute_sql');
+    expect(tools.map((tool) => tool.name)).not.toContain('show_query');
+  });
+
+  test('sends the rows to the view and only a count to the model', async () => {
+    const { show } = await setupApps();
+
+    const result = await show({
+      sql: 'select n from generate_series(1, 3) as n order by n',
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(textOf(result))).toEqual({
+      row_count: 3,
+      truncated: false,
+    });
+    expect(result._meta?.[VIEW_DATA_META_KEY]).toEqual({
+      rows: [{ n: 1 }, { n: 2 }, { n: 3 }],
+      truncated: false,
+    });
+  });
+
+  test('runs read-only even when the server can write', async () => {
+    const { show } = await setupApps();
+
+    const result = await show({
+      sql: 'create table notes (id int)',
+    });
+
+    // The model can't write through a tool whose results only the user sees.
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/read-only|permission denied/i);
+  });
+
+  test('sends the view at most the row limit and says so', async () => {
+    const { show } = await setupApps();
+
+    const result = await show({
+      sql: `select n from generate_series(1, ${SHOW_QUERY_ROW_LIMIT + 5}) as n`,
+    });
+
+    expect(JSON.parse(textOf(result))).toEqual({
+      row_count: SHOW_QUERY_ROW_LIMIT,
+      truncated: true,
+    });
+    const viewData = result._meta?.[VIEW_DATA_META_KEY] as {
+      rows: unknown[];
+    };
+    expect(viewData.rows).toHaveLength(SHOW_QUERY_ROW_LIMIT);
+  });
+
+  test('runs log queries over a resolved window the view can rerun', async () => {
+    const { show } = await setupApps();
+    let window: Record<string, string | null> = {};
+    harness.mockServer!.use(
+      http.get(
+        `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
+        ({ request }) => {
+          const url = new URL(request.url);
+          window = {
+            start: url.searchParams.get('iso_timestamp_start'),
+            end: url.searchParams.get('iso_timestamp_end'),
+          };
+          return HttpResponse.json({
+            result: [{ timestamp: 1, event_message: 'GET /' }],
+          });
+        }
+      )
+    );
+
+    const result = await show({
+      source: 'logs',
+      sql: "select timestamp, event_message from logs where source = 'edge_logs'",
+      iso_timestamp_start: '2026-11-22T10:00:00Z',
+      iso_timestamp_end: '2026-11-22T12:00:00Z',
+    });
+
+    expect(window).toEqual({
+      start: '2026-11-22T10:00:00.000Z',
+      end: '2026-11-22T12:00:00.000Z',
+    });
+    expect(result._meta?.[VIEW_DATA_META_KEY]).toEqual({
+      rows: [{ timestamp: 1, event_message: 'GET /' }],
+      truncated: false,
+      iso_timestamp_start: '2026-11-22T10:00:00.000Z',
+      iso_timestamp_end: '2026-11-22T12:00:00.000Z',
+    });
+  });
+
+  test('turns a logs endpoint error into a tool error', async () => {
+    const { show } = await setupApps();
+    harness.mockServer!.use(
+      http.get(
+        `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
+        () =>
+          HttpResponse.json({ result: [], error: { message: 'Syntax error' } })
+      )
+    );
+
+    const result = await show({ source: 'logs', sql: 'select nope' });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('Syntax error');
   });
 });

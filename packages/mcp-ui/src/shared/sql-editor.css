@@ -1,0 +1,118 @@
+@layer components {
+  /*
+   * The SQL editor (see SqlEditor), matching the CodeMirror theme of the
+   * Supabase surfaces: sm (13px) mono on a transparent ground, a borderless gutter
+   * of muted line numbers, 8px above and below the text, wrapped lines, and
+   * Studio's code colours. A transparent textarea sits over the highlighted
+   * lines; both share every metric so the caret lands on the text.
+   */
+  :where(.sql-editor) {
+    /* Digits in the widest line number; SqlEditor sets it inline. */
+    --sb-component-sql-editor-digits: 2;
+    --sb-component-sql-editor-gutter: calc(
+      var(--sb-component-sql-editor-digits) *
+      1ch +
+      8px
+    );
+    --sb-component-sql-editor-text-start: calc(
+      var(--sb-component-sql-editor-gutter) +
+      6px
+    );
+
+    min-block-size: 72px;
+    max-block-size: 288px;
+    overflow: auto;
+    color: var(--sb-color-foreground);
+    font-family: var(--font-mono);
+    font-size: var(--font-text-sm-size);
+    line-height: 1.4;
+
+    :where([data-slot="content"]) {
+      position: relative;
+      padding-block: var(--sb-space-2);
+    }
+
+    :where([data-slot="line"]) {
+      display: grid;
+      grid-template-columns: var(--sb-component-sql-editor-gutter) minmax(
+          0,
+          1fr
+        );
+    }
+
+    :where([data-slot="line"] [data-slot="line-number"]) {
+      padding-inline: 5px 3px;
+      color: var(--sb-color-tertiary-foreground);
+      text-align: end;
+      user-select: none;
+    }
+
+    :where([data-slot="line"] [data-slot="line-text"]) {
+      padding-inline: 6px 2px;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    /* Over the lines, the same size and text metrics, its own text hidden
+       so the highlighted copy shows through; the caret and selection stay. */
+    :where([data-slot="input"]) {
+      position: absolute;
+      inset: 0;
+      inline-size: 100%;
+      block-size: 100%;
+      margin: 0;
+      padding: var(--sb-space-2) 2px var(--sb-space-2)
+        var(--sb-component-sql-editor-text-start);
+      overflow: hidden;
+      border: none;
+      background: transparent;
+      color: transparent;
+      caret-color: var(--sb-color-foreground);
+      font: inherit;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      resize: none;
+
+      &:where(:focus-visible) {
+        outline-offset: -2px;
+      }
+
+      &::placeholder {
+        color: var(--sb-color-tertiary-foreground);
+      }
+
+      &::selection {
+        background: color-mix(
+          in oklab,
+          var(--sb-color-foreground) 20%,
+          transparent
+        );
+      }
+    }
+
+    :where([data-token="keyword"]) {
+      color: var(--sb-color-code-block-1);
+    }
+
+    :where([data-token="string"]) {
+      color: var(--sb-color-code-block-2);
+    }
+
+    :where([data-token="literal"]) {
+      color: var(--sb-color-code-block-3);
+    }
+
+    :where([data-token="type"]) {
+      color: var(--sb-color-code-block-4);
+    }
+
+    :where([data-token="operator"]) {
+      color: var(--sb-color-code-block-5);
+    }
+
+    :where([data-token="comment"]) {
+      color: var(--sb-color-tertiary-foreground);
+      font-style: italic;
+    }
+  }
+}

@@ -71,8 +71,17 @@ export function useMcpView<T>(name: string): McpView<T> {
           setToolCall({ status: 'error', message: parseToolError(result) });
           return;
         }
+        // VIEW_DATA_META_KEY: what `show_*` tools send the view alone. Other
+        // tools' views read the result the model gets.
+        const viewData = result._meta?.['supabase.com/view'];
         try {
-          setToolCall({ status: 'ready', data: parseToolResult<T>(result) });
+          setToolCall({
+            status: 'ready',
+            data:
+              viewData === undefined
+                ? parseToolResult<T>(result)
+                : (viewData as T),
+          });
         } catch (err) {
           setToolCall({ status: 'error', message: String(err) });
         }
