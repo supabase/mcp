@@ -11,17 +11,17 @@ declare const CURRENT_FEATURE_GROUPS: readonly ["docs", "account", "database", "
 declare const featureGroupSchema: z.ZodPipe<z.ZodUnion<readonly [z.ZodEnum<{
     debug: "debug";
 }>, z.ZodEnum<{
-    storage: "storage";
-    database: "database";
-    feedback: "feedback";
     docs: "docs";
     account: "account";
+    database: "database";
     debugging: "debugging";
     development: "development";
     functions: "functions";
     branching: "branching";
+    storage: "storage";
     notebooks: "notebooks";
-}>]>, z.ZodTransform<"storage" | "database" | "feedback" | "docs" | "account" | "debugging" | "development" | "functions" | "branching" | "notebooks", "storage" | "database" | "feedback" | "docs" | "account" | "debugging" | "development" | "functions" | "branching" | "notebooks" | "debug">>;
+    feedback: "feedback";
+}>]>, z.ZodTransform<"docs" | "account" | "database" | "debugging" | "development" | "functions" | "branching" | "storage" | "notebooks" | "feedback", "debug" | "docs" | "account" | "database" | "debugging" | "development" | "functions" | "branching" | "storage" | "notebooks" | "feedback">>;
 type FeatureGroup = z.infer<typeof featureGroupSchema>;
 
 type ObservedTool = ElicitationToolName | 'other';
@@ -679,14 +679,14 @@ declare const debuggingToolDefs: {
         readonly parameters: z.ZodObject<{
             project_id: z.ZodString;
             service: z.ZodEnum<{
-                auth: "auth";
-                realtime: "realtime";
                 storage: "storage";
                 api: "api";
                 "branch-action": "branch-action";
                 postgres: "postgres";
                 "edge-function": "edge-function";
                 "edge-function-runtime": "edge-function-runtime";
+                auth: "auth";
+                realtime: "realtime";
             }>;
             iso_timestamp_start: z.ZodOptional<z.ZodISODateTime>;
             iso_timestamp_end: z.ZodOptional<z.ZodISODateTime>;
@@ -971,11 +971,11 @@ declare const notebookToolDefs: {
                     text: z.ZodString;
                 }, z.core.$strict>, z.ZodObject<{
                     type: z.ZodLiteral<"database">;
+                    title: z.ZodOptional<z.ZodString>;
                     view: z.ZodOptional<z.ZodEnum<{
                         table: "table";
                         chart: "chart";
                     }>>;
-                    title: z.ZodOptional<z.ZodString>;
                     sql: z.ZodString;
                     row_limit: z.ZodNumber;
                     database_identifier: z.ZodOptional<z.ZodString>;
@@ -997,11 +997,11 @@ declare const notebookToolDefs: {
                     }, z.core.$strict>>;
                 }, z.core.$strict>, z.ZodObject<{
                     type: z.ZodLiteral<"log">;
+                    title: z.ZodOptional<z.ZodString>;
                     view: z.ZodOptional<z.ZodEnum<{
                         table: "table";
                         chart: "chart";
                     }>>;
-                    title: z.ZodOptional<z.ZodString>;
                     sql: z.ZodString;
                     time_range: z.ZodDiscriminatedUnion<[z.ZodObject<{
                         type: z.ZodLiteral<"absolute">;
@@ -1039,8 +1039,8 @@ declare const notebookToolDefs: {
             }, z.core.$strip>;
         }, z.core.$strip>;
         readonly outputSchema: z.ZodObject<{
-            name: z.ZodString;
             id: z.ZodString;
+            name: z.ZodString;
             updated_at: z.ZodString;
             url: z.ZodString;
         }, z.core.$strip>;
@@ -1149,8 +1149,8 @@ declare const notebookToolDefs: {
             notebook_id: z.ZodString;
         }, z.core.$strip>;
         readonly outputSchema: z.ZodObject<{
-            name: z.ZodString;
             id: z.ZodString;
+            name: z.ZodString;
         }, z.core.$strip>;
         readonly annotations: {
             readonly title: "Delete notebook";
@@ -1327,11 +1327,11 @@ declare const supabaseMcpToolSchemas: {
                     text: z.ZodString;
                 }, z.core.$strict>, z.ZodObject<{
                     type: z.ZodLiteral<"database">;
+                    title: z.ZodOptional<z.ZodString>;
                     view: z.ZodOptional<z.ZodEnum<{
                         table: "table";
                         chart: "chart";
                     }>>;
-                    title: z.ZodOptional<z.ZodString>;
                     sql: z.ZodString;
                     row_limit: z.ZodNumber;
                     database_identifier: z.ZodOptional<z.ZodString>;
@@ -1353,11 +1353,11 @@ declare const supabaseMcpToolSchemas: {
                     }, z.core.$strict>>;
                 }, z.core.$strict>, z.ZodObject<{
                     type: z.ZodLiteral<"log">;
+                    title: z.ZodOptional<z.ZodString>;
                     view: z.ZodOptional<z.ZodEnum<{
                         table: "table";
                         chart: "chart";
                     }>>;
-                    title: z.ZodOptional<z.ZodString>;
                     sql: z.ZodString;
                     time_range: z.ZodDiscriminatedUnion<[z.ZodObject<{
                         type: z.ZodLiteral<"absolute">;
@@ -1395,8 +1395,8 @@ declare const supabaseMcpToolSchemas: {
             }, z.core.$strip>;
         }, z.core.$strip>;
         outputSchema: z.ZodObject<{
-            name: z.ZodString;
             id: z.ZodString;
+            name: z.ZodString;
             updated_at: z.ZodString;
             url: z.ZodString;
         }, z.core.$strip>;
@@ -1508,8 +1508,8 @@ declare const supabaseMcpToolSchemas: {
             notebook_id: z.ZodString;
         }, z.core.$strip>;
         outputSchema: z.ZodObject<{
-            name: z.ZodString;
             id: z.ZodString;
+            name: z.ZodString;
         }, z.core.$strip>;
         annotations: {
             readonly title: "Delete notebook";
@@ -1798,14 +1798,14 @@ declare const supabaseMcpToolSchemas: {
         inputSchema: z.ZodObject<{
             project_id: z.ZodString;
             service: z.ZodEnum<{
-                auth: "auth";
-                realtime: "realtime";
                 storage: "storage";
                 api: "api";
                 "branch-action": "branch-action";
                 postgres: "postgres";
                 "edge-function": "edge-function";
                 "edge-function-runtime": "edge-function-runtime";
+                auth: "auth";
+                realtime: "realtime";
             }>;
             iso_timestamp_start: z.ZodOptional<z.ZodISODateTime>;
             iso_timestamp_end: z.ZodOptional<z.ZodISODateTime>;

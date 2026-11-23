@@ -148,25 +148,25 @@ declare const migrationSchema: z.ZodObject<{
     name: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 declare const logsServiceSchema: z.ZodEnum<{
-    auth: "auth";
-    realtime: "realtime";
     storage: "storage";
     api: "api";
     "branch-action": "branch-action";
     postgres: "postgres";
     "edge-function": "edge-function";
     "edge-function-runtime": "edge-function-runtime";
+    auth: "auth";
+    realtime: "realtime";
 }>;
 declare const getLogsOptionsSchema: z.ZodObject<{
     service: z.ZodEnum<{
-        auth: "auth";
-        realtime: "realtime";
         storage: "storage";
         api: "api";
         "branch-action": "branch-action";
         postgres: "postgres";
         "edge-function": "edge-function";
         "edge-function-runtime": "edge-function-runtime";
+        auth: "auth";
+        realtime: "realtime";
     }>;
     iso_timestamp_start: z.ZodOptional<z.ZodString>;
     iso_timestamp_end: z.ZodOptional<z.ZodString>;
@@ -262,11 +262,11 @@ declare const createNotebookOptionsSchema: z.ZodObject<{
             text: z.ZodString;
         }, z.core.$strict>, z.ZodObject<{
             type: z.ZodLiteral<"database">;
+            title: z.ZodOptional<z.ZodString>;
             view: z.ZodOptional<z.ZodEnum<{
                 table: "table";
                 chart: "chart";
             }>>;
-            title: z.ZodOptional<z.ZodString>;
             sql: z.ZodString;
             row_limit: z.ZodNumber;
             database_identifier: z.ZodOptional<z.ZodString>;
@@ -288,11 +288,11 @@ declare const createNotebookOptionsSchema: z.ZodObject<{
             }, z.core.$strict>>;
         }, z.core.$strict>, z.ZodObject<{
             type: z.ZodLiteral<"log">;
+            title: z.ZodOptional<z.ZodString>;
             view: z.ZodOptional<z.ZodEnum<{
                 table: "table";
                 chart: "chart";
             }>>;
-            title: z.ZodOptional<z.ZodString>;
             sql: z.ZodString;
             time_range: z.ZodDiscriminatedUnion<[z.ZodObject<{
                 type: z.ZodLiteral<"absolute">;
