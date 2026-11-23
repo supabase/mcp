@@ -19,9 +19,42 @@ SUPABASE_ACCESS_TOKEN=<your pat> pnpm inspector
 
 `pnpm inspector` opens the web UI already pointed at the dev server with `?experimental_apps=true`, your token and the modern protocol, since views are only shown to modern-era clients that advertise MCP Apps. Connect, then open the Apps tab. Inspector caches view HTML per connection, so reconnect after a change.
 
+### Visually test scenarios with the mock API
+
+To see a view's progress, failure and timeout states without a Supabase account, run the mock Management API, the dev server pointed at it, and Inspector together with one command from the repo root:
+
+```bash
+pnpm dev:mock   # Ctrl-C stops all three; MOCK_API_PORT / MOCK_TOKEN override the defaults, extra args go to dev:http
+MCP_QUERY='project_ref=abcdefghijklmnopqrst' pnpm dev:mock   # extra query params for the MCP URL Inspector connects to
+```
+
+Or run them yourself in three terminals:
+
+```bash
+pnpm mock-api                              # fake Management API on http://localhost:4010
+pnpm dev:http --api-url http://localhost:4010 --secret-url-template 'http://localhost:4010/mcp/secrets?ref={ref}&name={name}'
+SUPABASE_ACCESS_TOKEN=mock pnpm inspector  # any bearer token works with the mock
+```
+
+`pnpm inspector` targets the `pnpm dev:http` server on `127.0.0.1:3111`, and `dev:http` forwards the extra flags to the server, so Inspector connects the same way as against the real API. Switch scenarios at runtime, then call the tool again:
+
+```bash
+curl -X POST localhost:4010/__scenario -d '{"name":"create-project:init-failed"}'
+```
+
+The scenario list and other endpoints are in [`packages/mcp-server-supabase/dev/README.md`](../mcp-server-supabase/dev/README.md).
+
+## Styling
+
+Views are themed by the host first. `useHostStyles` applies the host's theme and MCP Apps style variables (`--color-text-primary`, `--font-sans`, `--border-radius-md`, …), and rules read the font, radius and border-width variables directly. Colours go through Studio's semantic tokens (`--sb-color-foreground`, `--sb-color-border`, …), which a bridge in `src/shared/base.css` maps from the host's colour variables, so components can move into Studio unchanged. Every variable has a fallback there, taken from the Supabase design system, which applies only when the host omits it. Dark mode is `light-dark()` in those fallbacks, following the host's theme.
+
+The CSS is plain, in cascade layers, `@layer base, native, components, view, utilities`: tokens and root styles, bare elements, shared components, a view's own overrides (in its `view.css`), then the few rules that must win over everything (`.sr-only`). `base.css` holds `base`, `native` and `utilities`, and every view imports it first. Each shared component keeps its `components` rules in its own file (`src/shared/badge.css`) and imports it, so a view only ships the CSS of the components it imports. Vite keeps CSS imports as side effects, so importing a component ships its CSS even if the view never renders it. Each layer has a specificity cap, and anything past it goes in `:where()`, so later layers always win without heavier selectors or `!important`. Components use one class per element, with parts as `data-slot` and state as `data-state` or `data-tone`. A component's custom properties are namespaced after its file (`--sb-component-project-card-*` in `project-card.css`); reading another component's property needs a `var()` fallback, because a view may ship one file without the other.
+
+The full rules are in [`.agents/skills/mcp-ui-css/SKILL.md`](.agents/skills/mcp-ui-css/SKILL.md). `pnpm lint:css` checks them (it also runs before `pnpm build`).
+
 ## Add a view
 
-1. Create `src/views/<name>/index.html` and its React entry. `pnpm build` picks up every folder in `src/views/`.
+1. Create `src/views/<name>/index.html` and its React entry. `pnpm build` picks up every folder in `src/views/`. If the view needs CSS of its own, add `src/views/<name>/view.css` (see [Styling](#styling)).
 2. In `packages/mcp-server-supabase/src/resources/app-resources.ts`, import `@supabase/mcp-ui/<name>.html` and register it as a resource.
 3. Link the tool to it with `_meta: { ui: { resourceUri } }` in its definition.
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.19.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.18.0...mcp-server-supabase-v0.19.0) (2026-11-19)
+
+
+### Features
+
+* **mcp apps:** create project and create branch ui ([#573](https://github.com/supabase/mcp/issues/573)) ([a4e8c43](https://github.com/supabase/mcp/commit/a4e8c43beabc752fc66607003c13a005e170e65c))
+
+
+### Bug Fixes
+
+* **mcp-server-supabase:** detect deno.jsonc as the default edge function import map ([#559](https://github.com/supabase/mcp/issues/559)) ([16bde19](https://github.com/supabase/mcp/commit/16bde199ef6a1361caf9cdeeecb760aefa5f594d))
+
+## [0.18.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.17.0...mcp-server-supabase-v0.18.0) (2026-11-17)
+
+
+### Features
+
+* **mcp-apps:** MCP Apps foundation ([#551](https://github.com/supabase/mcp/issues/551)) ([0dbacba](https://github.com/supabase/mcp/commit/0dbacba0e1f16fc4c2d4a67a1258ba8eb7832115))
+
 ## [0.17.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.16.1...mcp-server-supabase-v0.17.0) (2026-11-13)
 
 

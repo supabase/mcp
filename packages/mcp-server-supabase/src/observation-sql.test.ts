@@ -4,6 +4,7 @@ import {
   isInputRequiredResult,
   type CallToolResult,
   type ClientCapabilities,
+  type InputRequiredResult,
 } from '@modelcontextprotocol/client';
 import type {
   RequestStateCodec,
@@ -92,6 +93,31 @@ async function setup(
 
 const accept = { confirm_destructive: { action: 'accept', content: {} } };
 
+// Resends whose state does not fit the call: issued for the other tool, or for
+// other SQL or another project.
+const staleStates = [
+  { change: 'tool', mismatch: 'tool_mismatch', changedArgs: {} },
+  {
+    change: 'query',
+    mismatch: 'arguments_mismatch',
+    changedArgs: { query: `${query}\nDROP TABLE "PRIVATE_OTHER";` },
+  },
+  {
+    change: 'project_id',
+    mismatch: 'arguments_mismatch',
+    changedArgs: { project_id: 'PRIVATE_OTHER_PROJECT' },
+  },
+] as const;
+
+function otherTool(name: SqlTool): SqlTool {
+  return name === 'execute_sql' ? 'apply_migration' : 'execute_sql';
+}
+
+function promptMessage(result: InputRequiredResult) {
+  const params = result.inputRequests?.confirm_destructive?.params;
+  return params && 'message' in params ? params.message : undefined;
+}
+
 describe.each(tools)('%s SQL observations', (name) => {
   test('issues and reissues without executing or consuming a missing response', async () => {
     const h = await setup();
@@ -146,25 +172,12 @@ describe.each(tools)('%s SQL observations', (name) => {
     }
   );
 
-  test.each([
-    { change: 'tool', mismatch: 'tool_mismatch', changedArgs: {} },
-    {
-      change: 'query',
-      mismatch: 'arguments_mismatch',
-      changedArgs: { query: `${query}\nDROP TABLE "PRIVATE_OTHER";` },
-    },
-    {
-      change: 'project_id',
-      mismatch: 'arguments_mismatch',
-      changedArgs: { project_id: 'PRIVATE_OTHER_PROJECT' },
-    },
-  ] as const)(
+  test.each(staleStates)(
     'rejects changed $change without consuming accept',
     async ({ mismatch, changedArgs }) => {
       const h = await setup();
-      const other = name === 'execute_sql' ? 'apply_migration' : 'execute_sql';
       const first = issued(
-        await h.call(mismatch === 'tool_mismatch' ? other : name)
+        await h.call(mismatch === 'tool_mismatch' ? otherTool(name) : name)
       );
       const result = await h.call(name, {
         requestState: first.requestState,
@@ -185,44 +198,123 @@ describe.each(tools)('%s SQL observations', (name) => {
     }
   );
 
+  // The row above feeds SQL that still flags. State that does not fit the call
+  // is only an error for SQL that needs confirmation, so the other two
+  // classifier classes get their own rows on the same paths.
+  test.each(staleStates)(
+    'runs SQL that no longer classifies as destructive and ignores the stale state (changed $change)',
+    async ({ mismatch, changedArgs }) => {
+      const h = await setup();
+      const first = issued(
+        await h.call(mismatch === 'tool_mismatch' ? otherTool(name) : name)
+      );
+      vi.spyOn(classifier, 'isDestructiveSql').mockReturnValue(false);
+      const sent = { ...h.args(name), ...changedArgs };
+      const result = await h.call(name, {
+        requestState: first.requestState,
+        arguments: sent,
+        inputResponses: accept,
+      });
+      expect(isInputRequiredResult(result)).toBe(false);
+      expect((result as CallToolResult).isError).not.toBe(true);
+      assertAttempt(
+        h.attempts[1],
+        name,
+        [decision('bypass', 'not_destructive'), started, finished('returned')],
+        'completed'
+      );
+      expect(h.operation(name)).toHaveBeenCalledOnce();
+      expect(h.operation(name)).toHaveBeenCalledWith(
+        sent.project_id,
+        name === 'execute_sql'
+          ? { query: sent.query, read_only: undefined }
+          : { query: sent.query, name: 'PRIVATE_MIGRATION' }
+      );
+    }
+  );
+
+  test.each(staleStates)(
+    'returns the classifier failure, not the state error, when classification throws (changed $change)',
+    async ({ mismatch, changedArgs }) => {
+      const h = await setup();
+      const first = issued(
+        await h.call(mismatch === 'tool_mismatch' ? otherTool(name) : name)
+      );
+      vi.spyOn(classifier, 'isDestructiveSql').mockImplementation(() => {
+        throw new Error('PRIVATE_CLASSIFIER_ERROR');
+      });
+      const result = await h.call(name, {
+        requestState: first.requestState,
+        arguments: { ...h.args(name), ...changedArgs },
+        inputResponses: accept,
+      });
+      expect((result as CallToolResult).isError).toBe(true);
+      // The state error records a decision and a validation fact. A failed
+      // classification records nothing.
+      assertAttempt(h.attempts[1], name, [], 'tool_error');
+      expect(h.executeSql).not.toHaveBeenCalled();
+      expect(h.applyMigration).not.toHaveBeenCalled();
+    }
+  );
+
+  // Once asked, only an accept runs the SQL: a decline or cancel stays final
+  // whatever the SQL classifies as on the resend.
   test.each([
     { action: 'decline', fails: false },
     { action: 'cancel', fails: false },
     { action: 'decline', fails: true },
   ] as const)(
-    'discards staged $action when classification changes (fails=$fails)',
+    'keeps staged $action final when classification changes (fails=$fails)',
     async ({ action, fails }) => {
       const h = await setup();
       const first = issued(await h.call(name));
-      vi.spyOn(classifier, 'isDestructiveSql').mockImplementation(() => {
-        if (fails) throw new Error('PRIVATE_CLASSIFIER_ERROR');
-        return false;
-      });
+      const classify = vi
+        .spyOn(classifier, 'isDestructiveSql')
+        .mockImplementation(() => {
+          if (fails) throw new Error('PRIVATE_CLASSIFIER_ERROR');
+          return false;
+        });
       const result = await h.call(name, {
         requestState: first.requestState,
         inputResponses: { confirm_destructive: { action } },
       });
-      if (fails) {
-        expect((result as CallToolResult).isError).toBe(true);
-        expect(JSON.stringify(result)).toContain('PRIVATE_CLASSIFIER_ERROR');
-        assertAttempt(h.attempts[1], name, [], 'tool_error');
-        expect(h.operation(name)).not.toHaveBeenCalled();
-      } else {
-        expect((result as CallToolResult).isError).not.toBe(true);
-        assertAttempt(
-          h.attempts[1],
-          name,
-          [
-            decision('bypass', 'not_destructive'),
-            started,
-            finished('returned'),
-          ],
-          'completed'
-        );
-        expect(h.operation(name)).toHaveBeenCalledOnce();
-      }
+      expect((result as CallToolResult).isError).not.toBe(true);
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_CLASSIFIER_ERROR');
+      assertAttempt(
+        h.attempts[1],
+        name,
+        [decision('inline', 'eligible'), response(action)],
+        action === 'decline' ? 'declined' : 'cancelled'
+      );
+      expect(h.operation(name)).not.toHaveBeenCalled();
+      // Regression: the resend classifies again and swallows the error.
+      expect(classify).not.toHaveBeenCalled();
     }
   );
+
+  test('asks again without executing when an unanswered resend no longer classifies as destructive', async () => {
+    const h = await setup();
+    const first = issued(await h.call(name));
+    vi.spyOn(classifier, 'isDestructiveSql').mockReturnValue(false);
+    const result = await h.call(name, { requestState: first.requestState });
+    expect(h.operation(name)).not.toHaveBeenCalled();
+    const again = issued(result);
+    expect(again.requestState).toEqual(expect.any(String));
+    // The first prompt says the SQL includes destructive operations. That is
+    // no longer true, so this prompt can't repeat it.
+    expect(promptMessage(again)).toEqual(expect.any(String));
+    expect(promptMessage(again)).not.toBe(promptMessage(first));
+    assertAttempt(
+      h.attempts[1],
+      name,
+      [
+        decision('inline', 'eligible'),
+        validation('missing_response'),
+        required('missing_response'),
+      ],
+      'input_required'
+    );
+  });
 });
 
 test.each(tools)(

@@ -570,6 +570,72 @@ describe('tools', () => {
     expect(result.import_map_path).toMatch(/import_map\.json$/);
   });
 
+  test('default edge function import map to deno.jsonc', async () => {
+    const { callTool } = await setup();
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    const result = await callTool({
+      name: 'deploy_edge_function',
+      arguments: {
+        project_id: project.id,
+        name: 'hello-world',
+        files: [
+          {
+            name: 'index.ts',
+            content: 'console.log("Hello, world!");',
+          },
+          {
+            name: 'deno.jsonc',
+            content: '{}',
+          },
+        ],
+      },
+    });
+
+    expect(result.import_map).toBe(true);
+    expect(result.import_map_path).toMatch(/deno\.jsonc$/);
+  });
+
+  test('default edge function import map prefers deno.json regardless of file order', async () => {
+    const { callTool } = await setup();
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    const result = await callTool({
+      name: 'deploy_edge_function',
+      arguments: {
+        project_id: project.id,
+        name: 'hello-world',
+        files: [
+          {
+            name: 'index.ts',
+            content: 'console.log("Hello, world!");',
+          },
+          {
+            name: 'import_map.json',
+            content: '{}',
+          },
+          {
+            name: 'deno.jsonc',
+            content: '{}',
+          },
+          {
+            name: 'deno.json',
+            content: '{}',
+          },
+        ],
+      },
+    });
+
+    expect(result.import_map).toBe(true);
+    expect(result.import_map_path).toMatch(/\/deno\.json$/);
+  });
+
   test('updating edge function with missing import_map_path defaults to previous value', async () => {
     const { callTool } = await setup();
     const { project } = await createProjectFixture({

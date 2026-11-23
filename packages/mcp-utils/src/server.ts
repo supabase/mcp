@@ -73,6 +73,8 @@ export type Tool<
    * MCP Apps (`_meta.ui.resourceUri`) live here.
    */
   _meta?: Record<string, unknown>;
+  /** MCP `_meta` merged onto `tools/call` results for this tool. */
+  resultMeta?: Record<string, unknown>;
   /**
    * Executes the tool. `ctx` is the SDK's per-request `ServerContext`
    * (elicitation, multi-round-trip `requestState`, HTTP info, etc.) — most
@@ -680,7 +682,9 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
           outcome = result.isError
             ? 'tool_error'
             : (scope?.outcome() ?? 'completed');
-          return result;
+          return tool.resultMeta
+            ? { ...result, _meta: { ...tool.resultMeta, ...result._meta } }
+            : result;
         }
 
         const content =
@@ -689,9 +693,9 @@ export function createMcpServer<Bucket extends string = never, Fact = never>(
             : [];
 
         outcome = scope?.outcome() ?? 'completed';
-        return {
-          content,
-        };
+        return tool.resultMeta
+          ? { content, _meta: tool.resultMeta }
+          : { content };
       } catch (error) {
         const result = {
           isError: true,

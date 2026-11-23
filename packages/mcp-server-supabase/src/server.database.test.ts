@@ -992,7 +992,9 @@ describe('tools', () => {
       expect.arrayContaining([expect.objectContaining({ name: 'test.test_2' })])
     );
     expect(result.tables).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: 'test.test_1' })])
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'public.test_1' }),
+      ])
     );
   });
 
@@ -1004,28 +1006,52 @@ describe('tools', () => {
       project: { name: 'Project 1', region: 'us-east-1' },
     });
 
+    await project.db.exec('create schema test;');
+    await project.db.exec(
+      'create table public.test_1 (id serial primary key);'
+    );
+    await project.db.exec('create table test.test_2 (id serial primary key);');
+
+    // PGlite has no TimescaleDB, so create a table in its internal schema;
+    // without one, asserting that schema is absent would pass vacuously.
+    await project.db.exec('create schema _timescaledb_internal;');
+    await project.db.exec(
+      'create table _timescaledb_internal.test_3 (id serial primary key);'
+    );
+
+    // Omitting `schemas` defaults to ["public"]; an empty array lists every
+    // schema except the system schemas, which is the path under test.
     const result = await callTool({
       name: 'list_tables',
       arguments: {
         project_id: project.id,
+        schemas: [],
       },
     });
 
-    expect(result).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ schema: 'pg_catalog' }),
-      ])
+    // `list_tables` returns `{ tables }`, and each table's schema is part of
+    // its qualified `name` (e.g. `public.test_1`), so assert on those names.
+    const tableNames: string[] = result.tables.map(
+      (table: { name: string }) => table.name
     );
 
-    expect(result).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ schema: 'information_schema' }),
-      ])
+    // Guard against a vacuous pass: user tables from every schema are listed.
+    expect(tableNames).toEqual(
+      expect.arrayContaining(['public.test_1', 'test.test_2'])
     );
 
-    expect(result).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ schema: 'pg_toast' })])
-    );
+    // `list_tables` only selects ordinary and partitioned tables, so TOAST
+    // tables never appear and the `pg_toast` check below cannot fail.
+    for (const schema of [
+      'pg_catalog',
+      'information_schema',
+      'pg_toast',
+      '_timescaledb_internal',
+    ]) {
+      expect(
+        tableNames.filter((name) => name.startsWith(`${schema}.`))
+      ).toEqual([]);
+    }
   });
 
   test('list_tables is not vulnerable to SQL injection via schemas parameter', async () => {
@@ -1354,8 +1380,20 @@ describe('tools', () => {
                 },
               }),
             });
-            // Non-acceptance retains classification failure precedence.
-            expect(unaccepted).toMatchObject({ isError: true });
+            if (action === undefined) {
+              // An unanswered resend retains classification failure precedence.
+              expect(unaccepted).toMatchObject({ isError: true });
+            } else {
+              // A decline or cancel is final, so nothing classifies the SQL
+              // again and the failure never reaches the client.
+              expect(isInputRequiredResult(unaccepted)).toBe(false);
+              expect((unaccepted as CallToolResult).isError).not.toBe(true);
+              expect(unaccepted).toMatchObject({
+                structuredContent: {
+                  status: action === 'decline' ? 'declined' : 'cancelled',
+                },
+              });
+            }
             expect(executeSql).not.toHaveBeenCalled();
             expect(applyMigration).not.toHaveBeenCalled();
           }
