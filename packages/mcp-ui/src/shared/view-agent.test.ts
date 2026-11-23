@@ -34,7 +34,13 @@ function setup() {
     id: 'toolu_1',
     title: 'Query results',
     source: 'database',
+    window: {},
     editor,
+    retarget: (change) => {
+      for (const [key, value] of Object.entries(change)) {
+        if (value !== undefined) Object.assign(block, { [key]: value });
+      }
+    },
   };
   const app = { registerTool: vi.fn() };
   const webMcpTools = new Map<
@@ -76,7 +82,11 @@ describe('registerViewTools, with the query block’s tools', () => {
     // WebMCP takes JSON Schema, not a Standard Schema object.
     expect(webMcpTools.get('edit_query_view')!.inputSchema).toMatchObject({
       type: 'object',
-      required: ['block_id', 'expected_revision', 'sql'],
+      required: ['block_id', 'expected_revision'],
+      properties: expect.objectContaining({
+        sql: expect.anything(),
+        source: { type: 'string', enum: ['database', 'logs'] },
+      }),
     });
   });
 

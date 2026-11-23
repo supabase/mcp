@@ -31,6 +31,8 @@ export type QueryResult = {
   sql: string;
   /** How long a run from the view took. */
   elapsedMs?: number;
+  /** What the SQL ran against (the editor's `target` at the time). */
+  target?: string;
 };
 
 /** Where a query's run is: waiting for it, its rows, or why it failed. */
@@ -56,7 +58,7 @@ export type QueryEditorState = {
   /** Why the last run failed, if it did. */
   error: string | null;
   has_results: boolean;
-  /** The results answer an earlier version of the SQL. */
+  /** The results answer an earlier version of the SQL, or another source. */
   results_stale: boolean;
   columns: string[];
   row_count: number | null;
@@ -92,6 +94,7 @@ export function QueryEditor({
   delivered,
   onRun,
   source = 'database',
+  target,
   footerDetail,
   onStateChange,
   ref,
@@ -104,6 +107,11 @@ export function QueryEditor({
   /** Runs edited SQL. Omit when the host can't call tools: the SQL is then read-only. */
   onRun?: RunQuery;
   source?: 'database' | 'logs';
+  /**
+   * What the SQL runs against, e.g. the source and log window. Results run
+   * against another target show as stale, like results of other SQL.
+   */
+  target?: string;
   /** On the footer's right, e.g. the log window, with its full text on hover. */
   footerDetail?: { label: string; title?: string };
   /** Called with what the editor shows whenever it changes, e.g. to share with the agent. */
@@ -128,7 +136,8 @@ export function QueryEditor({
   const run = ownRun ?? delivered;
   const result = run.status === 'done' ? run : undefined;
   const isBusy = isRunning || run.status === 'running';
-  const isStale = !!result && result.sql !== sql;
+  const isStale =
+    !!result && (result.sql !== sql || (result.target ?? target) !== target);
   // Embedded editors hide the query while there are results to look at.
   const showQuery = isQueryShown ?? run.status !== 'done';
   const canRun = !!onRun && !isBusy && sql.trim().length > 0;
@@ -201,6 +210,7 @@ export function QueryEditor({
         status: 'done',
         ...next,
         sql: ran,
+        target,
         elapsedMs: Math.round(performance.now() - start),
       });
     } catch (error) {

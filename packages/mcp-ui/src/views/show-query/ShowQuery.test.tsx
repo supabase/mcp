@@ -361,6 +361,119 @@ describe('ShowQuery with the agent', () => {
   });
 });
 
+describe('ShowQuery when the agent changes its source', () => {
+  const callAppTool = (name: string, args: Record<string, unknown> = {}) =>
+    act(async () => appTools.get(name)!(args));
+  const LOGS_SQL =
+    "select timestamp, event_message from logs where source = 'edge_logs'";
+
+  beforeEach(() => {
+    host.input = { source: 'logs', sql: LOGS_SQL };
+    host.toolCall = {
+      status: 'ready',
+      data: {
+        rows: [{ timestamp: 1, event_message: 'GET /' }],
+        truncated: false,
+        iso_timestamp_start: '2026-11-22T10:00:00.000Z',
+        iso_timestamp_end: '2026-11-23T10:00:00.000Z',
+      },
+    };
+  });
+
+  it('switches a logs block to Postgres in place, for the user to run', async () => {
+    const view = renderView();
+
+    const result = await callAppTool('edit_query_view', {
+      block_id: 'toolu_1',
+      expected_revision: 0,
+      source: 'database',
+      sql: 'select * from pg_policies;',
+      title: 'Policies',
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      source: 'database',
+      title: 'Policies',
+      sql: 'select * from pg_policies;',
+    });
+    expect(result.structuredContent).not.toHaveProperty('log_window');
+    // The user sees the new query against the database, not yet run.
+    expect(view.title()).toBe('Policies');
+    expect(view.detail()).toBeUndefined();
+    expect(view.notice()).toBe(
+      'Showing previous results. Run your query to update them.'
+    );
+    expect(callTool).not.toHaveBeenCalled();
+
+    callTool.mockResolvedValue(sqlResult([{ policyname: 'own rows' }]));
+    await act(async () => fireEvent.click(view.run()!));
+    expect(callTool).toHaveBeenCalledWith('execute_sql', {
+      query: 'select * from pg_policies;',
+    });
+  });
+
+  it('asks for SQL that fits the new source, and leaves the block as it was', async () => {
+    const view = renderView();
+
+    const result = await callAppTool('edit_query_view', {
+      block_id: 'toolu_1',
+      expected_revision: 0,
+      source: 'database',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain(
+      'Write SQL for source "database" too'
+    );
+    expect(view.detail()).toBe('Logs · 24h window');
+  });
+
+  it('reads a narrower log window when the agent asks, once the user runs it', async () => {
+    callTool.mockResolvedValue({
+      result: wrapUntrusted({ result: [], error: null }),
+    });
+    const view = renderView();
+
+    const result = await callAppTool('edit_query_view', {
+      block_id: 'toolu_1',
+      expected_revision: 0,
+      iso_timestamp_start: '2026-11-23T09:00:00.000Z',
+      iso_timestamp_end: '2026-11-23T10:00:00.000Z',
+    });
+    expect(result.structuredContent).toMatchObject({
+      log_window: {
+        iso_timestamp_start: '2026-11-23T09:00:00.000Z',
+        iso_timestamp_end: '2026-11-23T10:00:00.000Z',
+      },
+    });
+    expect(view.detail()).toBe('Logs · 1h window');
+    // The rows on screen answer the old window until the user runs it.
+    expect(view.notice()).toBe(
+      'Showing previous results. Run your query to update them.'
+    );
+
+    await act(async () => fireEvent.click(view.run()!));
+    expect(callTool).toHaveBeenCalledWith('query_logs', {
+      sql: LOGS_SQL,
+      iso_timestamp_start: '2026-11-23T09:00:00.000Z',
+      iso_timestamp_end: '2026-11-23T10:00:00.000Z',
+    });
+  });
+
+  it('refuses a log window for a Postgres query', async () => {
+    host.input = { sql: 'select 1;' };
+    host.toolCall = { status: 'ready', data: { rows: [], truncated: false } };
+    renderView();
+
+    const result = await callAppTool('edit_query_view', {
+      block_id: 'toolu_1',
+      expected_revision: 0,
+      iso_timestamp_start: '2026-11-23T09:00:00.000Z',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('only to source "logs"');
+  });
+});
+
 describe('ShowQuery in a panel', () => {
   const expandButton = () =>
     screen.queryByRole('button', { name: 'Expand query' });
