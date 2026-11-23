@@ -25,8 +25,13 @@ import {
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { getResources } from './resources/index.js';
+import {
+  regexClassifier,
+  type SqlConfirmationClassifier,
+} from './sql-confirmation.js';
 import { getAccountTools } from './tools/account-tools.js';
 import { getBranchingTools } from './tools/branching-tools.js';
+import { createSqlClassifyStep } from './tools/classify-sql.js';
 import {
   type ElicitationState,
   ExpiredRequestState,
@@ -141,6 +146,20 @@ export type SupabaseMcpServerOptions = {
       enabledTools: readonly ElicitationToolName[];
       /** How long a confirmation `requestState` stays valid, in seconds. Defaults to 600. */
       ttlSeconds?: number;
+      /**
+       * Classifies `execute_sql` and `apply_migration` SQL for destructive
+       * SQL confirmation. Defaults to `regexClassifier`. Swap in another
+       * classifier, for example `withFallback(parser, regexClassifier)` so a
+       * parser that cannot load falls back to the regex.
+       *
+       * Only `undefined` skips confirmation. `oversized` asks for
+       * confirmation; `unavailable`, `timeout`, `crashed`, a rejection, or any
+       * result outside `SqlConfirmationClassification` fails the tool call
+       * with a `SqlClassifierCallError`, without running the SQL. The error
+       * carries nothing of the classifier's own error and has no `cause`.
+       * See `SqlConfirmationClassifier`.
+       */
+      classifier?: SqlConfirmationClassifier;
     };
     /**
      * URL-mode secret collection for `create_edge_function_secret`. Requires
@@ -261,6 +280,11 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
   // Both codecs share the HMAC key and binding. The SDK verifies each token's
   // signed expiry; a codec's configured TTL only affects tokens it mints.
   const verificationCodec = confirmationCodec ?? secretCollectionCodec;
+  // One classify step for the whole server, built outside the per-feature
+  // tool wiring so every tool that runs caller SQL gets the same one.
+  const classifySql = createSqlClassifyStep(
+    elicitation?.confirmation?.classifier ?? regexClassifier
+  );
 
   let handshakeClientInfo: Implementation | undefined;
 
@@ -354,6 +378,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
             database,
             projectId,
             readOnly,
+            classifySql,
             confirmation:
               confirmationCodec &&
               (enabledConfirmationTools.includes('execute_sql') ||
