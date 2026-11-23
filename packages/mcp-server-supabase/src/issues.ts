@@ -1,5 +1,7 @@
 import { z } from 'zod/v4';
 
+export const MAX_AFFECTED_PER_ISSUE = 20;
+
 export const issueCategorySchema = z.enum([
   'security',
   'performance',
@@ -14,6 +16,7 @@ export const issueSchema = z.object({
   category: issueCategorySchema,
   source: z.literal('lint'),
   docs_url: z.string(),
+  affected_count: z.number().int().nonnegative(),
   affected: z.array(
     z.object({
       id: z.string(),
@@ -85,7 +88,13 @@ export function normalizeIssues(
   result: unknown,
   category: IssueCategory
 ): IssuesResult {
-  const { lints } = z.object({ lints: z.array(lintSchema) }).parse(result);
+  const lints = z
+    .array(lintSchema)
+    .parse(
+      Array.isArray(result)
+        ? result
+        : z.object({ lints: z.unknown() }).parse(result).lints
+    );
   const issues = new Map<string, Issue>();
   const unavailable = lints.filter(
     ({ name }) =>
@@ -128,6 +137,7 @@ export function normalizeIssues(
     const existing = issues.get(lint.name);
     if (existing) {
       existing.affected.push(affected);
+      existing.affected_count += 1;
       if (severityRank[severity] > severityRank[existing.severity])
         existing.severity = severity;
     } else {
@@ -139,12 +149,22 @@ export function normalizeIssues(
         category,
         source: 'lint',
         docs_url,
+        affected_count: 1,
         affected: [affected],
       });
     }
   }
   return {
-    issues: Array.from(issues.values()),
+    issues: Array.from(issues.values(), (issue) => ({
+      ...issue,
+      affected: issue.affected
+        .sort(
+          (a, b) =>
+            severityRank[b.severity] - severityRank[a.severity] ||
+            a.id.localeCompare(b.id)
+        )
+        .slice(0, MAX_AFFECTED_PER_ISSUE),
+    })),
     checks: [
       {
         type: category,

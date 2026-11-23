@@ -1,5 +1,9 @@
 import { expect, test } from 'vitest';
-import { filterAndSortIssues, normalizeIssues } from './issues.js';
+import {
+  MAX_AFFECTED_PER_ISSUE,
+  filterAndSortIssues,
+  normalizeIssues,
+} from './issues.js';
 
 const lint = {
   name: 'function_search_path_mutable',
@@ -12,7 +16,7 @@ const lint = {
   metadata: { schema: 'public', name: 'lookup', arguments: '' },
 };
 
-test('critical filtering keeps every affected function and its remediation', () => {
+test('critical filtering keeps sampled affected function and its remediation', () => {
   const result = normalizeIssues(
     {
       lints: [
@@ -33,19 +37,20 @@ test('critical filtering keeps every affected function and its remediation', () 
       id: 'function_search_path_mutable',
       severity: 'critical',
       description: 'Check `search_path`.',
+      affected_count: 2,
       affected: [
+        {
+          id: 'second',
+          resource: { name: 'lookup(id uuid)' },
+          severity: 'critical',
+          docs_url: 'https://example.com/second',
+        },
         {
           id: 'first',
           resource: { type: 'function', schema: 'public', name: 'lookup()' },
           severity: 'info',
           detail: 'Fix `public.lookup`.',
           docs_url: 'https://example.com/first',
-        },
-        {
-          id: 'second',
-          resource: { name: 'lookup(id uuid)' },
-          severity: 'critical',
-          docs_url: 'https://example.com/second',
         },
       ],
     },
@@ -75,11 +80,13 @@ test('resources preserve explicit identities and missing metadata without droppi
     },
     'security'
   );
-  expect(result.issues[0]?.affected.map(({ resource }) => resource)).toEqual([
-    { type: 'function', name: 'public.lookup(uuid)', schema: null },
-    { type: 'project', name: 'Project', schema: null },
-    { type: 'project', name: 'widgets', schema: 'custom' },
-  ]);
+  expect(result.issues[0]?.affected.map(({ resource }) => resource)).toEqual(
+    expect.arrayContaining([
+      { type: 'function', name: 'public.lookup(uuid)', schema: null },
+      { type: 'project', name: 'Project', schema: null },
+      { type: 'project', name: 'widgets', schema: 'custom' },
+    ])
+  );
   expect(result.issues[0]?.affected[1]?.id).toBeTruthy();
 });
 
@@ -132,4 +139,25 @@ test('severity leads the output, with stable check IDs breaking ties', () => {
     'a',
     'z',
   ]);
+});
+
+test('issues bound evidence, count all findings, and prioritize critical findings deterministically', () => {
+  const lints = Array.from({ length: 25 }, (_, i) => ({
+    ...lint,
+    cache_key: String(i).padStart(2, '0'),
+    level: i === 24 ? 'ERROR' : 'INFO',
+  }));
+  const first = normalizeIssues({ lints }, 'security').issues[0]!;
+  const reversed = normalizeIssues({ lints: [...lints].reverse() }, 'security')
+    .issues[0]!;
+  expect(first.affected_count).toBe(25);
+  expect(first.affected).toHaveLength(MAX_AFFECTED_PER_ISSUE);
+  expect(first.affected[0]).toMatchObject({ id: '24', severity: 'critical' });
+  expect(first).toEqual(reversed);
+});
+
+test('issues accept self-hosted lint arrays without changing their findings', () => {
+  expect(normalizeIssues([lint], 'security')).toEqual(
+    normalizeIssues({ lints: [lint] }, 'security')
+  );
 });
