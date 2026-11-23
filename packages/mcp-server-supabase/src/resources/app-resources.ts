@@ -21,34 +21,73 @@ export const SHOW_QUERY_UI_URI = 'ui://supabase/show-query';
 export const SHOW_ROW_UI_URI = 'ui://supabase/show-row';
 export const SHOW_LOGS_UI_URI = 'ui://supabase/show-logs';
 
-const VIEW_META: { ui: McpUiResourceMeta } = {
-  ui: {
-    // Views are fully inlined and make no network requests.
-    csp: { connectDomains: [], resourceDomains: [] },
-    // Views blend into the conversation instead of sitting in a host frame.
-    prefersBorder: false,
-    // Views let the user copy connection details.
-    permissions: { clipboardWrite: {} },
-  },
+const BASE_VIEW_UI: McpUiResourceMeta = {
+  // Views are fully inlined and make no network requests.
+  csp: { connectDomains: [], resourceDomains: [] },
+  // Views blend into the conversation instead of sitting in a host frame.
+  prefersBorder: false,
+  // Views let the user copy connection details.
+  permissions: { clipboardWrite: {} },
 };
+
+/**
+ * Where a host shows a view, as the Supabase surfaces define it: `inline` in
+ * the conversation (a card, a query block), or a `panel` beside it (logs, a
+ * row) that the user works in. A panel prefers fullscreen, which Claude
+ * opens in its side panel without a click and ChatGPT opens fullscreen.
+ */
+export type ViewPresentation = 'inline' | 'panel';
+
+/** Resource `_meta` for a view, for every host. */
+export function viewResourceMeta(presentation: ViewPresentation) {
+  const preferredDisplayMode =
+    presentation === 'panel' ? 'fullscreen' : 'inline';
+  return {
+    // `preferredDisplayMode` is Claude's extension to the MCP Apps standard.
+    ui: { ...BASE_VIEW_UI, preferredDisplayMode },
+    'openai/ui': {
+      preferredDisplayMode,
+      availableDisplayModes: [preferredDisplayMode],
+    },
+  };
+}
+
+/**
+ * Tool `_meta` for a tool that opens a view: the view's resource, and for
+ * ChatGPT, the mode a model call opens it in.
+ */
+export function viewToolMeta(
+  resourceUri: string,
+  presentation: ViewPresentation
+) {
+  return {
+    ui: { resourceUri },
+    'openai/ui': {
+      preferredModelDisplayMode:
+        presentation === 'panel' ? 'fullscreen' : 'inline',
+    },
+  };
+}
 
 function appResource(
   uri: string,
   name: string,
   description: string,
-  html: string
+  html: string,
+  presentation: ViewPresentation = 'inline'
 ): Resource {
+  const meta = viewResourceMeta(presentation);
   return resource(uri, {
     name,
     description,
     mimeType: RESOURCE_MIME_TYPE,
-    _meta: VIEW_META,
+    _meta: meta,
     // Hosts read `_meta` from the content first, so send it here too.
     read: async () => ({
       uri,
       mimeType: RESOURCE_MIME_TYPE,
       text: html,
-      _meta: VIEW_META,
+      _meta: meta,
     }),
   });
 }
@@ -77,7 +116,8 @@ export function getAppResources(): Resource[] {
       SHOW_ROW_UI_URI,
       'Row view',
       'One table row, editable by the user, for the show_row tool.',
-      showRowHtml
+      showRowHtml,
+      'panel'
     ),
     appResource(
       SHOW_LOGS_UI_URI,

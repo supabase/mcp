@@ -33,6 +33,7 @@ import { migrationSchema } from '../platform/types.js';
 import {
   SHOW_QUERY_UI_URI,
   SHOW_ROW_UI_URI,
+  viewToolMeta,
 } from '../resources/app-resources.js';
 import { hashObject } from '../util.js';
 import {
@@ -409,7 +410,7 @@ export const databaseToolDefs = {
       'Shows the user a SQL query and its results in an editor, where they can change the SQL and run it again. Use it only when the user wants to see results, such as "show me the newest users"; to read data yourself, use `execute_sql` or `query_logs`. Runs read-only and returns only a row count: the rows go to the user, not to you. Never use it for writes. Include an ORDER BY and a LIMIT. For source "logs", write the SQL as for `query_logs`, and pass iso_timestamp_start and iso_timestamp_end for a requested range (at most 24 hours).',
     parameters: showQueryInputSchema,
     outputSchema: showQueryOutputSchema,
-    _meta: { ui: { resourceUri: SHOW_QUERY_UI_URI } },
+    _meta: viewToolMeta(SHOW_QUERY_UI_URI, 'inline'),
     annotations: {
       title: 'Show query',
       readOnlyHint: true,
@@ -423,7 +424,7 @@ export const databaseToolDefs = {
       'Shows the user one row of a table in an editor, where they can change its values and save them. Use it when the user wants to see or edit a specific row, such as "let me edit order 42". First find the row with `execute_sql` and get its complete primary key, and settle ambiguous matches with the user. Only the user can save changes. Returns no row contents to you. Rows open read-only on read-only servers and in schemas Supabase manages, such as auth and storage.',
     parameters: showRowInputSchema,
     outputSchema: showRowOutputSchema,
-    _meta: { ui: { resourceUri: SHOW_ROW_UI_URI } },
+    _meta: viewToolMeta(SHOW_ROW_UI_URI, 'panel'),
     annotations: {
       title: 'Show row',
       readOnlyHint: true,
