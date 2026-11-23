@@ -160,6 +160,7 @@ describe('tools', () => {
     });
 
     await expect(goodToolPromise).resolves.toEqual({ value: 'bar' });
+    expect(onToolCall).toHaveBeenCalledTimes(1);
     expect(onToolCall).toHaveBeenLastCalledWith({
       name: 'good_tool',
       arguments: { foo: 'bar' },
@@ -177,6 +178,7 @@ describe('tools', () => {
     });
 
     await expect(badToolPromise).rejects.toThrow('Failure: bar');
+    expect(onToolCall).toHaveBeenCalledTimes(2);
     expect(onToolCall).toHaveBeenLastCalledWith({
       name: 'bad_tool',
       arguments: { foo: 'bar' },
@@ -331,6 +333,173 @@ describe('tools', () => {
       title: 'Report',
       content: [{ label: 'first' }, { label: 'second' }],
     });
+  });
+
+  test('tool _meta is passed through in tools/list', async () => {
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      tools: {
+        with_meta: tool({
+          description: 'A tool with _meta',
+          parameters: z.object({}),
+          outputSchema: z.object({}),
+          _meta: { ui: { resourceUri: 'ui://test/view' } },
+          execute: async () => ({}),
+        }),
+        without_meta: tool({
+          description: 'A tool without _meta',
+          parameters: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => ({}),
+        }),
+      },
+    });
+
+    const { client } = await setup({ server });
+
+    const { tools } = await client.listTools();
+    const withMeta = tools.find((tool) => tool.name === 'with_meta');
+    const withoutMeta = tools.find((tool) => tool.name === 'without_meta');
+
+    expect(withMeta?._meta).toEqual({
+      ui: { resourceUri: 'ui://test/view' },
+    });
+    expect(withoutMeta?._meta).toBeUndefined();
+  });
+
+  test('tool resultMeta is attached to results without changing onToolCall data', async () => {
+    const calls: unknown[] = [];
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      onToolCall: (details) => calls.push(details),
+      tools: {
+        plain: tool({
+          description: 'Returns plain data',
+          parameters: z.object({}),
+          outputSchema: z.object({ ok: z.boolean() }),
+          resultMeta: { 'example.com/a': '1' },
+          execute: async () => ({ ok: true }),
+        }),
+        raw: tool({
+          description: 'Returns a CallToolResult with its own _meta',
+          parameters: z.object({}),
+          outputSchema: z.object({}),
+          resultMeta: { 'example.com/a': '1', 'example.com/b': 'from-tool' },
+          execute: async () => ({
+            content: [{ type: 'text' as const, text: 'hi' }],
+            _meta: { 'example.com/b': 'from-result' },
+          }),
+        }),
+      },
+    });
+
+    const { client } = await setup({ server });
+
+    const plainResult = await client.callTool({ name: 'plain', arguments: {} });
+    expect(plainResult._meta).toEqual({ 'example.com/a': '1' });
+    expect(calls[0]).toMatchObject({
+      name: 'plain',
+      success: true,
+      data: { ok: true },
+    });
+
+    const rawResult = await client.callTool({ name: 'raw', arguments: {} });
+    expect(rawResult._meta).toEqual({
+      'example.com/a': '1',
+      'example.com/b': 'from-result',
+    });
+  });
+});
+
+describe('resources', () => {
+  test('resource _meta is passed through in resources/list and templates/list', async () => {
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      resources: [
+        resource('ui://test/view', {
+          name: 'view',
+          mimeType: 'text/html;profile=mcp-app',
+          _meta: { ui: { prefersBorder: true } },
+          read: async (uri) => ({ uri, text: '<html></html>' }),
+        }),
+        resourceTemplate('test://items/{id}', {
+          name: 'item',
+          _meta: { custom: 'value' },
+          read: async (uri) => ({ uri, text: 'item' }),
+        }),
+      ],
+    });
+
+    const { client } = await setup({ server });
+
+    const { resources } = await client.listResources();
+    expect(resources[0]?._meta).toEqual({ ui: { prefersBorder: true } });
+
+    const { resourceTemplates } = await client.listResourceTemplates();
+    expect(resourceTemplates[0]?._meta).toEqual({ custom: 'value' });
+  });
+
+  test('resources callback receives the request context', async () => {
+    const seen: unknown[] = [];
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      resources: (ctx) => {
+        seen.push(ctx?.mcpReq);
+        return [
+          resource('ui://test/view', {
+            name: 'view',
+            read: async (uri) => ({ uri, text: 'view' }),
+          }),
+        ];
+      },
+    });
+
+    const { client } = await setup({ server });
+    await client.listResources();
+    await client.listResourceTemplates();
+    await client.readResource({ uri: 'ui://test/view' });
+
+    expect(seen).toHaveLength(3);
+    expect(seen.every((mcpReq) => mcpReq !== undefined)).toBe(true);
+  });
+});
+
+describe('extensions', () => {
+  test('extensions are declared in server capabilities', async () => {
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      tools: {},
+      extensions: {
+        'io.modelcontextprotocol/ui': {
+          mimeTypes: ['text/html;profile=mcp-app'],
+        },
+      },
+    });
+
+    const { client } = await setup({ server });
+
+    expect(client.getServerCapabilities()?.extensions).toEqual({
+      'io.modelcontextprotocol/ui': {
+        mimeTypes: ['text/html;profile=mcp-app'],
+      },
+    });
+  });
+
+  test('extensions are omitted when not configured', async () => {
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      tools: {},
+    });
+
+    const { client } = await setup({ server });
+
+    expect(client.getServerCapabilities()?.extensions).toBeUndefined();
   });
 });
 

@@ -1,0 +1,285 @@
+/*
+ * The global core every MCP UI view ships: tokens, native element styles and
+ * utilities. Components keep their CSS in a file beside their TSX and import
+ * it, so a view only ships the CSS of the components it renders. Before
+ * editing, read packages/mcp-ui/.agents/skills/mcp-ui-css/SKILL.md: layers,
+ * specificity caps, host theming and markup rules. `pnpm lint:css` checks
+ * them.
+ */
+@layer base, native, components, view, utilities;
+
+@layer base {
+  /*
+   * The host bridge. Components use Studio's semantic colour tokens (the
+   * core names in packages/ui/build/css/source/semantic.css in the supabase
+   * monorepo, prefixed `--sb-color-`: --sb-color-card, --sb-color-muted,
+   * --sb-color-border and so on, never the legacy names in compat.css such
+   * as --background-surface-* or --foreground-light), so they can move into
+   * Studio with the prefix dropped. Here, and only here, each token
+   * takes the host's MCP Apps style variable, which `useHostStyles` sets
+   * inline on <html>, or a Supabase design system fallback when the host
+   * doesn't send it. In Studio this layer isn't loaded and Studio's own
+   * theme defines the same tokens.
+   *
+   * The MCP Apps spec names the host variables but not their roles, and
+   * hosts map their themes onto them differently:
+   *
+   *   variable              Claude                  Codex / ChatGPT     Inspector
+   *   border-tertiary       hairline (15% alpha)    default border      not sent
+   *   border-primary        strong line (40%)       control outline     default border
+   *   border-secondary      30%                     default border      light grey
+   *   background-primary    raised surface (white)  app surface         page
+   *   background-secondary  warm inset grey         elevated surface    card surface
+   *
+   * So the bridge picks, per token, the variable that means the same thing
+   * in every host:
+   *
+   *   Studio token (--sb-color-*)  host variable           why
+   *   foreground                   text-primary
+   *   muted-foreground             text-secondary
+   *   tertiary-foreground          text-tertiary
+   *   background                   background-primary      only under inverse text
+   *   foreground-contrast          text-inverse            text on a foreground fill
+   *   card                         (transparent)           Claude frames a view on its own surface and Codex
+   *                                                        sets it on the thread: cards let that show through
+   *   muted                        background-secondary    "set apart from the page" in every host
+   *   border, input                border-tertiary         the only hairline in both Claude and Codex
+   *   ring                         ring-primary
+   *   primary                      text-success            Studio's primary green marks success
+   *   warning                      text-warning
+   *   destructive                  text-danger
+   *
+   * Status borders and tints are derived as Studio derives them (30% and
+   * 10% of the colour), not taken from hosts: Claude's status borders are
+   * solid. Disabled controls fade with opacity, as Studio's do.
+   */
+  :where(:root) {
+    --sb-color-foreground: var(
+      --color-text-primary,
+      light-dark(oklch(0.1 0 0), oklch(0.95 0.00275 157.5))
+    );
+    --sb-color-muted-foreground: var(
+      --color-text-secondary,
+      light-dark(oklch(0.413 0 0), oklch(0.798 0.00275 157.5))
+    );
+    --sb-color-tertiary-foreground: var(
+      --color-text-tertiary,
+      light-dark(oklch(0.5475 0 0), oklch(0.684 0.00275 157.5))
+    );
+    --sb-color-background: var(
+      --color-background-primary,
+      light-dark(oklch(0.995 0 0), oklch(0.19 0.0025 157.5))
+    );
+    --sb-color-foreground-contrast: var(
+      --color-text-inverse,
+      var(--sb-color-background)
+    );
+    --sb-color-card: transparent;
+    --sb-color-muted: var(
+      --color-background-secondary,
+      color-mix(in oklab, var(--sb-color-foreground) 5%, transparent)
+    );
+    --sb-color-border: var(
+      --color-border-tertiary,
+      color-mix(in oklab, var(--sb-color-foreground) 13.5%, transparent)
+    );
+    --sb-color-input: var(--sb-color-border);
+    --sb-color-ring: var(
+      --color-ring-primary,
+      light-dark(oklch(0.7 0.15 157.5 / 0.55), oklch(0.76 0.15 157.5 / 0.55))
+    );
+
+    --sb-color-primary: var(
+      --color-text-success,
+      light-dark(hsl(156.5 86.5% 26.1%), hsl(154.9 59.5% 70%))
+    );
+    --sb-color-border-primary-bright: color-mix(
+      in oklab,
+      var(--sb-color-primary) 30%,
+      transparent
+    );
+    --sb-color-warning: var(
+      --color-text-warning,
+      light-dark(oklch(0.55 0.14 58), oklch(0.8 0.14 75))
+    );
+    --sb-color-border-warning: color-mix(
+      in oklab,
+      var(--sb-color-warning) 30%,
+      transparent
+    );
+    --sb-color-destructive: var(
+      --color-text-danger,
+      light-dark(oklch(0.52 0.14 25), oklch(0.55 0.14 25))
+    );
+    --sb-color-border-destructive: color-mix(
+      in oklab,
+      var(--sb-color-destructive) 30%,
+      transparent
+    );
+
+    /* No font files are loaded: these resolve to the host's or the system's. */
+    --font-sans: Inter, "Helvetica Neue", Helvetica, ui-sans-serif, system-ui,
+      sans-serif;
+    --font-mono: "Source Code Pro", ui-monospace, Menlo, monospace;
+    --font-weight-medium: 500;
+    --font-text-xs-size: 12px;
+    --font-text-xs-line-height: 1.33;
+    --font-text-sm-size: 13px;
+    --font-text-sm-line-height: 1.43;
+    --font-text-md-size: 14px;
+    --font-text-md-line-height: 1.43;
+    --font-text-lg-size: 16px;
+    --font-text-lg-line-height: 1.5;
+    --font-weight-normal: 400;
+
+    --border-width-regular: 1px;
+    --border-radius-md: 6px;
+    --border-radius-lg: 8px;
+    --border-radius-full: 9999px;
+
+    /* Local tokens: the host standard has no spacing scale. */
+    --sb-space-1: 4px;
+    --sb-space-2: 8px;
+    --sb-space-3: 12px;
+    --sb-space-4: 16px;
+
+    --sb-control-compact-padding-block: 6px;
+    --sb-control-compact-padding-inline: var(--sb-space-2);
+    /* One height for controls that sit in a row: icon-only buttons are this
+       square, and copy values are this tall, so they all line up. */
+    --sb-control-size: 32px;
+
+    /* The host's safe area insets, set by `useHostStyles`. */
+    --sb-inset-top: 0px;
+    --sb-inset-right: 0px;
+    --sb-inset-bottom: 0px;
+    --sb-inset-left: 0px;
+
+    color-scheme: light dark;
+
+    font-family: var(--font-sans);
+    font-size: var(--font-text-sm-size);
+    line-height: var(--font-text-sm-line-height);
+    color: var(--sb-color-foreground);
+  }
+
+  /* Sizes include padding and border everywhere. */
+  :where(*, ::before, ::after) {
+    box-sizing: border-box;
+  }
+
+  :where(body) {
+    margin: 0;
+    padding: calc(var(--sb-inset-top) + var(--sb-space-1))
+      calc(var(--sb-inset-right) + var(--sb-space-1))
+      calc(var(--sb-inset-bottom) + var(--sb-space-1))
+      calc(var(--sb-inset-left) + var(--sb-space-1));
+    background: transparent;
+  }
+
+  :where(:focus-visible) {
+    outline: 2px solid var(--sb-color-ring);
+    outline-offset: 2px;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
+}
+
+@layer native {
+  /*
+   * Buttons, and links that look like one (`<a class="button">`): one rule
+   * for both, so the link picks up every button style and variant.
+   */
+  :is(button, a:where(.button)) {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sb-space-2);
+    padding: 6px var(--sb-space-3);
+    border: var(--border-width-regular) solid var(--sb-color-input);
+    border-radius: var(--border-radius-md);
+    background: transparent;
+    color: var(--sb-color-foreground);
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+
+    &:where(:hover:not(:disabled)) {
+      background: var(--sb-color-muted);
+    }
+
+    /* Faded as Studio fades disabled controls; variants keep their colours. */
+    &:where(:disabled) {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  /* Text links. Button-styled links are excluded so neither rule depends on
+   * source order to win. */
+  a:where(:not(.button)) {
+    color: var(--sb-color-muted-foreground);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+
+    &:where(:hover) {
+      color: var(--sb-color-foreground);
+    }
+  }
+
+  /*
+   * Icons (see icons.tsx). Here rather than in `components` so a component
+   * that styles an icon inside it (by `data-slot`) always wins, whatever the
+   * import order. Like the link rules above, a class in `native` bends the
+   * layer rules; see SKILL.md.
+   */
+  svg:where(.icon) {
+    flex: none;
+
+    &:where([data-state="spinning"]) {
+      transform-origin: center;
+      animation: spin 0.9s linear infinite;
+
+      @media (prefers-reduced-motion: reduce) {
+        animation-duration: 3s;
+      }
+    }
+  }
+
+  code {
+    font-family: var(--font-mono);
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+/*
+ * Rules that must override everything, including `view`. Keep this layer
+ * nearly empty; see the `utilities` section of
+ * packages/mcp-ui/.agents/skills/mcp-ui-css/SKILL.md before adding to it.
+ */
+@layer utilities {
+  /* Hidden visually, still read by screen readers. */
+  :where(.sr-only) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}

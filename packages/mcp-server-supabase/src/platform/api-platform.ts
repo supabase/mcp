@@ -5,6 +5,7 @@ import {
 import type { InitData } from '@supabase/mcp-utils';
 import packageJson from '../../package.json' with { type: 'json' };
 import {
+  getDefaultImportMapPath,
   getDeploymentId,
   getFilenameFromUrlOrPath,
   normalizeFilename,
@@ -653,13 +654,10 @@ export function createSupabaseApiPlatform(
         existingEdgeFunction = await functions.getEdgeFunction(projectId, name);
       } catch (error) {}
 
-      const import_map_file = inputFiles.find((file) =>
-        ['deno.json', 'import_map.json'].includes(file.name)
-      );
-
       // Use existing import map path or file name heuristic if not provided
       import_map_path ??=
-        existingEdgeFunction?.import_map_path ?? import_map_file?.name;
+        existingEdgeFunction?.import_map_path ??
+        getDefaultImportMapPath(inputFiles);
 
       const response = await managementApiClient.POST(
         '/v1/projects/{ref}/functions/deploy',

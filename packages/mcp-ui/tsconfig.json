@@ -1,0 +1,15 @@
+{
+  "extends": "@total-typescript/tsconfig/bundler/dom/app",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    // Type-only imports of the server's schemas, from source: the server
+    // bundles these views, so depending on its build would be a cycle.
+    "paths": {
+      "@supabase/mcp-server-supabase/platform": [
+        "../mcp-server-supabase/src/platform/index.ts"
+      ]
+    }
+  },
+  "include": ["src", "vite.config.ts", "vitest.config.ts"]
+}

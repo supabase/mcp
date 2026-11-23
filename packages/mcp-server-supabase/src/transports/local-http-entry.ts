@@ -35,6 +35,7 @@ export type LocalHttpEntryOptions = {
 const querySchema = z.object({
   project_ref: z.string().optional(),
   read_only: z.stringbool().default(false),
+  experimental_apps: z.stringbool().default(false),
   features: z
     .string()
     .transform((value) => parseList(value))
@@ -165,6 +166,7 @@ export async function startLocalHttpEntry({
           const {
             project_ref: projectId,
             read_only: readOnly,
+            experimental_apps: experimentalApps,
             features,
             skip_elicitations: skipElicitations,
           } = query.data;
@@ -187,6 +189,7 @@ export async function startLocalHttpEntry({
                 projectId,
                 readOnly,
                 features,
+                experimentalApps,
                 contentApiUrl,
                 dashboardUrl,
                 elicitation: {

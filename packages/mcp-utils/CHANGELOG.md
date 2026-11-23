@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.11.0](https://github.com/supabase/mcp/compare/mcp-utils-v0.10.0...mcp-utils-v0.11.0) (2026-11-17)
+
+
+### Features
+
+* **mcp-apps:** MCP Apps foundation ([#551](https://github.com/supabase/mcp/issues/551)) ([0dbacba](https://github.com/supabase/mcp/commit/0dbacba0e1f16fc4c2d4a67a1258ba8eb7832115))
+
+## [0.10.0](https://github.com/supabase/mcp/compare/mcp-utils-v0.9.0...mcp-utils-v0.10.0) (2026-11-13)
+
+
+### Features
+
+* tag cost-confirmation errors and report caller-input errors as ToolCallerError ([#543](https://github.com/supabase/mcp/issues/543)) ([ac366c4](https://github.com/supabase/mcp/commit/ac366c4fcad94b6b6b2aea04d9c3519ceca14975))
+
 ## [0.9.0](https://github.com/supabase/mcp/compare/mcp-utils-v0.8.0...mcp-utils-v0.9.0) (2026-10-14)
 
 

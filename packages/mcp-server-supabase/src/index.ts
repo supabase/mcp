@@ -10,7 +10,11 @@ export type {
   RequestObservation,
   RequestObserver,
 } from './observation.js';
-export { isToolCallerError, ToolCallerError } from './errors.js';
+export {
+  isToolCallerError,
+  ToolCallerError,
+  type ToolCallerErrorKind,
+} from '@supabase/mcp-utils';
 export type { ToolCallCallback } from '@supabase/mcp-utils';
 export {
   createFeedbackOperations,
@@ -34,3 +38,7 @@ export {
   createToolSchemas,
   supabaseMcpToolSchemas,
 } from './tools/tool-schemas.js';
+export {
+  CREATE_BRANCH_UI_URI,
+  CREATE_PROJECT_UI_URI,
+} from './resources/app-resources.js';

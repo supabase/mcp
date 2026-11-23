@@ -1469,18 +1469,31 @@ export interface paths {
          * Gets all project's logs in a single log stream
          * @description Executes an SQL or LQL query on the project's unified logs stream.
          *
-         *     Either the `iso_timestamp_start` and `iso_timestamp_end` parameters must be provided.
-         *     If both are not provided, only the last 1 minute of logs will be queried.
-         *     The timestamp range must be no more than 24 hours and is rounded to the nearest minute. If the range is more than 24 hours, a validation error will be thrown.
+         *       Either the `iso_timestamp_start` and `iso_timestamp_end` parameters must be provided.
+         *       If both are not provided, only the last 1 minute of logs will be queried.
+         *       The timestamp range must be no more than 24 hours and is rounded to the nearest minute. If the range is more than 24 hours, a validation error will be thrown.
          *
-         *     Filter by the `source` column to specify specific log sources, such as edge_logs, postgres_logs, etc.
+         *       Filter by the `source` column to specify specific log sources, such as edge_logs, postgres_logs, etc.
          *
-         *     Note: SQL must be written in **ClickHouse SQL dialect**.
+         *       Note: SQL must be written in **ClickHouse SQL dialect**.
          *
          */
         get: operations["v1-get-project-logs"];
         put?: never;
-        post?: never;
+        /**
+         * Gets all project's logs in a single log stream
+         * @description Executes an SQL or LQL query on the project's unified logs stream.
+         *
+         *       Either the `iso_timestamp_start` and `iso_timestamp_end` parameters must be provided.
+         *       If both are not provided, only the last 1 minute of logs will be queried.
+         *       The timestamp range must be no more than 24 hours and is rounded to the nearest minute. If the range is more than 24 hours, a validation error will be thrown.
+         *
+         *       Filter by the `source` column to specify specific log sources, such as edge_logs, postgres_logs, etc.
+         *
+         *       Note: SQL must be written in **ClickHouse SQL dialect**.
+         *
+         */
+        post: operations["v1-post-project-logs"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1898,7 +1911,8 @@ export interface paths {
          * @description This endpoint is deprecated - use the deploy endpoint. Creates a function and adds it to the specified project.
          */
         post: operations["v1-create-a-function"];
-        delete?: never;
+        /** Deletes all Edge Functions from a project */
+        delete: operations["v1-delete-all-functions"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2396,7 +2410,7 @@ export interface components {
             postgres_engine: string;
             release_channel: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
             db_host: string;
             db_port: number;
             db_user?: string;
@@ -2462,7 +2476,23 @@ export interface components {
             /** Format: date-time */
             deletion_scheduled_at?: string;
             /** @enum {string} */
-            preview_project_status?: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+            preview_project_status?: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
+        };
+        PlanGateErrorBody: {
+            /** @description Human-readable explanation of the plan gate */
+            message: string;
+            /** @description Present on entitlement denials. Other errors with this status code (validation, billing state) carry only message. */
+            error?: {
+                /**
+                 * @description Machine-readable marker for plan-gated denials
+                 * @enum {string}
+                 */
+                code: "entitlement_required";
+                /** @description Entitlement feature key that failed the check */
+                feature: string;
+                /** @description Billing page URL for the organization, present when the org is resolvable */
+                upgrade_url?: string;
+            };
         };
         BranchDeleteResponse_Output: {
             /** @enum {string} */
@@ -2511,7 +2541,7 @@ export interface components {
             /** @description Creation timestamp */
             created_at: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
             database: {
                 /** @description Database host */
                 host: string;
@@ -2595,6 +2625,23 @@ export interface components {
             postgres_engine?: null;
             /** @description [Experimental] Whether to enable high availability for the project. */
             high_availability?: boolean;
+            /** @description Initial SQL to run on the database. Limited to 1024 characters (1 KiB). For complex database changes, please use migrations https://supabase.com/docs/guides/deployment/database-migrations */
+            db_sql?: string;
+            /**
+             * Format: uri
+             * @description URL of the authentication site.
+             */
+            auth_site_url?: string;
+            /** @description Schemas exposed by the data API. */
+            data_api_exposed_schemas?: string[];
+            /** @description Whether to use the API schema for the data API. */
+            data_api_use_api_schema?: boolean;
+            /** @description Force revoke default privileges for the data API. This flag will be ignored if the organization enforces `true` by default, and cannot be overridden. */
+            data_api_revoke_default_privileges?: boolean;
+            /** @description GitHub installation ID for linkage. Must first grant access to the repository on the Dashboard. */
+            github_installation_id?: number;
+            /** @description GitHub repository ID for linkage. Must first grant access to the repository on the Dashboard. */
+            github_repository_id?: number;
         };
         V1ProjectResponse_Output: {
             /**
@@ -2624,7 +2671,7 @@ export interface components {
             /** @description Creation timestamp */
             created_at: string;
             /** @enum {string} */
-            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+            status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
         };
         RegionsInfoV1_Output: {
             recommendations: {
@@ -3016,7 +3063,7 @@ export interface components {
              * @description Include requester's public IP in the list of addresses to unban.
              * @default false
              */
-            requester_ip: boolean;
+            requester_ip?: boolean;
             identifier?: string;
         };
         NetworkRestrictionsResponse_Output: {
@@ -3268,22 +3315,6 @@ export interface components {
             /** @enum {string} */
             status: "not-used" | "custom-domain-used" | "active";
             custom_domain?: string;
-        };
-        PlanGateErrorBody: {
-            /** @description Human-readable explanation of the plan gate */
-            message: string;
-            /** @description Present on entitlement denials. Other errors with this status code (validation, billing state) carry only message. */
-            error?: {
-                /**
-                 * @description Machine-readable marker for plan-gated denials
-                 * @enum {string}
-                 */
-                code: "entitlement_required";
-                /** @description Entitlement feature key that failed the check */
-                feature: string;
-                /** @description Billing page URL for the organization, present when the org is resolvable */
-                upgrade_url?: string;
-            };
         };
         /** @example {
          *       "vanity_subdomain": "acme-prod"
@@ -3780,6 +3811,7 @@ export interface components {
             saml_external_url: string | null;
             saml_allow_encrypted_assertions: boolean | null;
             security_sb_forwarded_for_enabled: boolean | null;
+            external_email_magic_link_disabled: boolean | null;
             security_captcha_enabled: boolean | null;
             /** @enum {string|null} */
             security_captcha_provider: "turnstile" | "hcaptcha" | null;
@@ -3892,6 +3924,7 @@ export interface components {
             saml_enabled?: boolean | null;
             saml_external_url?: string | null;
             security_sb_forwarded_for_enabled?: boolean | null;
+            external_email_magic_link_disabled?: boolean;
             security_captcha_enabled?: boolean | null;
             /** @enum {string|null} */
             security_captcha_provider?: "turnstile" | "hcaptcha" | null;
@@ -4217,6 +4250,36 @@ export interface components {
                 status: string;
             };
         };
+        /**
+         * @description Request body for searching project logs with POST body
+         * @example {
+         *       "sql": "select event_message from edge_logs limit 10",
+         *       "iso_timestamp_start": "2025-03-01T00:00:00Z",
+         *       "iso_timestamp_end": "2025-03-01T23:59:59Z"
+         *     }
+         */
+        V1PostProjectLogsBody: {
+            /**
+             * @description Custom SQL query to execute on the logs. See [querying logs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#querying-with-the-logs-explorer) for more details.
+             * @example select event_message from edge_logs limit 10
+             */
+            sql?: string;
+            /**
+             * @description Custom LQL query to execute on the logs. See [querying logs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#querying-with-the-logs-explorer) for more details.
+             * @example s:event_message
+             */
+            lql?: string;
+            /**
+             * Format: date-time
+             * @example 2025-03-01T00:00:00Z
+             */
+            iso_timestamp_start?: string;
+            /**
+             * Format: date-time
+             * @example 2025-03-01T23:59:59Z
+             */
+            iso_timestamp_end?: string;
+        };
         V1GetUsageApiCountResponse_Output: {
             result?: {
                 timestamp: string;
@@ -4313,19 +4376,33 @@ export interface components {
         };
         /** @example {
          *       "query": "select * from pg_stat_activity limit 1;",
-         *       "read_only": true
+         *       "read_only": true,
+         *       "disable_statement_timeout": false
          *     } */
         V1RunQueryBody: {
             query: string;
             parameters?: unknown[];
             read_only?: boolean;
+            /**
+             * @description Disable statement timeout for the query. Role-based or global timeout
+             *             still apply https://supabase.com/docs/guides/database/postgres/timeouts
+             * @default true
+             */
+            disable_statement_timeout?: boolean;
         };
         /** @example {
-         *       "query": "select * from pg_stat_activity limit 1;"
+         *       "query": "select * from pg_stat_activity limit 1;",
+         *       "disable_statement_timeout": false
          *     } */
         V1ReadOnlyQueryBody: {
             query: string;
             parameters?: unknown[];
+            /**
+             * @description Disable statement timeout for the query. Role-based or global timeout
+             *             still apply https://supabase.com/docs/guides/database/postgres/timeouts
+             * @default true
+             */
+            disable_statement_timeout?: boolean;
         };
         GetProjectDbMetadataResponse_Output: {
             databases: {
@@ -5100,9 +5177,18 @@ export interface components {
             };
             /** @enum {string} */
             name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+            /** @description When `true`, the provider's SAML ACS URL and entity ID are scoped to its own provider ID instead of the ones shared by all SAML providers in the project. The same signing key is still used. This cannot be changed once the provider is created. */
+            dedicated_scope?: boolean;
         };
         CreateProviderResponse_Output: {
             id: string;
+            domains?: {
+                domain?: string;
+                created_at?: string;
+                updated_at?: string;
+            }[];
+            created_at?: string;
+            updated_at?: string;
             saml?: {
                 entity_id: string;
                 metadata_url?: string;
@@ -5119,18 +5205,19 @@ export interface components {
                 };
                 /** @enum {string} */
                 name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+                dedicated_scope?: boolean | null;
             };
-            domains?: {
-                domain?: string;
-                created_at?: string;
-                updated_at?: string;
-            }[];
-            created_at?: string;
-            updated_at?: string;
         };
         ListProvidersResponse_Output: {
             items: {
                 id: string;
+                domains?: {
+                    domain?: string;
+                    created_at?: string;
+                    updated_at?: string;
+                }[];
+                created_at?: string;
+                updated_at?: string;
                 saml?: {
                     entity_id: string;
                     metadata_url?: string;
@@ -5147,18 +5234,19 @@ export interface components {
                     };
                     /** @enum {string} */
                     name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+                    dedicated_scope?: boolean | null;
                 };
-                domains?: {
-                    domain?: string;
-                    created_at?: string;
-                    updated_at?: string;
-                }[];
-                created_at?: string;
-                updated_at?: string;
             }[];
         };
         GetProviderResponse_Output: {
             id: string;
+            domains?: {
+                domain?: string;
+                created_at?: string;
+                updated_at?: string;
+            }[];
+            created_at?: string;
+            updated_at?: string;
             saml?: {
                 entity_id: string;
                 metadata_url?: string;
@@ -5175,14 +5263,8 @@ export interface components {
                 };
                 /** @enum {string} */
                 name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+                dedicated_scope?: boolean | null;
             };
-            domains?: {
-                domain?: string;
-                created_at?: string;
-                updated_at?: string;
-            }[];
-            created_at?: string;
-            updated_at?: string;
         };
         /** @example {
          *       "metadata_url": "https://sso.acme.com/metadata.xml",
@@ -5210,6 +5292,13 @@ export interface components {
         };
         UpdateProviderResponse_Output: {
             id: string;
+            domains?: {
+                domain?: string;
+                created_at?: string;
+                updated_at?: string;
+            }[];
+            created_at?: string;
+            updated_at?: string;
             saml?: {
                 entity_id: string;
                 metadata_url?: string;
@@ -5227,16 +5316,16 @@ export interface components {
                 /** @enum {string} */
                 name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
             };
-            domains?: {
-                domain?: string;
-                created_at?: string;
-                updated_at?: string;
-            }[];
-            created_at?: string;
-            updated_at?: string;
         };
         DeleteProviderResponse_Output: {
             id: string;
+            domains?: {
+                domain?: string;
+                created_at?: string;
+                updated_at?: string;
+            }[];
+            created_at?: string;
+            updated_at?: string;
             saml?: {
                 entity_id: string;
                 metadata_url?: string;
@@ -5253,14 +5342,8 @@ export interface components {
                 };
                 /** @enum {string} */
                 name_id_format?: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" | "urn:oasis:names:tc:SAML:2.0:nameid-format:transient" | "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" | "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+                dedicated_scope?: boolean | null;
             };
-            domains?: {
-                domain?: string;
-                created_at?: string;
-                updated_at?: string;
-            }[];
-            created_at?: string;
-            updated_at?: string;
         };
         V1BackupsResponse_Output: {
             region: string;
@@ -5414,7 +5497,7 @@ export interface components {
                 region: string;
                 is_branch: boolean;
                 /** @enum {string} */
-                status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING";
+                status: "INACTIVE" | "ACTIVE_HEALTHY" | "ACTIVE_UNHEALTHY" | "COMING_UP" | "UNKNOWN" | "GOING_DOWN" | "INIT_FAILED" | "REMOVED" | "RESTORING" | "UPGRADING" | "PAUSING" | "RESTORE_FAILED" | "RESTARTING" | "PAUSE_FAILED" | "RESIZING" | "PROMOTING" | "RIGHTSIZING";
                 inserted_at: string;
                 databases: {
                     /** @enum {string} */
@@ -5584,6 +5667,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Persistent branches are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -5946,6 +6038,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description The instance size is not available on the organization plan, or the organization has overdue invoices */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -6755,6 +6856,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Custom JWT templates for secret API keys are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -7018,6 +7128,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Custom JWT templates for secret API keys are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -7121,6 +7240,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Branching or persistent branches are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -9697,6 +9825,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description An auth setting in the request is not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -10047,6 +10184,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description The restore is not available on the organization plan, or the organization has overdue invoices or a service restriction */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -10518,6 +10664,8 @@ export interface operations {
             query?: {
                 /** @description Custom SQL query to execute on the logs. See [querying logs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#querying-with-the-logs-explorer) for more details. */
                 sql?: string;
+                /** @description Custom LQL query to execute on the logs. See [querying logs](https://supabase.com/docs/guides/monitoring-and-debugging/logs#querying-with-the-logs-explorer) for more details. */
+                lql?: string;
                 iso_timestamp_start?: string;
                 iso_timestamp_end?: string;
             };
@@ -10529,6 +10677,60 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Usage exceeded. Enable additional usage to continue querying */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "v1-post-project-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V1PostProjectLogsBody"];
+            };
+        };
         responses: {
             200: {
                 headers: {
@@ -11982,7 +12184,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -12052,7 +12256,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -12069,6 +12275,54 @@ export interface operations {
                 content?: never;
             };
             /** @description Failed to create project's function */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "v1-delete-all-functions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Failed to delete project's functions */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -12116,7 +12370,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -12489,6 +12745,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Disk modifications are not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -12690,6 +12955,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description A storage feature or file size limit in the request is not available on the organization plan */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {
@@ -13245,6 +13519,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
+            };
             /** @description Forbidden action */
             403: {
                 headers: {
@@ -13350,6 +13633,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Forbidden action */
             403: {

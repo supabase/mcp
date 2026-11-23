@@ -50,8 +50,6 @@ See the [Supabase MCP Server](https://supabase.com/mcp) docs for the full list o
 
 The docs also feature an interactive URL builder to populate configuration options for you.
 
-Both `get_issues` and `get_advisors` are available in the debugging feature group. `get_issues` combines security, performance, and health checks. `get_advisors` remains available with its existing inputs and response format; deprecation is planned for the future, with no date set.
-
 ## Usage with AI SDK's MCP Client
 
 The `@supabase/mcp-server-supabase` package exports `createToolSchemas()` to populate input and output schemas for Vercel AI SDK's [MCP client](https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools). This allows Supabase MCP tools to be treated as static tools with client-side validation and inferred TypeScript types for their inputs and outputs.
@@ -171,7 +169,9 @@ The server does not automatically forward request or response payloads to the ob
 
 ## Other MCP servers
 
-### `@supabase/mcp-server-postgrest`
+### `@supabase/mcp-server-postgrest` (deprecated)
+
+> **Deprecated:** `@supabase/mcp-server-postgrest` is no longer maintained, and we no longer accept issues or PRs for it. Existing installs keep working. To give your own app's users an MCP server, build your own with Supabase instead: see [Deploy MCP servers](https://supabase.com/docs/guides/ai-tools/byo-mcp).
 
 The PostgREST MCP server allows you to connect your own users to your app via REST API. See more details on its [project README](./packages/mcp-server-postgrest).
 

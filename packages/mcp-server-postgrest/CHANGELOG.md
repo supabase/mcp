@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/supabase/mcp/compare/mcp-server-postgrest-v0.2.0...mcp-server-postgrest-v0.2.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **postgrest:** add deprecation notice and BYO-MCP migration pointer ([#570](https://github.com/supabase/mcp/issues/570)) ([029e2a5](https://github.com/supabase/mcp/commit/029e2a55700f62d15c72f9fde51056e702f4acb0))
+* **postgrest:** report HTTP error responses as tool errors ([#541](https://github.com/supabase/mcp/issues/541)) ([ffa50d2](https://github.com/supabase/mcp/commit/ffa50d2a80f47f45dcb33fcb6c03144b5a04f8a8))
+
 ## [0.2.0](https://github.com/supabase/mcp/compare/mcp-server-postgrest-v0.1.1...mcp-server-postgrest-v0.2.0) (2026-08-20)
 
 

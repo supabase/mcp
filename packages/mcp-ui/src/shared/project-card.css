@@ -1,0 +1,242 @@
+@layer components {
+  /*
+   * One project or branch and its status (see ProjectCard), after the project
+   * card in the Supabase surfaces: a hairline outline on the host's own
+   * surface, with no fill or shadow (see the host bridge in base.css).
+   */
+  :where(.project-card) {
+    /* The card's padding, corner radius, border width and outline. Parts
+       styled elsewhere that sit inside the card (the connection details
+       block) read these to stay aligned with it. */
+    --sb-component-project-card-padding-block: var(--sb-space-4);
+    --sb-component-project-card-padding-inline: var(--sb-space-4);
+    --sb-component-project-card-radius: var(--border-radius-lg);
+    --sb-component-project-card-border-width: var(--border-width-regular);
+    --sb-component-project-card-border: var(
+        --sb-component-project-card-border-width
+      )
+      solid var(--sb-color-border);
+    /* The badge's height: its 1em + --sb-space-1 content at sm, plus its
+       border. The retry icon and the badge skeleton match it. */
+    --sb-component-project-card-badge-size: calc(
+      var(--font-text-sm-size) +
+      var(--sb-space-1) +
+      2 *
+      var(--border-width-regular)
+    );
+
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-space-3);
+    padding: var(--sb-component-project-card-padding-block)
+      var(--sb-component-project-card-padding-inline);
+    overflow: hidden;
+    border: var(--sb-component-project-card-border);
+    border-radius: var(--sb-component-project-card-radius);
+    background: var(--sb-color-card);
+
+    /* Project info, then actions; the actions wrap below it when the card is narrow. */
+    :where([data-slot="header"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-3);
+    }
+
+    :where([data-slot="project-info"]) {
+      display: flex;
+      flex: 1 1 16rem;
+      flex-direction: column;
+      gap: 2px;
+      min-inline-size: 0;
+    }
+
+    /* Organization, then for a branch its project. Two text sizes in the
+       card: lg for the name, sm for everything else. */
+    :where([data-slot="breadcrumbs"]) {
+      overflow: hidden;
+      color: var(--sb-color-muted-foreground);
+      font-size: var(--font-text-sm-size);
+      line-height: var(--font-text-sm-line-height);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    :where([data-slot="breadcrumbs"] [data-slot="crumb-separator"]) {
+      margin-inline: var(--sb-space-1);
+      color: var(--sb-color-tertiary-foreground);
+    }
+
+    /* Name, then the status badge beside it. */
+    :where([data-slot="title-row"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-1) var(--sb-space-2);
+      min-inline-size: 0;
+    }
+
+    :where([data-slot="title-row"] [data-slot="name"]) {
+      margin: 0;
+      overflow: hidden;
+      font-size: var(--font-text-lg-size);
+      font-weight: var(--font-weight-normal);
+      line-height: var(--font-text-lg-line-height);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /*
+     * Retry, beside the badge when checking has stopped: a small round icon
+     * button the badge's height, borderless. A variant of the native button,
+     * so it restates the hover colour it changes; disabled is the native fade.
+     */
+    :where([data-slot="title-row"] [data-slot="retry"]) {
+      flex: none;
+      justify-content: center;
+      inline-size: var(--sb-component-project-card-badge-size);
+      block-size: var(--sb-component-project-card-badge-size);
+      padding: 0;
+      border-color: transparent;
+      border-radius: var(--border-radius-full);
+      color: var(--sb-color-muted-foreground);
+
+      &:where(:hover:not(:disabled)) {
+        color: var(--sb-color-foreground);
+      }
+    }
+
+    /*
+     * Ref · region. Every detail starts with a separator of
+     * fixed width. The list is pulled back by one separator and its gap, and
+     * clipped by the same amount, so the separator that starts each line
+     * (wrapped ones too) is hidden. Clipping here rather than on the project
+     * info column keeps focus rings beside the badge whole.
+     */
+    :where([data-slot="details"]) {
+      --sb-component-project-card-separator-size: 0.5em;
+
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-1) var(--sb-space-2);
+      margin: 0;
+      margin-inline-start: calc(
+        -1 *
+        (var(--sb-component-project-card-separator-size) + var(--sb-space-2))
+      );
+      clip-path: inset(
+        0 0 0
+          calc(
+            var(--sb-component-project-card-separator-size) +
+            var(--sb-space-2)
+          )
+      );
+      color: var(--sb-color-muted-foreground);
+      font-size: var(--font-text-sm-size);
+      line-height: var(--font-text-sm-line-height);
+    }
+
+    :where([data-slot="details"] [data-slot="detail"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-2);
+      min-inline-size: 0;
+    }
+
+    :where([data-slot="detail"] [data-slot="detail-separator"]) {
+      flex: none;
+      inline-size: var(--sb-component-project-card-separator-size);
+      color: var(--sb-color-tertiary-foreground);
+      text-align: center;
+    }
+
+    :where([data-slot="detail"] [data-slot="detail-value"]) {
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    :where([data-slot="actions"]) {
+      display: flex;
+      flex: none;
+    }
+
+    /* An action as an icon-only square (Open in dashboard), labelled for
+       assistive tech and on hover. */
+    :where([data-slot="actions"] [data-slot="action-icon-button"]) {
+      justify-content: center;
+      inline-size: var(--sb-control-size);
+      block-size: var(--sb-control-size);
+      padding: 0;
+    }
+
+    /* A problem, or why the status won't update here. */
+    :where([data-slot="note"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-2);
+      font-size: var(--font-text-sm-size);
+      line-height: var(--font-text-sm-line-height);
+
+      &:where([data-tone="danger"]) {
+        color: var(--sb-color-destructive);
+      }
+
+      &:where([data-tone="muted"]) {
+        color: var(--sb-color-tertiary-foreground);
+      }
+    }
+
+    /* Wraps inside the card even when the message has a long unbroken word. */
+    :where([data-slot="note"] [data-slot="note-text"]) {
+      flex: 1;
+      min-inline-size: 0;
+    }
+
+    /*
+     * Stands in for data the card doesn't have yet. Each shape takes the
+     * place and size of what it replaces, so nothing moves when the data
+     * arrives: text sits inside its line, the pill is the badge's height and
+     * the square is an icon button's.
+     */
+    :where([data-slot="skeleton"]) {
+      display: inline-block;
+      flex: none;
+      vertical-align: middle;
+      inline-size: 8em;
+      block-size: 1em;
+      border-radius: var(--border-radius-md);
+      background: color-mix(
+        in oklab,
+        var(--sb-color-foreground) 10%,
+        transparent
+      );
+      animation: pulse 1.6s ease-in-out infinite;
+
+      @media (prefers-reduced-motion: reduce) {
+        animation: none;
+      }
+
+      &:where([data-width="short"]) {
+        inline-size: 5em;
+      }
+
+      &:where([data-width="long"]) {
+        inline-size: 10em;
+      }
+
+      &:where([data-shape="pill"]) {
+        inline-size: 5em;
+        block-size: var(--sb-component-project-card-badge-size);
+        border-radius: var(--border-radius-full);
+      }
+
+      &:where([data-shape="square"]) {
+        inline-size: var(--sb-control-size);
+        block-size: var(--sb-control-size);
+      }
+    }
+  }
+}

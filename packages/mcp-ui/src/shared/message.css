@@ -1,0 +1,11 @@
+@layer components {
+  /* A single line of status text (see Message). */
+  :where(.message) {
+    padding-block: var(--sb-space-2);
+    color: var(--sb-color-tertiary-foreground);
+
+    &:where([data-tone="error"]) {
+      color: var(--sb-color-destructive);
+    }
+  }
+}

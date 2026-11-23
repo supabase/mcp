@@ -5,7 +5,7 @@ import {
 } from '@modelcontextprotocol/server';
 import type { ToolObservation } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
-import { ToolCallerError } from '../errors.js';
+import { ToolCallerError } from '@supabase/mcp-utils';
 import type { ObservationFact } from '../observation.js';
 import { resolveLogWindow } from '../logs.js';
 import type {
@@ -17,7 +17,7 @@ import {
   createNotebookOptionsSchema,
   notebookSchema,
 } from '../platform/types.js';
-import { hashObject } from '../util.js';
+import { DEFAULT_DASHBOARD_URL, hashObject } from '../util.js';
 import {
   actionOnlyElicitationSchema,
   checkConfirmationState,
@@ -400,7 +400,7 @@ export function getNotebookTools({
   projectId,
   readOnly,
   confirmation,
-  dashboardUrl = 'https://supabase.com/dashboard',
+  dashboardUrl = DEFAULT_DASHBOARD_URL,
 }: NotebookToolsOptions) {
   const project_id = projectId;
   const createNotebook = notebooks.createNotebook?.bind(notebooks);

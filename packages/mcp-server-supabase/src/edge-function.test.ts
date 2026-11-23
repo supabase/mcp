@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getDefaultImportMapPath,
   getFilenameFromUrlOrPath,
   normalizeFilename,
 } from './edge-function.js';
@@ -57,5 +58,33 @@ describe('getFilenameFromUrlOrPath', () => {
     expect(getFilenameFromUrlOrPath('https://example.com/index.ts')).toBe(
       'https://example.com/index.ts'
     );
+  });
+});
+
+describe('getDefaultImportMapPath', () => {
+  const files = (...names: string[]) => names.map((name) => ({ name }));
+
+  it.each([
+    [['index.ts', 'deno.json'], 'deno.json'],
+    [['index.ts', 'deno.jsonc'], 'deno.jsonc'],
+    [['index.ts', 'import_map.json'], 'import_map.json'],
+    [['index.ts', 'import_map.json', 'deno.jsonc', 'deno.json'], 'deno.json'],
+    [['import_map.json', 'deno.jsonc', 'index.ts'], 'deno.jsonc'],
+    [['deno.json', 'deno.jsonc', 'import_map.json'], 'deno.json'],
+  ])('%j resolves to %s', (names, expected) => {
+    expect(getDefaultImportMapPath(files(...names))).toBe(expected);
+  });
+
+  it('does not depend on file order', () => {
+    const names = ['index.ts', 'import_map.json', 'deno.jsonc', 'deno.json'];
+    expect(getDefaultImportMapPath(files(...names))).toBe(
+      getDefaultImportMapPath(files(...[...names].reverse()))
+    );
+  });
+
+  it('returns undefined without a root-level import map file', () => {
+    expect(
+      getDefaultImportMapPath(files('index.ts', 'src/deno.json'))
+    ).toBeUndefined();
   });
 });

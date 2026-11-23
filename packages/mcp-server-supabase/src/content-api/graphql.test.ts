@@ -1,6 +1,6 @@
 import { stripIndent } from 'common-tags';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isToolCallerError } from '../errors.js';
+import { isToolCallerError } from '@supabase/mcp-utils';
 import { GraphQLClient } from './graphql.js';
 
 afterEach(() => {
@@ -131,32 +131,77 @@ describe('graphql client', () => {
 
   it.each([
     [
-      {
-        message: 'Cannot query field "nope" on type "RootQueryType".',
-        locations: [{ line: 1, column: 3 }],
-      },
+      [
+        {
+          message: 'Cannot query field "nope" on type "RootQueryType".',
+          locations: [{ line: 1, column: 3 }],
+        },
+      ],
       'Supabase Content API GraphQL error: Cannot query field "nope" on type "RootQueryType". (line 1, column 3)',
+      true,
     ],
     [
-      {
-        message:
-          'GET requests must specify an operation name or send only a single operation',
-      },
+      [
+        {
+          message:
+            'GET requests must specify an operation name or send only a single operation',
+        },
+      ],
       'Supabase Content API GraphQL error: GET requests must specify an operation name or send only a single operation',
+      true,
+    ],
+    [
+      [{ message: 'GET requests may only execute query operations' }],
+      'Supabase Content API GraphQL error: GET requests may only execute query operations',
+      true,
+    ],
+    [
+      [{ message: 'Internal Server Error' }],
+      'Supabase Content API GraphQL error: Internal Server Error',
+      false,
+    ],
+    [
+      [
+        {
+          message: 'Internal Server Error',
+          locations: [{ line: 1, column: 3 }],
+          path: ['searchDocs'],
+        },
+      ],
+      'Supabase Content API GraphQL error: Internal Server Error (line 1, column 3)',
+      false,
+    ],
+    [
+      [
+        {
+          message: 'Cannot query field "nope" on type "RootQueryType".',
+          locations: [{ line: 1, column: 3 }],
+        },
+        {
+          message: 'Internal Server Error',
+          locations: [{ line: 2, column: 3 }],
+          path: ['searchDocs'],
+        },
+      ],
+      'Supabase Content API GraphQL error: Cannot query field "nope" on type "RootQueryType". (line 1, column 3), Internal Server Error (line 2, column 3)',
+      false,
     ],
   ])(
-    'reports the Content API GraphQL error message: %j',
-    async (graphqlError, message) => {
+    'reports the Content API GraphQL errors %j',
+    async (graphqlErrors, message, callerError) => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        Response.json({ errors: [graphqlError] })
+        Response.json({ errors: graphqlErrors })
       );
       const graphqlClient = new GraphQLClient({
         url: 'https://content.example.com/graphql',
       });
 
-      await expect(
-        graphqlClient.query({ query: '{ getHelloWorld }' })
-      ).rejects.toMatchObject({ message });
+      const error = await graphqlClient
+        .query({ query: '{ getHelloWorld }' })
+        .catch((error: unknown) => error);
+
+      expect(error).toMatchObject({ message });
+      expect(isToolCallerError(error)).toBe(callerError);
     }
   );
 });

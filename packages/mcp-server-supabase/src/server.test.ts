@@ -10,7 +10,7 @@ import {
   mockContentApiSchemaLoadCount,
 } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
-import { isToolCallerError } from './errors.js';
+import { isToolCallerError } from '@supabase/mcp-utils';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { createMcpHandler } from '@modelcontextprotocol/server';
@@ -19,7 +19,7 @@ import { supabaseMcpToolSchemas } from './tools/tool-schemas.js';
 import { stripIndent } from 'common-tags';
 import gqlmin from 'gqlmin';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { globalRegistry } from 'zod/v4';
+import { globalRegistry, ZodError } from 'zod/v4';
 
 const harness = createServerHarness();
 const setup = harness.setup;
@@ -745,6 +745,73 @@ describe('feature groups', () => {
     ).rejects.toThrow('upstream down');
 
     expect(errors.map(isToolCallerError)).toEqual([true, false]);
+  });
+
+  test('argument and unknown-tool failures reach onToolCall as caller errors and keep their client result', async () => {
+    const failures: Array<{
+      name: string;
+      arguments: unknown;
+      error: unknown;
+    }> = [];
+    const { client } = await setup({
+      onToolCall: (details) => {
+        if (!details.success) {
+          failures.push({
+            name: details.name,
+            arguments: details.arguments,
+            error: details.error,
+          });
+        }
+      },
+    });
+
+    const parseResult = await client.callTool({
+      name: 'list_organizations',
+      arguments: { extra: true },
+    });
+    const unknownToolResult = await client.callTool({
+      name: 'no_such_tool',
+      arguments: { foo: 'bar' },
+    });
+
+    // zod's issue for `.strict()` rejecting the extra key, as JSON text.
+    const extraKeyIssue = 'Unrecognized key: \\"extra\\"';
+    expect(failures).toMatchObject([
+      {
+        name: 'list_organizations',
+        arguments: { extra: true },
+        error: {
+          name: 'ToolCallerError',
+          message: expect.stringContaining(extraKeyIssue),
+          cause: expect.any(ZodError),
+        },
+      },
+      {
+        name: 'no_such_tool',
+        arguments: { foo: 'bar' },
+        error: { name: 'ToolCallerError', message: 'tool not found' },
+      },
+    ]);
+    expect(failures[1]?.error).not.toHaveProperty('cause');
+
+    const clientErrors = [parseResult, unknownToolResult].map((result) => {
+      const content = result.content.at(0);
+      return {
+        isError: result.isError,
+        error:
+          content?.type === 'text' ? JSON.parse(content.text).error : content,
+      };
+    });
+    expect(clientErrors).toMatchObject([
+      {
+        isError: true,
+        error: {
+          name: 'ZodError',
+          message: expect.stringContaining(extraKeyIssue),
+        },
+      },
+      { isError: true, error: { name: 'Error', message: 'tool not found' } },
+    ]);
   });
 
   test('feedback tools are hidden in read-only mode', async () => {

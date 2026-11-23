@@ -13,6 +13,7 @@ import {
   isToolCallerError,
   ToolCallerError,
   version,
+  type ToolCallerErrorKind,
 } from './index.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 
@@ -80,6 +81,23 @@ describe('index', () => {
       message: 'bad input',
     });
     expect(isToolCallerError(error)).toBe(true);
+  });
+
+  test('ToolCallerError carries an optional kind', () => {
+    const cause = new Error('root cause');
+    const error = new ToolCallerError('needs confirmation', {
+      kind: 'confirmation_required',
+      cause,
+    });
+
+    expect(error.kind).toBe('confirmation_required');
+    expect(error.cause).toBe(cause);
+    expect(error).toMatchObject({
+      name: 'ToolCallerError',
+      message: 'needs confirmation',
+    });
+    expect(isToolCallerError(error)).toBe(true);
+    expect(new ToolCallerError('bad input').kind).toBeUndefined();
   });
 
   test('isToolCallerError matches the brand from another package copy', () => {
