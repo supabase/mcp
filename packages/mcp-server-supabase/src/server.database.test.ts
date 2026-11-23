@@ -1862,24 +1862,35 @@ describe('Spark path on a partial pg_catalog (temporary workaround)', () => {
     expect(seen[0]).toMatch(PG_META);
   });
 
-  test('a project whose detail does not answer in time gets the pg-meta SQL', async () => {
+  test('a project whose detail does not answer in time gets the pg-meta SQL, from one pending read', async () => {
     const { callTool } = await setup();
     const project = await projectWithTable('spark');
+    let detailReads = 0;
     harness.mockServer?.use(
-      http.get(`${API_URL}/v1/projects/:projectId`, () => delay('infinite'))
+      http.get(`${API_URL}/v1/projects/:projectId`, () => {
+        detailReads += 1;
+        return delay('infinite');
+      })
     );
     const seen = recordQueries(() => undefined);
 
-    const tables = await callTool({
-      name: 'list_tables',
-      arguments: { project_id: project.id, schemas: ['public'] },
-    });
+    const [tables] = await Promise.all([
+      callTool({
+        name: 'list_tables',
+        arguments: { project_id: project.id, schemas: ['public'] },
+      }),
+      callTool({
+        name: 'list_extensions',
+        arguments: { project_id: project.id },
+      }),
+    ]);
 
     expect(tables.tables).toEqual([
       expect.objectContaining({ name: 'public.notes' }),
     ]);
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatch(PG_META);
+    expect(seen).toHaveLength(2);
+    expect(seen.every((query) => PG_META.test(query))).toBe(true);
+    expect(detailReads).toBe(1);
   });
 
   test('a Spark project returns a permission error unchanged, even when it mentions an unsupported feature', async () => {

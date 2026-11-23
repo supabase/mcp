@@ -255,6 +255,28 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
   // A project's engine does not change, and `tools` runs on every request, so the answer is kept here.
   const sparkProjects = new Map<string, boolean>();
+  // One read of the project detail per project at a time: a call made while it is pending waits on it, so a
+  // detail that hangs does not get a new request from every catalog call.
+  const engineLookups = new Map<string, Promise<boolean | undefined>>();
+  const lookUpEngine = (projectId: string) => {
+    const pending = engineLookups.get(projectId);
+    if (pending) return pending;
+    const lookup = (async () => {
+      try {
+        const project = await platform.account?.getProject(projectId);
+        if (!project) return undefined;
+        const spark = project.database?.postgres_engine === 'spark';
+        sparkProjects.set(projectId, spark);
+        return spark;
+      } catch {
+        return undefined;
+      } finally {
+        engineLookups.delete(projectId);
+      }
+    })();
+    engineLookups.set(projectId, lookup);
+    return lookup;
+  };
   const isSparkProject = async (projectId: string) => {
     const known = sparkProjects.get(projectId);
     if (known !== undefined) return known;
@@ -262,8 +284,8 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     // "Now" has a deadline: a slow answer must not use up the client's own before any SQL is sent.
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
-      const project = await Promise.race([
-        platform.account?.getProject(projectId),
+      const spark = await Promise.race([
+        lookUpEngine(projectId),
         new Promise<undefined>((resolve) => {
           deadline = setTimeout(
             () => resolve(undefined),
@@ -271,12 +293,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
           );
         }),
       ]);
-      if (!project) return false;
-      const spark = project.database?.postgres_engine === 'spark';
-      sparkProjects.set(projectId, spark);
-      return spark;
-    } catch {
-      return false;
+      return spark ?? false;
     } finally {
       clearTimeout(deadline);
     }
