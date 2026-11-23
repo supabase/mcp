@@ -11,7 +11,7 @@ import type {
   ClientCapabilities,
   InputRequiredResult,
 } from '@modelcontextprotocol/client';
-import { HttpResponse, http } from 'msw';
+import { HttpResponse, delay, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const harness = createServerHarness();
@@ -1858,6 +1858,26 @@ describe('Spark path on a partial pg_catalog (temporary workaround)', () => {
         arguments: { project_id: project.id, schemas: ['public'] },
       })
     ).rejects.toThrow('WITH ORDINALITY is not supported');
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatch(PG_META);
+  });
+
+  test('a project whose detail does not answer in time gets the pg-meta SQL', async () => {
+    const { callTool } = await setup();
+    const project = await projectWithTable('spark');
+    harness.mockServer?.use(
+      http.get(`${API_URL}/v1/projects/:projectId`, () => delay('infinite'))
+    );
+    const seen = recordQueries(() => undefined);
+
+    const tables = await callTool({
+      name: 'list_tables',
+      arguments: { project_id: project.id, schemas: ['public'] },
+    });
+
+    expect(tables.tables).toEqual([
+      expect.objectContaining({ name: 'public.notes' }),
+    ]);
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatch(PG_META);
   });

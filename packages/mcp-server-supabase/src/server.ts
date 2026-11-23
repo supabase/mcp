@@ -48,6 +48,9 @@ import {
 } from './types.js';
 import { parseFeatureGroups } from './util.js';
 
+/** How long a tool waits for the project detail that says whether the project runs on Spark. */
+const ENGINE_LOOKUP_TIMEOUT_MS = 3_000;
+
 const { version } = packageJson;
 
 // Clients on protocol 2026-07-28 send their info in each request instead of an initialize handshake
@@ -256,14 +259,26 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     const known = sparkProjects.get(projectId);
     if (known !== undefined) return known;
     // Without a project detail, or when it cannot be read now, the project is treated as Postgres (not cached).
+    // "Now" has a deadline: a slow answer must not use up the client's own before any SQL is sent.
+    let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
-      const project = await platform.account?.getProject(projectId);
+      const project = await Promise.race([
+        platform.account?.getProject(projectId),
+        new Promise<undefined>((resolve) => {
+          deadline = setTimeout(
+            () => resolve(undefined),
+            ENGINE_LOOKUP_TIMEOUT_MS
+          );
+        }),
+      ]);
       if (!project) return false;
       const spark = project.database?.postgres_engine === 'spark';
       sparkProjects.set(projectId, spark);
       return spark;
     } catch {
       return false;
+    } finally {
+      clearTimeout(deadline);
     }
   };
 
