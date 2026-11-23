@@ -21,4 +21,23 @@
       );
     }
   }
+
+  /* Studio's danger button: the destructive colour on its own tint. */
+  :is(button, a:where(.button)):where(.danger) {
+    border-color: var(--sb-color-border-destructive);
+    background: color-mix(
+      in oklab,
+      var(--sb-color-destructive) 10%,
+      transparent
+    );
+    color: var(--sb-color-destructive);
+
+    &:where(:hover:not(:disabled)) {
+      background: color-mix(
+        in oklab,
+        var(--sb-color-destructive) 20%,
+        transparent
+      );
+    }
+  }
 }

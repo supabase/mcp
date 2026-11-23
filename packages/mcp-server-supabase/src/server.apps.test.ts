@@ -21,6 +21,7 @@ import {
   CREATE_PROJECT_UI_URI,
   getAppResources,
   SHOW_QUERY_UI_URI,
+  SHOW_ROW_UI_URI,
 } from './resources/app-resources.js';
 import { SHOW_QUERY_ROW_LIMIT } from './tools/database-operation-tools.js';
 
@@ -109,6 +110,7 @@ describe('MCP Apps', () => {
     expect(linkOf('create_project')).toBe(CREATE_PROJECT_UI_URI);
     expect(linkOf('create_branch')).toBe(CREATE_BRANCH_UI_URI);
     expect(linkOf('show_query')).toBe(SHOW_QUERY_UI_URI);
+    expect(linkOf('show_row')).toBe(SHOW_ROW_UI_URI);
 
     expect(await listedViewUris(client)).toEqual([...VIEW_URIS].sort());
     expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
@@ -355,5 +357,94 @@ describe('show_query', () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('Syntax error');
+  });
+});
+
+describe('show_row', () => {
+  async function setupApps(options: { readOnly?: boolean } = {}) {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+      ...options,
+    });
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+    // Seed through the project's database directly: execute_sql is read-only
+    // on a read-only server.
+    const { client: writer } = await harness.setupModern();
+    await callModernTool(writer, {
+      name: 'execute_sql',
+      arguments: {
+        project_id: project.id,
+        query: `
+          create table orders (
+            id bigint generated always as identity primary key,
+            note text,
+            paid boolean not null default false
+          );
+          insert into orders (note) values ('Gift wrap'), ('Rush');
+        `,
+      },
+    });
+    const show = async (args: Record<string, unknown>) => {
+      const result = await callModernTool(client, {
+        name: 'show_row',
+        arguments: { project_id: project.id, ...args },
+      });
+      if (isInputRequiredResult(result)) throw new Error('expected a result');
+      return result;
+    };
+    return { show };
+  }
+
+  const textOf = (result: { content: unknown[] }) =>
+    (result.content[0] as { text: string }).text;
+
+  test('sends the row and its table to the view, and only editability to the model', async () => {
+    const { show } = await setupApps();
+
+    const result = await show({ table: 'orders', key: { id: 2 } });
+
+    expect(JSON.parse(textOf(result))).toEqual({ editable: true });
+    const viewData = result._meta?.[VIEW_DATA_META_KEY] as {
+      table: { primary_keys: string[]; editable: boolean; columns: unknown[] };
+      row: unknown;
+    };
+    expect(viewData.row).toEqual({ id: 2, note: 'Rush', paid: false });
+    expect(viewData.table.primary_keys).toEqual(['id']);
+    expect(viewData.table.editable).toBe(true);
+    expect(viewData.table.columns).toContainEqual(
+      expect.objectContaining({ name: 'id', identity: true, nullable: false })
+    );
+  });
+
+  test('opens rows read-only on a read-only server', async () => {
+    const { show } = await setupApps({ readOnly: true });
+
+    const result = await show({ table: 'orders', key: { id: 1 } });
+
+    expect(JSON.parse(textOf(result))).toEqual({ editable: false });
+  });
+
+  test('asks for the whole primary key, so it never opens the wrong row', async () => {
+    const { show } = await setupApps();
+
+    const result = await show({ table: 'orders', key: { note: 'Rush' } });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain(
+      'primary key columns of public.orders: id'
+    );
+  });
+
+  test('says when no row has the key', async () => {
+    const { show } = await setupApps();
+
+    const result = await show({ table: 'orders', key: { id: 99 } });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('No row in public.orders has that key.');
   });
 });

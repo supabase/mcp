@@ -12,10 +12,12 @@ import { resource, type Resource } from '@supabase/mcp-utils';
 import createBranchHtml from '@supabase/mcp-ui/create-branch.html';
 import createProjectHtml from '@supabase/mcp-ui/create-project.html';
 import showQueryHtml from '@supabase/mcp-ui/show-query.html';
+import showRowHtml from '@supabase/mcp-ui/show-row.html';
 
 export const CREATE_PROJECT_UI_URI = 'ui://supabase/create-project';
 export const CREATE_BRANCH_UI_URI = 'ui://supabase/create-branch';
 export const SHOW_QUERY_UI_URI = 'ui://supabase/show-query';
+export const SHOW_ROW_UI_URI = 'ui://supabase/show-row';
 
 const VIEW_META: { ui: McpUiResourceMeta } = {
   ui: {
@@ -68,6 +70,12 @@ export function getAppResources(): Resource[] {
       'Query view',
       'A SQL query and its results, editable and runnable, for the show_query tool.',
       showQueryHtml
+    ),
+    appResource(
+      SHOW_ROW_UI_URI,
+      'Row view',
+      'One table row, editable by the user, for the show_row tool.',
+      showRowHtml
     ),
   ];
 }

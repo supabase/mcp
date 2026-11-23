@@ -42,4 +42,5 @@ export {
   CREATE_BRANCH_UI_URI,
   CREATE_PROJECT_UI_URI,
   SHOW_QUERY_UI_URI,
+  SHOW_ROW_UI_URI,
 } from './resources/app-resources.js';

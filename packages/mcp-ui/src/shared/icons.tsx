@@ -134,6 +134,44 @@ export function PlayIcon(props: IconProps) {
   );
 }
 
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <LucideIcon {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </LucideIcon>
+  );
+}
+
+export function KeyRoundIcon(props: IconProps) {
+  return (
+    <LucideIcon {...props}>
+      <path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z" />
+      <circle cx="16.5" cy="7.5" r=".5" fill="currentColor" />
+    </LucideIcon>
+  );
+}
+
+export function LockKeyholeIcon(props: IconProps) {
+  return (
+    <LucideIcon {...props}>
+      <circle cx="12" cy="16" r="1" />
+      <rect x="3" y="10" width="18" height="12" rx="2" />
+      <path d="M7 10V7a5 5 0 0 1 10 0v3" />
+    </LucideIcon>
+  );
+}
+
+export function RefreshCwIcon(props: IconProps) {
+  return (
+    <LucideIcon {...props}>
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M8 16H3v5" />
+    </LucideIcon>
+  );
+}
+
 export function CodeSquareIcon(props: IconProps) {
   return (
     <LucideIcon {...props}>
