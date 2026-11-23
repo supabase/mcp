@@ -203,6 +203,12 @@ export async function runConsumer(createHandler = createSupabaseMcpHandler) {
     assert.equal(typeof sqlFirst.requestState, 'string');
     assert.equal(sqlExecutions, 0);
     assert.deepEqual(scopes[3].facts, [
+      {
+        kind: 'sql_classifier_call',
+        feature: 'destructive_sql',
+        result: 'destructive',
+        durationMs: scopes[3].facts[0]?.durationMs,
+      },
       { ...decision, feature: 'destructive_sql' },
       { ...issuance, feature: 'destructive_sql' },
     ]);
