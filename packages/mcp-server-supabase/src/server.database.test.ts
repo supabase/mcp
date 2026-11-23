@@ -1380,8 +1380,20 @@ describe('tools', () => {
                 },
               }),
             });
-            // Non-acceptance retains classification failure precedence.
-            expect(unaccepted).toMatchObject({ isError: true });
+            if (action === undefined) {
+              // An unanswered resend retains classification failure precedence.
+              expect(unaccepted).toMatchObject({ isError: true });
+            } else {
+              // A decline or cancel is final, so nothing classifies the SQL
+              // again and the failure never reaches the client.
+              expect(isInputRequiredResult(unaccepted)).toBe(false);
+              expect((unaccepted as CallToolResult).isError).not.toBe(true);
+              expect(unaccepted).toMatchObject({
+                structuredContent: {
+                  status: action === 'decline' ? 'declined' : 'cancelled',
+                },
+              });
+            }
             expect(executeSql).not.toHaveBeenCalled();
             expect(applyMigration).not.toHaveBeenCalled();
           }
