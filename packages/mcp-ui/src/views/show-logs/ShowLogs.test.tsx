@@ -240,7 +240,7 @@ describe('ShowLogs with the agent', () => {
     render(<ShowLogs />);
     fireEvent.click(events()[1]!);
 
-    const result = await callAppTool('read_logs');
+    const result = await callAppTool('read_logs_view');
     expect(result.structuredContent).toMatchObject({
       view_id: 'toolu_logs',
       source: 'all',
@@ -258,7 +258,7 @@ describe('ShowLogs with the agent', () => {
     });
     render(<ShowLogs />);
 
-    const result = await callAppTool('configure_logs', {
+    const result = await callAppTool('edit_logs_view', {
       view_id: 'toolu_logs',
       level: 'error',
     });
@@ -286,7 +286,7 @@ describe('ShowLogs with the agent', () => {
   it('searches without reading again', async () => {
     render(<ShowLogs />);
 
-    const result = await callAppTool('configure_logs', {
+    const result = await callAppTool('edit_logs_view', {
       view_id: 'toolu_logs',
       search: 'custmers',
     });
@@ -298,7 +298,7 @@ describe('ShowLogs with the agent', () => {
   it('refuses a change meant for another logs view', async () => {
     render(<ShowLogs />);
 
-    const result = await callAppTool('configure_logs', {
+    const result = await callAppTool('edit_logs_view', {
       view_id: 'toolu_other',
       level: 'error',
     });

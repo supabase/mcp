@@ -406,7 +406,7 @@ export const databaseToolDefs = {
   },
   show_query: {
     description:
-      'Shows the user a SQL query and its results in an editor, where they can change the SQL and run it again. Use it only when the user wants to see results, such as "show me the newest users"; to read data yourself, use `execute_sql` or `query_logs`. Runs read-only and returns only a row count: the rows go to the user, not to you. Never use it for writes. Include an ORDER BY and a LIMIT. For source "logs", write the SQL as for `query_logs`, and pass iso_timestamp_start and iso_timestamp_end for a requested range (at most 24 hours). An open query block shares its SQL with you; to change it, use the block\'s `read_query` and `set_query_draft` tools where the host offers them, rather than showing a new query.',
+      'Shows the user a SQL query and its results in an editor, where they can change the SQL and run it again. Use it only when the user wants to see results, such as "show me the newest users"; to read data yourself, use `execute_sql` or `query_logs`. Runs read-only and returns only a row count: the rows go to the user, not to you. Never use it for writes. Include an ORDER BY and a LIMIT. For source "logs", write the SQL as for `query_logs`, and pass iso_timestamp_start and iso_timestamp_end for a requested range (at most 24 hours). An open query block shares its SQL with you; to change it, use the block\'s `read_query_view` and `edit_query_view` tools where the host offers them, rather than showing a new query.',
     parameters: showQueryInputSchema,
     outputSchema: showQueryOutputSchema,
     _meta: { ui: { resourceUri: SHOW_QUERY_UI_URI } },

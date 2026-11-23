@@ -73,9 +73,23 @@ A view that the user and the agent work in together uses `src/shared/view-agent.
 - **Context.** `createContextSharer` sends what the view shows through `ui/update-model-context`, where the host supports it. It's one stream per view, labelled as data and titled for ChatGPT (`openai/title`).
 
 Each view keeps its own side in a file beside it:
-- `query-block-agent.ts`: `read_query` and `set_query_draft`. Edits pass the revision they read, so they never overwrite the user's typing, and they never run SQL: the user does.
-- `logs-agent.ts`: `read_logs` (the filters and the events the user selected, never the others) and `configure_logs` (changes the filters as the user would).
+- `query-block-agent.ts`: `read_query_view` and `edit_query_view`. Edits pass the revision they read, so they never overwrite the user's typing, and they never run SQL: the user does.
+- `logs-agent.ts`: `read_logs_view` (the filters and the events the user selected, never the others) and `edit_logs_view` (changes the filters as the user would).
 
 Tools carry the view's id (the host's tool call id), so a conversation with several views changes the right one.
+
+### Naming view tools
+
+| Tool | Name | Examples |
+| --- | --- | --- |
+| Server tool that opens a view | `show_<noun>` | `show_query`, `show_logs`, `show_row` |
+| View tool that reads what the view shows (read-only) | `read_<noun>_view` | `read_query_view`, `read_logs_view` |
+| View tool that changes what the view shows (a draft, filters), never persisting or running anything | `edit_<noun>_view` | `edit_query_view`, `edit_logs_view` |
+
+- **The noun matches the view's `show_` tool.** A new view gets `show_x`, then `read_x_view` and `edit_x_view` if the agent can work in it.
+- **The `_view` suffix** keeps view tools apart from the server's data tools (`read_logs_view` vs `get_logs` and `query_logs`), including in Claude's approval prompt, which shows only the name and the description's first line.
+- **The noun in the name** keeps two kinds of open view from registering the same name. That would be ambiguous: a host call reaches only one view.
+- **`edit`, not `update` or `set`.** It changes the view, not the data. Anything that saves or runs gets its own verb (`run_`, `save_`) and is added only deliberately, so it gets its own approval.
+- **Start each description with "In the open … view"**, since some hosts show only its first line.
 
 Keep views small. The whole HTML is sent on every `resources/read`, so prefer system fonts and SVG icons, and avoid heavy dependencies unless a view really needs them.

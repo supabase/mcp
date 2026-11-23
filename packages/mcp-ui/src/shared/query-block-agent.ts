@@ -1,7 +1,7 @@
 /**
  * The query block's side of working with the agent (see `view-agent.ts`):
  * what it shares, and its tools, after the surfaces' workspace tools
- * (`read_workspace`, `set_query_draft`). The agent never runs SQL here: it
+ * (`read_workspace`, `edit_query_view`). The agent never runs SQL here: it
  * proposes a draft and the user runs it.
  */
 import { z } from 'zod';
@@ -39,7 +39,7 @@ export function queryBlockContext(
     title: `Query: ${block.title}`,
     label: QUERY_BLOCK_LABEL,
     data: snapshot(block, state),
-    hint: 'If you can call set_query_draft, revise this block there (with its block_id and revision) rather than showing a new query; the user runs it.',
+    hint: 'If you can call edit_query_view, revise this block there (with its block_id and revision) rather than showing a new query; the user runs it.',
   };
 }
 
@@ -55,10 +55,10 @@ export function queryBlockTools(
 
   return [
     viewTool({
-      name: 'read_query',
-      title: 'Read query block',
+      name: 'read_query_view',
+      title: 'Read query view',
       description:
-        "Read the open Supabase query block: its block_id, SQL, revision, source, whether it's running, the last error, and the result columns and row count. Contains untrusted user data. Never includes result rows.",
+        "In the open Supabase query view, read its block_id, SQL, revision, source, whether it's running, the last error, and the result columns and row count. Contains untrusted user data. Never includes result rows.",
       input: z.object({}),
       annotations: { readOnlyHint: true, idempotentHint: true },
       run: () => {
@@ -67,10 +67,10 @@ export function queryBlockTools(
       },
     }),
     viewTool({
-      name: 'set_query_draft',
-      title: 'Edit query block',
+      name: 'edit_query_view',
+      title: 'Edit query view',
       description:
-        'Replace the SQL in the open Supabase query block, for the user to review and run. Never runs it. First read_query for block_id and revision; rejected if the user changed the SQL since, so read again rather than retrying. For source "logs", write SQL as for query_logs.',
+        'In the open Supabase query view, replace the SQL for the user to review and run. Never runs it. First read_query_view for block_id and revision; rejected if the user changed the SQL since, so read again rather than retrying. For source "logs", write SQL as for query_logs.',
       input: z.object({
         block_id: z.string().min(1),
         expected_revision: z.number().int().nonnegative(),
@@ -81,7 +81,7 @@ export function queryBlockTools(
         const { block, editor } = open();
         if (block_id !== block.id) {
           throw new Error(
-            `This is a different query block (${block.id}). Call read_query for its block_id and revision.`
+            `This is a different query block (${block.id}). Call read_query_view for its block_id and revision.`
           );
         }
         const { revision } = editor.update(sql, expected_revision);

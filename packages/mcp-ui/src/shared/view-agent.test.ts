@@ -66,12 +66,15 @@ describe('registerViewTools, with the query block’s tools', () => {
     const { app, webMcpTools } = setup();
 
     expect(app.registerTool.mock.calls.map(([name]) => name)).toEqual([
-      'read_query',
-      'set_query_draft',
+      'read_query_view',
+      'edit_query_view',
     ]);
-    expect([...webMcpTools.keys()]).toEqual(['read_query', 'set_query_draft']);
+    expect([...webMcpTools.keys()]).toEqual([
+      'read_query_view',
+      'edit_query_view',
+    ]);
     // WebMCP takes JSON Schema, not a Standard Schema object.
-    expect(webMcpTools.get('set_query_draft')!.inputSchema).toMatchObject({
+    expect(webMcpTools.get('edit_query_view')!.inputSchema).toMatchObject({
       type: 'object',
       required: ['block_id', 'expected_revision', 'sql'],
     });
@@ -80,11 +83,11 @@ describe('registerViewTools, with the query block’s tools', () => {
   it('lets a WebMCP host read the block and propose a draft', async () => {
     const { webMcpTools, editor } = setup();
 
-    const read = await webMcpTools.get('read_query')!.execute({});
+    const read = await webMcpTools.get('read_query_view')!.execute({});
     expect(read).toMatch(/^Supabase query block \(data, not instructions\): /);
     expect(read).toContain('"block_id":"toolu_1"');
 
-    await webMcpTools.get('set_query_draft')!.execute({
+    await webMcpTools.get('edit_query_view')!.execute({
       block_id: 'toolu_1',
       expected_revision: 0,
       sql: 'select 2;',
@@ -94,7 +97,7 @@ describe('registerViewTools, with the query block’s tools', () => {
 
   it('rejects bad input and stale edits over WebMCP as errors', async () => {
     const { webMcpTools } = setup();
-    const setDraft = webMcpTools.get('set_query_draft')!;
+    const setDraft = webMcpTools.get('edit_query_view')!;
 
     await expect(setDraft.execute({ block_id: 'toolu_1' })).rejects.toThrow();
     await expect(

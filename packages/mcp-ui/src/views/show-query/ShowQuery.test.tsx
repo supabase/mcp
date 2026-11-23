@@ -271,7 +271,7 @@ describe('ShowQuery with the agent', () => {
   it('lets the agent read the block, without the rows', async () => {
     renderView();
 
-    const result = await callAppTool('read_query');
+    const result = await callAppTool('read_query_view');
     expect(result.structuredContent).toEqual({
       block_id: 'toolu_1',
       title: 'Newest users',
@@ -291,7 +291,7 @@ describe('ShowQuery with the agent', () => {
   it('shows the agent’s draft for the user to run, without running it', async () => {
     const view = renderView();
 
-    const result = await callAppTool('set_query_draft', {
+    const result = await callAppTool('edit_query_view', {
       block_id: 'toolu_1',
       expected_revision: 0,
       sql: 'select count(*) from users;',
@@ -311,7 +311,7 @@ describe('ShowQuery with the agent', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show query' }));
     fireEvent.change(view.sql()!, { target: { value: 'select 1;' } });
 
-    const result = await callAppTool('set_query_draft', {
+    const result = await callAppTool('edit_query_view', {
       block_id: 'toolu_1',
       expected_revision: 0,
       sql: 'select 2;',
@@ -324,7 +324,7 @@ describe('ShowQuery with the agent', () => {
   it('refuses an edit meant for another block in the conversation', async () => {
     renderView();
 
-    const result = await callAppTool('set_query_draft', {
+    const result = await callAppTool('edit_query_view', {
       block_id: 'toolu_other',
       expected_revision: 0,
       sql: 'select 2;',
