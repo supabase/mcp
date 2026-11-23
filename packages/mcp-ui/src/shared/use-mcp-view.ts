@@ -47,7 +47,17 @@ export type McpView<T> = {
  * the host context and capabilities, and helpers built on them (`callTool`,
  * `inputText`, `openLink`). Also applies the host's styles (see `useHostStyles`).
  */
-export function useMcpView<T>(name: string): McpView<T> {
+export function useMcpView<T>(
+  name: string,
+  options: {
+    /**
+     * Runs once the app exists, before it connects: where a view registers
+     * the tools it offers the agent (`app.registerTool`), which must be
+     * declared during the handshake.
+     */
+    onAppCreated?: (app: App) => void;
+  } = {}
+): McpView<T> {
   const [toolCall, setToolCall] = useState<ToolCallState<T>>({
     status: 'loading',
   });
@@ -93,6 +103,7 @@ export function useMcpView<T>(name: string): McpView<T> {
       };
       app.onhostcontextchanged = (changed) =>
         setHostContext((current) => ({ ...current, ...changed }));
+      options.onAppCreated?.(app);
     },
   });
 

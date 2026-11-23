@@ -65,4 +65,11 @@ Decide whether the user wants the view every time the tool runs:
 - **Every call** (`create_project`, `create_branch`): link the existing tool to the view. The view reads the tool's normal result.
 - **Only when asked** (query results, a row, logs): the model reads data with its usual tools (`execute_sql`, `query_logs`) without putting a view in front of the user. Add a separate `show_<thing>` tool for the view, and add its name to `VIEW_TOOLS` in `packages/mcp-server-supabase/src/apps/index.ts` so clients without MCP Apps don't list it. It returns a short summary for the model and puts what the view shows in the result's `_meta` under `VIEW_DATA_META_KEY`, which `useMcpView` reads in place of the text result. Actions in the view call the usual tools (`callTool('execute_sql', …)`), so the server's permissions and confirmations still apply.
 
+### Let the agent work in a view
+
+A view that the user and the agent edit together, such as the query block, does two things (see `src/shared/query-block-agent.ts`):
+
+- **Shares what it shows as model context** with `app.updateModelContext`: here the SQL, its revision and the results' shape, never the rows. It marks the context as data, not instructions. Claude and ChatGPT both read it.
+- **Offers tools of its own** with `app.registerTool`, registered in `useMcpView`'s `onAppCreated` so they're declared before the handshake: here `read_query` and `set_query_draft`. Only hosts that call view tools use them (Claude today; ChatGPT documents no way for the model to change an open widget). Edits pass the revision they read, so they never overwrite the user's typing, and they never run anything: the user does.
+
 Keep views small. The whole HTML is sent on every `resources/read`, so prefer system fonts and SVG icons, and avoid heavy dependencies unless a view really needs them.

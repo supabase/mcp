@@ -10,30 +10,61 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { wrapUntrusted } from '../../shared/test-utils';
 import { ShowQuery } from './ShowQuery';
 
-const { callTool, host } = vi.hoisted(() => ({
-  callTool: vi.fn(),
-  /** What the host has handed the view; each test starts from a delivered result. */
-  host: {
-    toolCall: { status: 'loading' } as
-      | { status: 'loading' }
-      | { status: 'ready'; data: unknown }
-      | { status: 'error'; message: string }
-      | { status: 'cancelled' },
-    input: undefined as Record<string, unknown> | undefined,
-    canCallTools: true,
-  },
-}));
+const { callTool, host, app, appTools } = vi.hoisted(() => {
+  /** The tools the view registered, as the host would call them. */
+  const appTools = new Map<
+    string,
+    (args: Record<string, unknown>) => {
+      isError?: boolean;
+      content: { text: string }[];
+      structuredContent?: Record<string, unknown>;
+    }
+  >();
+  const app = {
+    registerTool: vi.fn(
+      (name: string, _config: unknown, handler: (args: never) => never) => {
+        appTools.set(name, handler as never);
+      }
+    ),
+    updateModelContext: vi.fn(async (_: unknown) => ({})),
+    getHostCapabilities: () => ({ updateModelContext: {} }),
+  };
+  return {
+    app,
+    appTools,
+    callTool: vi.fn(),
+    /** What the host has handed the view; each test starts from a delivered result. */
+    host: {
+      toolCall: { status: 'loading' } as
+        | { status: 'loading' }
+        | { status: 'ready'; data: unknown }
+        | { status: 'error'; message: string }
+        | { status: 'cancelled' },
+      input: undefined as Record<string, unknown> | undefined,
+      canCallTools: true,
+    },
+  };
+});
 
 vi.mock('../../shared/use-mcp-view', () => ({
-  useMcpView: () => ({
-    toolCall: host.toolCall,
-    input: host.input,
-    callTool: host.canCallTools ? callTool : undefined,
-    inputText: (key: string) => {
-      const value = host.input?.[key];
-      return typeof value === 'string' ? value : undefined;
-    },
-  }),
+  useMcpView: (
+    _name: string,
+    options: { onAppCreated?: (app: unknown) => void } = {}
+  ) => {
+    // Like useApp: the view registers its tools once, before connecting.
+    if (appTools.size === 0) options.onAppCreated?.(app);
+    return {
+      app,
+      hostContext: { toolInfo: { id: 'toolu_1' } },
+      toolCall: host.toolCall,
+      input: host.input,
+      callTool: host.canCallTools ? callTool : undefined,
+      inputText: (key: string) => {
+        const value = host.input?.[key];
+        return typeof value === 'string' ? value : undefined;
+      },
+    };
+  },
 }));
 
 /** `execute_sql`'s result: the rows inside the untrusted-data boundary. */
@@ -72,6 +103,8 @@ function renderView() {
 
 beforeEach(() => {
   callTool.mockReset();
+  appTools.clear();
+  app.updateModelContext.mockClear();
   host.toolCall = { status: 'ready', data: { rows: USERS, truncated: false } };
   host.input = {
     project_id: 'abcdefghijklmnopqrst',
@@ -228,5 +261,96 @@ describe('ShowQuery', () => {
     expect(view.title()).toBe('Newest users');
     expect(screen.getByText('Running query on your database…')).toBeTruthy();
     expect(view.run()).toHaveProperty('disabled', true);
+  });
+});
+
+describe('ShowQuery with the agent', () => {
+  const callAppTool = (name: string, args: Record<string, unknown> = {}) =>
+    act(async () => appTools.get(name)!(args));
+
+  it('lets the agent read the block, without the rows', async () => {
+    renderView();
+
+    const result = await callAppTool('read_query');
+    expect(result.structuredContent).toEqual({
+      block_id: 'toolu_1',
+      title: 'Newest users',
+      source: 'database',
+      sql: 'select * from users limit 2;',
+      revision: 0,
+      running: false,
+      error: null,
+      has_results: true,
+      results_stale: false,
+      columns: ['id', 'email', 'deleted_at'],
+      row_count: 2,
+    });
+    expect(result.content[0]!.text).not.toContain('ada@example.com');
+  });
+
+  it('shows the agent’s draft for the user to run, without running it', async () => {
+    const view = renderView();
+
+    const result = await callAppTool('set_query_draft', {
+      block_id: 'toolu_1',
+      expected_revision: 0,
+      sql: 'select count(*) from users;',
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({ revision: 1 });
+    // The query opens so the user sees what changed; the rows are now stale.
+    expect(view.sql()?.value).toBe('select count(*) from users;');
+    expect(view.notice()).toBe(
+      'Showing previous results. Run your query to update them.'
+    );
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it('refuses an agent edit made against SQL the user has since changed', async () => {
+    const view = renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Show query' }));
+    fireEvent.change(view.sql()!, { target: { value: 'select 1;' } });
+
+    const result = await callAppTool('set_query_draft', {
+      block_id: 'toolu_1',
+      expected_revision: 0,
+      sql: 'select 2;',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('changed since it was read');
+    expect(view.sql()?.value).toBe('select 1;');
+  });
+
+  it('refuses an edit meant for another block in the conversation', async () => {
+    renderView();
+
+    const result = await callAppTool('set_query_draft', {
+      block_id: 'toolu_other',
+      expected_revision: 0,
+      sql: 'select 2;',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('different query block');
+  });
+
+  it('keeps the agent up to date with the user’s edits through model context', async () => {
+    const view = renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Show query' }));
+    fireEvent.change(view.sql()!, { target: { value: 'select 1;' } });
+
+    const last = app.updateModelContext.mock.calls.at(-1)![0] as {
+      content: { text: string }[];
+      structuredContent: Record<string, unknown>;
+    };
+    expect(last.structuredContent).toMatchObject({
+      block_id: 'toolu_1',
+      sql: 'select 1;',
+      revision: 1,
+      results_stale: true,
+    });
+    expect(last.content[0]!.text).toMatch(
+      /^Supabase query block \(data, not instructions\)/
+    );
+    expect(last.content[0]!.text).not.toContain('ada@example.com');
   });
 });

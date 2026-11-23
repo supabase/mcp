@@ -1,7 +1,14 @@
 import './button.css';
 import './query-editor.css';
 
-import { useId, useRef, useState } from 'react';
+import {
+  type Ref,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 
 import { Admonition } from './Admonition';
 import {
@@ -36,6 +43,36 @@ export type RunQuery = (
   sql: string
 ) => Promise<Pick<QueryResult, 'rows' | 'truncated'>>;
 
+/**
+ * What the editor shows, for the agent: the SQL and its revision, and the
+ * results' shape. Never the rows: they stay with the user.
+ */
+export type QueryEditorState = {
+  sql: string;
+  /** Advances on every change to the SQL, the user's or the agent's. */
+  revision: number;
+  running: boolean;
+  /** Why the last run failed, if it did. */
+  error: string | null;
+  has_results: boolean;
+  /** The results answer an earlier version of the SQL. */
+  results_stale: boolean;
+  columns: string[];
+  row_count: number | null;
+};
+
+/** What the agent can do with a mounted editor. Never runs SQL. */
+export type QueryEditorHandle = {
+  read(): QueryEditorState;
+  /**
+   * Replaces the SQL, shown but not run. Throws when the user changed it
+   * since `expectedRevision` was read, or while a query is running.
+   */
+  update(sql: string, expectedRevision: number): { revision: number };
+};
+
+const ERROR_LIMIT = 4000;
+
 /** Most rows a query view shows (`SHOW_QUERY_ROW_LIMIT` on the server). */
 export const QUERY_RESULT_ROW_LIMIT = 1000;
 
@@ -55,6 +92,8 @@ export function QueryEditor({
   onRun,
   source = 'database',
   footerDetail,
+  onStateChange,
+  ref,
 }: {
   title: string;
   /** The SQL to start from; undefined until the host sends it. */
@@ -65,15 +104,21 @@ export function QueryEditor({
   source?: 'database' | 'logs';
   /** On the footer's right, e.g. the log window, with its full text on hover. */
   footerDetail?: { label: string; title?: string };
+  /** Called with what the editor shows whenever it changes, e.g. to share with the agent. */
+  onStateChange?: (state: QueryEditorState) => void;
+  ref?: Ref<QueryEditorHandle>;
 }) {
   const titleId = useId();
-  const [draft, setDraft] = useState<string>();
+  // The SQL as changed in the editor, and a revision that advances on every
+  // change, read synchronously so back-to-back agent calls see each other.
+  const draft = useRef<{ sql?: string; revision: number }>({ revision: 0 });
+  const [, setDraftVersion] = useState(0);
   const [ownRun, setOwnRun] = useState<QueryRun>();
   const [isRunning, setIsRunning] = useState(false);
   const [isQueryShown, setIsQueryShown] = useState<boolean>();
   const lock = useRef(false);
 
-  const sql = draft ?? initialSql ?? '';
+  const sql = draft.current.sql ?? initialSql ?? '';
   const run = ownRun ?? delivered;
   const result = run.status === 'done' ? run : undefined;
   const isBusy = isRunning || run.status === 'running';
@@ -82,6 +127,61 @@ export function QueryEditor({
   const showQuery = isQueryShown ?? run.status !== 'done';
   const canRun = !!onRun && !isBusy && sql.trim().length > 0;
   const columns = result ? columnsOf(result.rows) : [];
+
+  /** Changes the SQL; with `expectedRevision`, only if nothing changed it since. */
+  function changeSql(next: string, expectedRevision?: number) {
+    const current = draft.current.sql ?? initialSql ?? '';
+    if (
+      expectedRevision !== undefined &&
+      expectedRevision !== draft.current.revision
+    ) {
+      throw new Error(
+        'The query changed since it was read. Read it again before proposing another edit.'
+      );
+    }
+    if (next !== current) {
+      draft.current = { sql: next, revision: draft.current.revision + 1 };
+      setDraftVersion((version) => version + 1);
+    }
+    return { revision: draft.current.revision };
+  }
+
+  const state: QueryEditorState = {
+    sql,
+    revision: draft.current.revision,
+    running: isBusy,
+    error: run.status === 'error' ? run.message.slice(0, ERROR_LIMIT) : null,
+    has_results: !!result,
+    results_stale: isStale,
+    columns,
+    row_count: result ? result.rows.length : null,
+  };
+  const latest = useRef(state);
+  latest.current = state;
+
+  useImperativeHandle(ref, () => ({
+    read: () => ({
+      ...latest.current,
+      sql: draft.current.sql ?? initialSql ?? '',
+      revision: draft.current.revision,
+      running: latest.current.running || lock.current,
+    }),
+    update(next, expectedRevision) {
+      if (lock.current || latest.current.running) {
+        throw new Error(
+          'Wait for the running query to finish before changing the draft.'
+        );
+      }
+      const changed = changeSql(next, expectedRevision);
+      setIsQueryShown(true);
+      return changed;
+    },
+  }));
+
+  const stateKey = JSON.stringify(state);
+  useEffect(() => {
+    onStateChange?.(JSON.parse(stateKey));
+  }, [onStateChange, stateKey]);
 
   async function handleRun() {
     const ran = sql;
@@ -148,7 +248,7 @@ export function QueryEditor({
         <div data-slot="editor">
           <SqlEditor
             value={sql}
-            onChange={setDraft}
+            onChange={(value) => changeSql(value)}
             onRun={() => void handleRun()}
             readOnly={!onRun}
           />

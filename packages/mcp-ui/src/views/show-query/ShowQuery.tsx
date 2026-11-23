@@ -1,5 +1,13 @@
+import { useCallback, useMemo, useRef } from 'react';
+import {
+  createQueryBlockContext,
+  type QueryBlock,
+  registerQueryBlockTools,
+} from '../../shared/query-block-agent';
 import {
   QueryEditor,
+  type QueryEditorHandle,
+  type QueryEditorState,
   type QueryRun,
   type RunQuery,
 } from '../../shared/QueryEditor';
@@ -38,12 +46,43 @@ function logWindowLabel(start?: string, end?: string) {
  * the server's usual permissions and confirmations apply to them.
  */
 export function ShowQuery() {
-  const { toolCall, callTool, inputText } = useMcpView<ShowQueryViewData>(
-    'supabase-show-query'
-  );
+  // The open block, for the tools the agent calls; current as of each render.
+  const block = useRef<QueryBlock | undefined>(undefined);
+  const editor = useRef<QueryEditorHandle>(null);
+  const { toolCall, callTool, inputText, app, hostContext } =
+    useMcpView<ShowQueryViewData>('supabase-show-query', {
+      onAppCreated: (app) =>
+        registerQueryBlockTools(app, () =>
+          block.current
+            ? { ...block.current, editor: editor.current }
+            : undefined
+        ),
+    });
 
   const source = inputText('source') === 'logs' ? 'logs' : 'database';
   const sql = inputText('sql');
+  const title = inputText('title') ?? 'Query results';
+  // The tool call's id where the host gives one, so each block in a
+  // conversation answers only edits meant for it.
+  const fallbackId = useMemo(() => crypto.randomUUID(), []);
+  const toolCallId = hostContext?.toolInfo?.id;
+  block.current = {
+    id: toolCallId === undefined ? fallbackId : String(toolCallId),
+    title,
+    source,
+    editor: editor.current,
+  };
+
+  const shareContext = useMemo(
+    () => (app ? createQueryBlockContext(app) : undefined),
+    [app]
+  );
+  const handleStateChange = useCallback(
+    (state: QueryEditorState) => {
+      if (block.current) shareContext?.(block.current, state);
+    },
+    [shareContext]
+  );
   // Project-scoped servers drop `project_id` from tool inputs, and reject it
   // if sent, so the view passes it on only when the call had one.
   const projectId = inputText('project_id');
@@ -111,12 +150,14 @@ export function ShowQuery() {
 
   return (
     <QueryEditor
-      title={inputText('title') ?? 'Query results'}
+      ref={editor}
+      title={title}
       sql={sql}
       delivered={delivered}
       onRun={onRun}
       source={source}
       footerDetail={footerDetail}
+      onStateChange={handleStateChange}
     />
   );
 }
