@@ -220,13 +220,15 @@
 
     /* LogDetailPanel: a section docked under the list, or beside it on wide
        views, edge to edge with only a hairline between them, so the list
-       keeps the rest of the height and stays scrollable. */
+       keeps the rest of the height and stays scrollable. Docked under the
+       list it has a fixed height, so moving between events never shifts
+       the list; its body scrolls instead. */
     :where([data-slot="body"] [data-slot="detail"]) {
       display: flex;
       flex: none;
       flex-direction: column;
       min-block-size: 0;
-      max-block-size: 240px;
+      block-size: 240px;
       overflow: hidden;
       border-block-start: var(--border-width-regular) solid
         var(--sb-color-border);
@@ -234,7 +236,7 @@
       @container (min-width: 48rem) {
         inline-size: 288px;
         min-inline-size: 240px;
-        max-block-size: none;
+        block-size: auto;
         border-block-start: none;
         border-inline-start: var(--border-width-regular) solid
           var(--sb-color-border);
@@ -263,6 +265,7 @@
     }
 
     :where([data-slot="detail"] [data-slot="detail-body"]) {
+      flex: 1;
       min-block-size: 0;
       padding: var(--sb-space-4) var(--sb-space-3);
       overflow: auto;
