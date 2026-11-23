@@ -129,15 +129,19 @@ describe('MCP Apps', () => {
       prefersBorder: false,
       permissions: { clipboardWrite: {} },
     };
-    // Panels (a row) open beside the conversation; the rest stay inline.
+    // Panels (a row, logs) open beside the conversation, and a query block
+    // opens inline but can move to a panel; the cards stay inline.
     const panels = [SHOW_ROW_UI_URI, SHOW_LOGS_UI_URI];
+    const expandable = [SHOW_QUERY_UI_URI];
     const expectedMeta = (uri: string) => {
       const mode = panels.includes(uri) ? 'fullscreen' : 'inline';
       return {
         ui: { ...baseUi, preferredDisplayMode: mode },
         'openai/ui': {
           preferredDisplayMode: mode,
-          availableDisplayModes: [mode],
+          availableDisplayModes: expandable.includes(uri)
+            ? ['inline', 'fullscreen']
+            : [mode],
         },
       };
     };
