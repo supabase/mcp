@@ -32,6 +32,13 @@ export const LOG_SOURCE_LABELS: Record<string, string> = {
   pgbouncer_logs: 'Pooler',
 };
 
+/** The source filters the logs view offers: all, Edge Functions together, or one source. */
+export const LOG_SOURCE_FILTERS = [
+  'all',
+  'edge_functions',
+  ...Object.keys(LOG_SOURCE_LABELS),
+] as [string, ...string[]];
+
 /** Longest selection text sent to the agent, so one click can't flood its context. */
 export const MAX_LOG_ATTACHMENT_LENGTH = 32_000;
 

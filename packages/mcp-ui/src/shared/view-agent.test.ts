@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { type QueryBlock, registerQueryBlockTools } from './query-block-agent';
+import {
+  QUERY_BLOCK_LABEL,
+  type QueryBlock,
+  queryBlockTools,
+} from './query-block-agent';
 import type { QueryEditorHandle, QueryEditorState } from './QueryEditor';
+import { registerViewTools } from './view-agent';
 
 const STATE: QueryEditorState = {
   sql: 'select 1;',
@@ -45,11 +50,18 @@ function setup() {
       }) => webMcpTools.set(tool.name, tool)
     ),
   };
-  registerQueryBlockTools(app, () => block, webMcp);
+  registerViewTools(
+    app,
+    queryBlockTools(() => block),
+    {
+      label: QUERY_BLOCK_LABEL,
+      webMcp,
+    }
+  );
   return { app, webMcp, webMcpTools, editor };
 }
 
-describe('registerQueryBlockTools', () => {
+describe('registerViewTools, with the query block’s tools', () => {
   it('offers the same tools to MCP Apps hosts (Claude) and WebMCP hosts (ChatGPT, Codex)', () => {
     const { app, webMcpTools } = setup();
 
@@ -96,7 +108,15 @@ describe('registerQueryBlockTools', () => {
 
   it('works on hosts without WebMCP', () => {
     const app = { registerTool: vi.fn() };
-    expect(() => registerQueryBlockTools(app, () => undefined)).not.toThrow();
+    expect(() =>
+      registerViewTools(
+        app,
+        queryBlockTools(() => undefined),
+        {
+          label: QUERY_BLOCK_LABEL,
+        }
+      )
+    ).not.toThrow();
     expect(app.registerTool).toHaveBeenCalledTimes(2);
   });
 });

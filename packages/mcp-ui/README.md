@@ -67,9 +67,15 @@ Decide whether the user wants the view every time the tool runs:
 
 ### Let the agent work in a view
 
-A view that the user and the agent edit together, such as the query block, does two things (see `src/shared/query-block-agent.ts`):
+A view that the user and the agent work in together uses `src/shared/view-agent.ts`, which routes to whatever the host supports:
 
-- **Shares what it shows as model context** with `app.updateModelContext`: here the SQL, its revision and the results' shape, never the rows. It marks the context as data, not instructions, and titles it for ChatGPT (`openai/title`).
-- **Offers tools of its own**, here `read_query` and `set_query_draft`, defined once and registered both ways hosts take view tools. MCP Apps view tools (`app.registerTool`, in `useMcpView`'s `onAppCreated` so the handshake declares them) are for Claude. WebMCP (`document.modelContext.registerTool`) is for ChatGPT and Codex desktop, which don't support `app.registerTool` (see the [OpenAI MCP Extensions spec](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md) and its Bits & Bolts plugin). Edits pass the revision they read, so they never overwrite the user's typing, and they never run anything: the user does.
+- **Tools.** Define each once with `viewTool` and register them with `registerViewTools` in `useMcpView`'s `onAppCreated` (before the handshake). They're offered as MCP Apps view tools (`app.registerTool`) for Claude, and over WebMCP (`document.modelContext.registerTool`) for ChatGPT and Codex desktop, which don't support `app.registerTool` (see the [OpenAI MCP Extensions spec](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md) and its Bits & Bolts plugin). A host with neither just shows the view.
+- **Context.** `createContextSharer` sends what the view shows through `ui/update-model-context`, where the host supports it. It's one stream per view, labelled as data and titled for ChatGPT (`openai/title`).
+
+Each view keeps its own side in a file beside it:
+- `query-block-agent.ts`: `read_query` and `set_query_draft`. Edits pass the revision they read, so they never overwrite the user's typing, and they never run SQL: the user does.
+- `logs-agent.ts`: `read_logs` (the filters and the events the user selected, never the others) and `configure_logs` (changes the filters as the user would).
+
+Tools carry the view's id (the host's tool call id), so a conversation with several views changes the right one.
 
 Keep views small. The whole HTML is sent on every `resources/read`, so prefer system fonts and SVG icons, and avoid heavy dependencies unless a view really needs them.

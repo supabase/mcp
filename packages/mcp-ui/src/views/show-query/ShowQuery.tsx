@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useRef } from 'react';
 import {
-  createQueryBlockContext,
+  QUERY_BLOCK_LABEL,
   type QueryBlock,
-  registerQueryBlockTools,
+  queryBlockContext,
+  queryBlockTools,
 } from '../../shared/query-block-agent';
 import {
   QueryEditor,
@@ -13,6 +14,10 @@ import {
 } from '../../shared/QueryEditor';
 import { logRows, sqlRows, type Row } from '../../shared/sql-result';
 import { useMcpView } from '../../shared/use-mcp-view';
+import {
+  createContextSharer,
+  registerViewTools,
+} from '../../shared/view-agent';
 
 /**
  * What `show_query` sends the view in its result's `_meta`
@@ -52,10 +57,14 @@ export function ShowQuery() {
   const { toolCall, callTool, inputText, app, hostContext } =
     useMcpView<ShowQueryViewData>('supabase-show-query', {
       onAppCreated: (app) =>
-        registerQueryBlockTools(app, () =>
-          block.current
-            ? { ...block.current, editor: editor.current }
-            : undefined
+        registerViewTools(
+          app,
+          queryBlockTools(() =>
+            block.current
+              ? { ...block.current, editor: editor.current }
+              : undefined
+          ),
+          { label: QUERY_BLOCK_LABEL }
         ),
     });
 
@@ -74,12 +83,13 @@ export function ShowQuery() {
   };
 
   const shareContext = useMemo(
-    () => (app ? createQueryBlockContext(app) : undefined),
+    () => (app ? createContextSharer(app) : undefined),
     [app]
   );
   const handleStateChange = useCallback(
     (state: QueryEditorState) => {
-      if (block.current) shareContext?.(block.current, state);
+      if (block.current)
+        shareContext?.(queryBlockContext(block.current, state));
     },
     [shareContext]
   );
