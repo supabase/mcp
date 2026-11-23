@@ -54,4 +54,5 @@ export const VIEW_DATA_META_KEY = 'supabase.com/view';
 export const VIEW_TOOLS: ReadonlySet<string> = new Set([
   'show_query',
   'show_row',
+  'show_logs',
 ]);

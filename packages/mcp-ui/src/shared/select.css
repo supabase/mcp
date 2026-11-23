@@ -1,0 +1,47 @@
+@layer components {
+  /*
+   * Studio's Select trigger on a native select (see Select): a hairline in the
+   * input colour on the host's surface, with the chevron at its end. `sm` is
+   * the shared control height at sm text; `tiny` is 26px at xs, for toolbars.
+   */
+  :where(.select) {
+    position: relative;
+    display: inline-flex;
+    min-inline-size: 0;
+
+    :where(select) {
+      inline-size: 100%;
+      min-inline-size: 0;
+      block-size: var(--sb-control-size);
+      padding: 0 calc(var(--sb-space-3) + 20px) 0 var(--sb-space-3);
+      border: var(--border-width-regular) solid var(--sb-color-input);
+      border-radius: var(--border-radius-md);
+      background: transparent;
+      color: var(--sb-color-foreground);
+      font: inherit;
+      font-size: var(--font-text-sm-size);
+      appearance: none;
+      cursor: pointer;
+
+      &:where(:disabled) {
+        color: var(--sb-color-tertiary-foreground);
+        cursor: not-allowed;
+      }
+    }
+
+    &:where([data-size="tiny"]) :where(select) {
+      block-size: 26px;
+      padding: 0 calc(var(--sb-space-2) + 18px) 0 10px;
+      font-size: var(--font-text-xs-size);
+    }
+
+    :where([data-slot="chevron"]) {
+      position: absolute;
+      inset-block-start: 50%;
+      inset-inline-end: var(--sb-space-2);
+      color: var(--sb-color-tertiary-foreground);
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+  }
+}

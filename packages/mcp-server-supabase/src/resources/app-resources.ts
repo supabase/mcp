@@ -11,6 +11,7 @@ import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { resource, type Resource } from '@supabase/mcp-utils';
 import createBranchHtml from '@supabase/mcp-ui/create-branch.html';
 import createProjectHtml from '@supabase/mcp-ui/create-project.html';
+import showLogsHtml from '@supabase/mcp-ui/show-logs.html';
 import showQueryHtml from '@supabase/mcp-ui/show-query.html';
 import showRowHtml from '@supabase/mcp-ui/show-row.html';
 
@@ -18,6 +19,7 @@ export const CREATE_PROJECT_UI_URI = 'ui://supabase/create-project';
 export const CREATE_BRANCH_UI_URI = 'ui://supabase/create-branch';
 export const SHOW_QUERY_UI_URI = 'ui://supabase/show-query';
 export const SHOW_ROW_UI_URI = 'ui://supabase/show-row';
+export const SHOW_LOGS_UI_URI = 'ui://supabase/show-logs';
 
 const VIEW_META: { ui: McpUiResourceMeta } = {
   ui: {
@@ -76,6 +78,12 @@ export function getAppResources(): Resource[] {
       'Row view',
       'One table row, editable by the user, for the show_row tool.',
       showRowHtml
+    ),
+    appResource(
+      SHOW_LOGS_UI_URI,
+      'Logs view',
+      'Recent project logs to search, filter and select, for the show_logs tool.',
+      showLogsHtml
     ),
   ];
 }

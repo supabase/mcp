@@ -4,8 +4,8 @@ import './row-editor.css';
 import { useId, useRef, useState } from 'react';
 
 import { Admonition } from './Admonition';
+import { Select } from './Select';
 import {
-  ChevronDownIcon,
   KeyRoundIcon,
   LockKeyholeIcon,
   RefreshCwIcon,
@@ -32,47 +32,6 @@ export type ReloadRow = () => Promise<Row>;
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
-
-/** A native select styled as Studio's Select trigger, with its chevron. */
-function SelectField({
-  id,
-  label,
-  value,
-  options,
-  disabled,
-  onChange,
-}: {
-  id?: string;
-  label?: string;
-  value: string;
-  options: { value: string; label: string }[];
-  disabled: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <span data-slot="select">
-      <select
-        id={id}
-        aria-label={label}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {!options.some((option) => option.value === value) && (
-          <option value={value} disabled>
-            {value === '' ? 'Choose a value' : value}
-          </option>
-        )}
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDownIcon slot="select-icon" size={16} />
-    </span>
-  );
-}
 
 /** One column's field, after `RowField` in the Supabase surfaces. */
 function RowField({
@@ -117,8 +76,9 @@ function RowField({
       </div>
       <div data-slot="field-control">
         {options.length > 0 ? (
-          <SelectField
+          <Select
             id={id}
+            slot="value"
             value={field.raw}
             options={options.map((option) => ({
               value: option,
@@ -146,7 +106,8 @@ function RowField({
           />
         )}
         {canChooseMode && (
-          <SelectField
+          <Select
+            slot="mode"
             label={`${column.name} value mode`}
             value={field.mode}
             options={[

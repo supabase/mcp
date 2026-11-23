@@ -20,6 +20,7 @@ import {
   CREATE_BRANCH_UI_URI,
   CREATE_PROJECT_UI_URI,
   getAppResources,
+  SHOW_LOGS_UI_URI,
   SHOW_QUERY_UI_URI,
   SHOW_ROW_UI_URI,
 } from './resources/app-resources.js';
@@ -111,6 +112,7 @@ describe('MCP Apps', () => {
     expect(linkOf('create_branch')).toBe(CREATE_BRANCH_UI_URI);
     expect(linkOf('show_query')).toBe(SHOW_QUERY_UI_URI);
     expect(linkOf('show_row')).toBe(SHOW_ROW_UI_URI);
+    expect(linkOf('show_logs')).toBe(SHOW_LOGS_UI_URI);
 
     expect(await listedViewUris(client)).toEqual([...VIEW_URIS].sort());
     expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
@@ -446,5 +448,88 @@ describe('show_row', () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('No row in public.orders has that key.');
+  });
+});
+
+describe('show_logs', () => {
+  async function setupApps() {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+    const requests: URL[] = [];
+    harness.mockServer!.use(
+      http.get(
+        `${API_URL}/v1/projects/:projectId/analytics/endpoints/logs`,
+        ({ request }) => {
+          requests.push(new URL(request.url));
+          return HttpResponse.json({
+            result: [{ timestamp: 1, source: 'auth_logs', level: 'error' }],
+          });
+        }
+      )
+    );
+    const show = async (args: Record<string, unknown> = {}) => {
+      const result = await callModernTool(client, {
+        name: 'show_logs',
+        arguments: { project_id: project.id, ...args },
+      });
+      if (isInputRequiredResult(result)) throw new Error('expected a result');
+      return result;
+    };
+    return { show, requests };
+  }
+
+  const textOf = (result: { content: unknown[] }) =>
+    (result.content[0] as { text: string }).text;
+
+  test('sends the events to the view and only a count to the model', async () => {
+    const { show } = await setupApps();
+
+    const result = await show();
+
+    expect(JSON.parse(textOf(result))).toEqual({ event_count: 1 });
+    const viewData = result._meta?.[VIEW_DATA_META_KEY] as {
+      rows: unknown[];
+      iso_timestamp_start: string;
+      iso_timestamp_end: string;
+    };
+    expect(viewData.rows).toEqual([
+      { timestamp: 1, source: 'auth_logs', level: 'error' },
+    ]);
+    // The last hour by default.
+    expect(
+      Date.parse(viewData.iso_timestamp_end) -
+        Date.parse(viewData.iso_timestamp_start)
+    ).toBe(60 * 60_000);
+  });
+
+  test('reads the latest 100 events for the source and level asked for', async () => {
+    const { show, requests } = await setupApps();
+
+    await show({ source: 'auth_logs', level: 'error', minutes: 1440 });
+
+    const url = requests.at(-1)!;
+    const sql = url.searchParams.get('sql')!;
+    expect(sql).toMatch(/ FROM logs WHERE source = 'auth_logs' AND \(CASE /);
+    expect(sql).toMatch(/\) = 'error' ORDER BY timestamp DESC LIMIT 100$/);
+    expect(
+      Date.parse(url.searchParams.get('iso_timestamp_end')!) -
+        Date.parse(url.searchParams.get('iso_timestamp_start')!)
+    ).toBe(1440 * 60_000);
+  });
+
+  test('reads Edge Function invocations and runtime logs together', async () => {
+    const { show, requests } = await setupApps();
+
+    await show({ source: 'edge_functions' });
+
+    expect(requests.at(-1)!.searchParams.get('sql')).toContain(
+      "WHERE source IN ('function_edge_logs', 'function_logs')"
+    );
   });
 });

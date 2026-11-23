@@ -1,5 +1,12 @@
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
-import { resolveLogWindow } from '../logs.js';
+import { VIEW_DATA_META_KEY } from '../apps/index.js';
+import {
+  LOG_EVENT_LEVELS,
+  LOG_EVENT_SOURCES,
+  logEventsSql,
+  resolveLogWindow,
+} from '../logs.js';
 import {
   logsServiceSchema,
   type DebuggingOperations,
@@ -10,6 +17,8 @@ import {
   type ToolDefs,
   wrapWithUntrustedDataBoundary,
 } from './util.js';
+import { getLogCellRows } from './notebook-cells.js';
+import { SHOW_LOGS_UI_URI } from '../resources/app-resources.js';
 
 export const DEFAULT_LOGS_DIALECT: LogsDialect = 'clickhouse';
 
@@ -115,6 +124,41 @@ export const queryLogsByDialect = {
     parameters: z.ZodType;
   }
 >;
+
+const showLogsInputSchema = z.object({
+  project_id: z.string(),
+  source: z
+    .enum(['all', 'edge_functions', ...LOG_EVENT_SOURCES])
+    .optional()
+    .describe(
+      'The logs to show: "all" (default), "edge_functions" for Edge Function invocations and runtime logs together, or one source.'
+    ),
+  level: z
+    .enum(['all', ...LOG_EVENT_LEVELS])
+    .optional()
+    .describe('Only events of this severity. Defaults to "all".'),
+  minutes: z
+    .union([z.literal(60), z.literal(360), z.literal(1440)])
+    .optional()
+    .describe('How far back to look: 60 (default), 360 or 1440 minutes.'),
+  search: z
+    .string()
+    .max(500)
+    .optional()
+    .describe('Text to filter the shown events by, which the user can change.'),
+});
+
+const showLogsOutputSchema = z.object({
+  event_count: z.number(),
+});
+
+/** What `show_logs` sends its view in result `_meta`. */
+export type ShowLogsViewData = {
+  rows: unknown[];
+  /** The window the events were read from. */
+  iso_timestamp_start: string;
+  iso_timestamp_end: string;
+};
 
 const queryLogsOutputSchema = z.object({
   result: z.unknown(),
@@ -250,6 +294,20 @@ export const debuggingToolDefs = {
       openWorldHint: false,
     },
   },
+  show_logs: {
+    description:
+      'Shows the user their project\'s latest logs, which they can search, filter by severity and source, and select to send back to you. Use it when the user wants to see logs, such as "show me the auth errors from the last hour"; to read logs yourself, use `query_logs`. Shows the latest 100 matching events and returns only how many there were: the logs go to the user, not to you.',
+    parameters: showLogsInputSchema,
+    outputSchema: showLogsOutputSchema,
+    _meta: { ui: { resourceUri: SHOW_LOGS_UI_URI } },
+    annotations: {
+      title: 'Show logs',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
   get_advisors: {
     description:
       "Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
@@ -315,6 +373,48 @@ export function getDebuggingTools({
         },
       }),
     }),
+    // The unified logs query is ClickHouse SQL.
+    ...(queryLogs &&
+      logsDialect === 'clickhouse' && {
+        show_logs: injectableTool({
+          ...debuggingToolDefs.show_logs,
+          inject: { project_id },
+          execute: async ({
+            project_id,
+            source,
+            level,
+            minutes = 60,
+          }): Promise<CallToolResult> => {
+            const end = new Date();
+            const window = {
+              iso_timestamp_start: new Date(
+                end.getTime() - minutes * 60_000
+              ).toISOString(),
+              iso_timestamp_end: end.toISOString(),
+            };
+            const rows = getLogCellRows(
+              await queryLogs(project_id, {
+                sql: logEventsSql({ source, level }),
+                ...window,
+              })
+            );
+            if (!Array.isArray(rows)) {
+              throw new Error('The logs query did not return events.');
+            }
+            const viewData: ShowLogsViewData = { rows, ...window };
+            return {
+              // The model gets a count; the events go to the view alone.
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ event_count: rows.length }),
+                },
+              ],
+              _meta: { [VIEW_DATA_META_KEY]: viewData },
+            };
+          },
+        }),
+      }),
     get_advisors: injectableTool({
       ...debuggingToolDefs.get_advisors,
       parameters: debugging.getHealthAdvisors
