@@ -130,7 +130,7 @@ describe('MCP Apps', () => {
       permissions: { clipboardWrite: {} },
     };
     // Panels (a row) open beside the conversation; the rest stay inline.
-    const panels = [SHOW_ROW_UI_URI];
+    const panels = [SHOW_ROW_UI_URI, SHOW_LOGS_UI_URI];
     const expectedMeta = (uri: string) => {
       const mode = panels.includes(uri) ? 'fullscreen' : 'inline';
       return {
@@ -163,6 +163,9 @@ describe('MCP Apps', () => {
     const openaiUi = (name: string) =>
       tools.find((tool) => tool.name === name)?._meta?.['openai/ui'];
     expect(openaiUi('show_row')).toEqual({
+      preferredModelDisplayMode: 'fullscreen',
+    });
+    expect(openaiUi('show_logs')).toEqual({
       preferredModelDisplayMode: 'fullscreen',
     });
     expect(openaiUi('show_query')).toEqual({

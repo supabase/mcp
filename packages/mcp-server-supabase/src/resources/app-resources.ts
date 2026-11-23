@@ -123,7 +123,8 @@ export function getAppResources(): Resource[] {
       SHOW_LOGS_UI_URI,
       'Logs view',
       'Recent project logs to search, filter and select, for the show_logs tool.',
-      showLogsHtml
+      showLogsHtml,
+      'panel'
     ),
   ];
 }

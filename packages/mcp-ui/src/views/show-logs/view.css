@@ -1,0 +1,17 @@
+@layer view {
+  /*
+   * In the host's panel (fullscreen), the logs view fills the frame the way
+   * the surfaces' logs panel does: no frame of its own, and the list takes
+   * all the height the toolbar and the details leave.
+   */
+  :where([data-display-mode="fullscreen"] .logs-view) {
+    block-size: calc(100dvh - var(--sb-inset-top) - var(--sb-inset-bottom));
+    border: none;
+    border-radius: 0;
+
+    :where([data-slot="body"]) {
+      flex: 1;
+      max-block-size: none;
+    }
+  }
+}

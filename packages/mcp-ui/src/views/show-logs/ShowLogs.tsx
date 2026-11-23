@@ -34,7 +34,10 @@ const MINUTES = [60, 360, 1440];
  */
 export function ShowLogs() {
   const { toolCall, app, input, inputText, hostCapabilities } =
-    useMcpView<ShowLogsViewData>('supabase-show-logs');
+    useMcpView<ShowLogsViewData>('supabase-show-logs', {
+      // A panel, like the surfaces' logs panel (`viewResourceMeta`).
+      displayModes: ['fullscreen'],
+    });
 
   // The settings the tool was called with, until the user changes them.
   const [changed, setChanged] = useState<LogSettings>();
