@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { wrapUntrusted } from '../../shared/test-utils';
 import { ShowQuery } from './ShowQuery';
 
-const { callTool, host, app, appTools } = vi.hoisted(() => {
+const { callTool, expand, host, app, appTools } = vi.hoisted(() => {
   /** The tools the view registered, as the host would call them. */
   const appTools = new Map<
     string,
@@ -33,6 +33,7 @@ const { callTool, host, app, appTools } = vi.hoisted(() => {
     app,
     appTools,
     callTool: vi.fn(),
+    expand: vi.fn(),
     /** What the host has handed the view; each test starts from a delivered result. */
     host: {
       toolCall: { status: 'loading' } as
@@ -42,6 +43,8 @@ const { callTool, host, app, appTools } = vi.hoisted(() => {
         | { status: 'cancelled' },
       input: undefined as Record<string, unknown> | undefined,
       canCallTools: true,
+      /** The host offers fullscreen and the view isn't there yet. */
+      canExpand: false,
     },
   };
 });
@@ -59,6 +62,7 @@ vi.mock('../../shared/use-mcp-view', () => ({
       toolCall: host.toolCall,
       input: host.input,
       callTool: host.canCallTools ? callTool : undefined,
+      expand: host.canExpand ? expand : undefined,
       inputText: (key: string) => {
         const value = host.input?.[key];
         return typeof value === 'string' ? value : undefined;
@@ -105,6 +109,8 @@ beforeEach(() => {
   callTool.mockReset();
   appTools.clear();
   app.updateModelContext.mockClear();
+  expand.mockReset();
+  host.canExpand = false;
   host.toolCall = { status: 'ready', data: { rows: USERS, truncated: false } };
   host.input = {
     project_id: 'abcdefghijklmnopqrst',
@@ -352,5 +358,40 @@ describe('ShowQuery with the agent', () => {
       /^Supabase query block \(data, not instructions\)/
     );
     expect(last.content[0]!.text).not.toContain('ada@example.com');
+  });
+});
+
+describe('ShowQuery in a panel', () => {
+  const expandButton = () =>
+    screen.queryByRole('button', { name: 'Expand query' });
+
+  it('lets the user move the query to a panel where the host offers one', async () => {
+    host.canExpand = true;
+    expand.mockResolvedValue(undefined);
+    renderView();
+
+    await act(async () => fireEvent.click(expandButton()!));
+    expect(expand).toHaveBeenCalledOnce();
+  });
+
+  it('offers no Expand where the host keeps views in the conversation, or once expanded', () => {
+    renderView();
+    expect(expandButton()).toBeNull();
+  });
+
+  it('says why when the host keeps the query where it is', async () => {
+    host.canExpand = true;
+    expand.mockRejectedValue(
+      new Error(
+        'This host could not expand the view. You can keep working here.'
+      )
+    );
+    const view = renderView();
+
+    await act(async () => fireEvent.click(expandButton()!));
+    expect(screen.getByText('Failed to open query')).toBeTruthy();
+    expect(view.error()).toContain('could not expand the view');
+    // The results are still there to work with.
+    expect(view.cells()).toHaveLength(2);
   });
 });

@@ -54,7 +54,7 @@ export function ShowQuery() {
   // The open block, for the tools the agent calls; current as of each render.
   const block = useRef<QueryBlock | undefined>(undefined);
   const editor = useRef<QueryEditorHandle>(null);
-  const { toolCall, callTool, inputText, app, hostContext } =
+  const { toolCall, callTool, inputText, app, hostContext, expand } =
     useMcpView<ShowQueryViewData>('supabase-show-query', {
       onAppCreated: (app) =>
         registerViewTools(
@@ -66,6 +66,8 @@ export function ShowQuery() {
           ),
           { label: QUERY_BLOCK_LABEL }
         ),
+      // Inline, and the user can move it to a panel (`viewResourceMeta`).
+      displayModes: ['inline', 'fullscreen'],
     });
 
   const source = inputText('source') === 'logs' ? 'logs' : 'database';
@@ -168,6 +170,7 @@ export function ShowQuery() {
       source={source}
       footerDetail={footerDetail}
       onStateChange={handleStateChange}
+      onExpand={expand}
     />
   );
 }

@@ -1,0 +1,16 @@
+@layer view {
+  /*
+   * In the host's panel (fullscreen), the query block fills the frame the
+   * way the surfaces' SQL panel does: no frame of its own, the SQL at its
+   * own height, and the results taking the rest.
+   */
+  :where([data-display-mode="fullscreen"] .query-editor) {
+    block-size: calc(100dvh - var(--sb-inset-top) - var(--sb-inset-bottom));
+    border: none;
+    border-radius: 0;
+
+    :where([data-slot="results"]) {
+      max-block-size: none;
+    }
+  }
+}

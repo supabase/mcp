@@ -1,4 +1,5 @@
 import '../../shared/base.css';
+import './view.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ShowQuery } from './ShowQuery';
