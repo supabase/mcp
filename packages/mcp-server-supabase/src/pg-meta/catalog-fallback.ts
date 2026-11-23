@@ -2,11 +2,12 @@
  * TEMPORARY WORKAROUND. Delete this file and its two call sites in
  * `tools/database-operation-tools.ts` once Spark (turso) runs `tables.sql`, `columns.sql` and `extensions.sql`.
  *
- * Used only after the pg-meta query fails with a missing-feature error (`isCatalogGap`). It reads the same facts with plain catalog queries and assembles
- * pg-meta's output shape in TypeScript, for databases whose `pg_catalog` is partial: today Spark on turso, which
- * lacks `unnest` over several arrays, `DISTINCT ON`, the jsonb aggregates, `pg_enum`, `pg_stat_*` and
- * `pg_available_extensions()`. Row estimates and sizes read as 0, privilege filters are not applied, and enums and
- * comments and partitions are left empty when their catalogs are missing.
+ * The Spark path of `list_tables` and `list_extensions`: used instead of the pg-meta queries when the project's
+ * engine is Spark (`database.postgres_engine` of the project detail), never as a retry after an error. It reads the
+ * same facts with plain catalog queries and assembles pg-meta's output shape in TypeScript, because Spark's
+ * `pg_catalog` is partial: it lacks `unnest` over several arrays, `DISTINCT ON`, the jsonb aggregates, `pg_enum`,
+ * `pg_stat_*` and `pg_available_extensions()`. Row estimates and sizes read as 0, privilege filters are not applied,
+ * and enums and comments and partitions are left empty when their catalogs are missing.
  */
 import { SYSTEM_SCHEMAS } from './index.js';
 import type {
@@ -101,17 +102,21 @@ const attnums = (value: unknown) =>
         .map(Number);
 
 // The whole message must be one of Spark's refusals: a Postgres error that only mentions these words (a schema
-// name in `permission denied for schema ...`) must not reach this fallback, which skips pg-meta's privilege filters.
+// name in `permission denied for schema ...`) must not be read as an absent catalog.
 const CATALOG_GAP =
   /^(?:[a-z_ ]+ is not supported|unnest currently requires exactly one array|no such (?:table|function|column): [\w.]+)$/i;
 
-export function isCatalogGap(error: unknown) {
+function isCatalogGap(error: unknown) {
+  // The Management API sends Postgres' formatted text (`ERROR:  <SQLSTATE>: <message>`, then DETAIL and HINT lines).
   const message = (error instanceof Error ? error.message : String(error))
     .replace(/^Failed to run sql query: /, '')
+    .replace(/^ERROR:\s+[0-9A-Z]{5}:\s+/, '')
+    .split('\n', 1)[0]!
     .trim();
   return !/^permission denied\b/i.test(message) && CATALOG_GAP.test(message);
 }
 
+// Catalogs Spark may not have (`pg_enum`, `pg_description`, `pg_inherits`) read as empty.
 const optional = (run: Promise<Record<string, unknown>[]>) =>
   run.catch((error) => {
     if (isCatalogGap(error)) return [] as Record<string, unknown>[];

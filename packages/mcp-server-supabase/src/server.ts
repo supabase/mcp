@@ -235,6 +235,23 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
   let handshakeClientInfo: Implementation | undefined;
 
+  // A project's engine does not change, and `tools` runs on every request, so the answer is kept here.
+  const sparkProjects = new Map<string, boolean>();
+  const isSparkProject = async (projectId: string) => {
+    const known = sparkProjects.get(projectId);
+    if (known !== undefined) return known;
+    // Without a project detail, or when it cannot be read now, the project is treated as Postgres (not cached).
+    try {
+      const project = await platform.account?.getProject(projectId);
+      if (!project) return false;
+      const spark = project.database?.postgres_engine === 'spark';
+      sparkProjects.set(projectId, spark);
+      return spark;
+    } catch {
+      return false;
+    }
+  };
+
   const server = createMcpServer<ObservedTool, ObservationFact>({
     name: 'supabase',
     title: 'Supabase',
@@ -320,6 +337,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
           getDatabaseTools({
             database,
             projectId,
+            isSparkProject,
             readOnly,
             confirmation:
               elicitationCodec &&

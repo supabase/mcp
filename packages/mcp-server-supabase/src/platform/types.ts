@@ -326,6 +326,10 @@ export const notebookWithContentSchema = notebookSchema.extend({
 
 export type Organization = z.infer<typeof organizationSchema>;
 export type Project = z.infer<typeof projectSchema>;
+/** The project detail endpoint also reports the database engine. */
+export type ProjectDetail = Project & {
+  database?: { postgres_engine?: string };
+};
 export type Branch = z.infer<typeof branchSchema>;
 export type EdgeFunction = z.infer<typeof edgeFunctionSchema>;
 export type EdgeFunctionWithBody = z.infer<typeof edgeFunctionWithBodySchema>;
@@ -370,7 +374,7 @@ export type AccountOperations = {
   listOrganizations(): Promise<{ id: string; slug: string; name: string }[]>;
   getOrganization(organizationId: string): Promise<Organization>;
   listProjects(): Promise<Project[]>;
-  getProject(projectId: string): Promise<Project>;
+  getProject(projectId: string): Promise<ProjectDetail>;
   createProject(options: CreateProjectOptions): Promise<Project>;
   pauseProject(projectId: string): Promise<void>;
   restoreProject(projectId: string): Promise<void>;

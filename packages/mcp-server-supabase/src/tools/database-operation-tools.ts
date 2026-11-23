@@ -15,7 +15,6 @@ import {
 import { ToolCallerError } from '../errors.js';
 import type { ObservationFact } from '../observation.js';
 import {
-  isCatalogGap,
   listExtensionsFallback,
   listTablesFallback,
 } from '../pg-meta/catalog-fallback.js';
@@ -48,6 +47,8 @@ import {
 type DatabaseOperationToolsOptions = {
   database: DatabaseOperations;
   projectId?: string;
+  /** Whether the project runs on Spark. Absent for platforms that cannot tell: the project is then Postgres. */
+  isSparkProject?: (projectId: string) => Promise<boolean>;
   readOnly?: boolean;
   confirmation?: {
     codec: RequestStateCodec<ElicitationState>;
@@ -288,6 +289,7 @@ export const databaseToolDefs = {
 export function getDatabaseTools({
   database,
   projectId,
+  isSparkProject,
   readOnly,
   confirmation,
 }: DatabaseOperationToolsOptions) {
@@ -298,17 +300,9 @@ export function getDatabaseTools({
       ...databaseToolDefs.list_tables,
       inject: { project_id },
       execute: async ({ project_id, schemas, verbose }) => {
-        const { query, parameters } = listTablesSql(schemas);
-        const data = await database
-          .executeSql<unknown>(project_id, {
-            query,
-            parameters,
-            read_only: true,
-          })
-          // TEMPORARY: see pg-meta/catalog-fallback.ts.
-          .catch((error) => {
-            if (!isCatalogGap(error)) throw error;
-            return listTablesFallback(
+        // TEMPORARY: see pg-meta/catalog-fallback.ts.
+        const data = (await isSparkProject?.(project_id))
+          ? await listTablesFallback(
               (query, parameters) =>
                 database.executeSql(project_id, {
                   query,
@@ -316,10 +310,11 @@ export function getDatabaseTools({
                   read_only: true,
                 }),
               schemas
-            ).catch(() => {
-              throw error;
+            )
+          : await database.executeSql<unknown>(project_id, {
+              ...listTablesSql(schemas),
+              read_only: true,
             });
-          });
         const parsedTables = data.map((table) =>
           postgresTableSchema.parse(table)
         );
@@ -463,21 +458,15 @@ export function getDatabaseTools({
       ...databaseToolDefs.list_extensions,
       inject: { project_id },
       execute: async ({ project_id }) => {
-        const query = listExtensionsSql();
-        const data = await database
-          .executeSql<unknown>(project_id, {
-            query,
-            read_only: true,
-          })
-          // TEMPORARY: see pg-meta/catalog-fallback.ts.
-          .catch((error) => {
-            if (!isCatalogGap(error)) throw error;
-            return listExtensionsFallback((query) =>
+        // TEMPORARY: see pg-meta/catalog-fallback.ts.
+        const data = (await isSparkProject?.(project_id))
+          ? await listExtensionsFallback((query) =>
               database.executeSql(project_id, { query, read_only: true })
-            ).catch(() => {
-              throw error;
+            )
+          : await database.executeSql<unknown>(project_id, {
+              query: listExtensionsSql(),
+              read_only: true,
             });
-          });
         const extensions = data.map((extension) =>
           postgresExtensionSchema.parse(extension)
         );
