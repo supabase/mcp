@@ -69,7 +69,7 @@ Decide whether the user wants the view every time the tool runs:
 
 A view that the user and the agent edit together, such as the query block, does two things (see `src/shared/query-block-agent.ts`):
 
-- **Shares what it shows as model context** with `app.updateModelContext`: here the SQL, its revision and the results' shape, never the rows. It marks the context as data, not instructions. Claude and ChatGPT both read it.
-- **Offers tools of its own** with `app.registerTool`, registered in `useMcpView`'s `onAppCreated` so they're declared before the handshake: here `read_query` and `set_query_draft`. Only hosts that call view tools use them (Claude today; ChatGPT documents no way for the model to change an open widget). Edits pass the revision they read, so they never overwrite the user's typing, and they never run anything: the user does.
+- **Shares what it shows as model context** with `app.updateModelContext`: here the SQL, its revision and the results' shape, never the rows. It marks the context as data, not instructions, and titles it for ChatGPT (`openai/title`).
+- **Offers tools of its own**, here `read_query` and `set_query_draft`, defined once and registered both ways hosts take view tools. MCP Apps view tools (`app.registerTool`, in `useMcpView`'s `onAppCreated` so the handshake declares them) are for Claude. WebMCP (`document.modelContext.registerTool`) is for ChatGPT and Codex desktop, which don't support `app.registerTool` (see the [OpenAI MCP Extensions spec](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md) and its Bits & Bolts plugin). Edits pass the revision they read, so they never overwrite the user's typing, and they never run anything: the user does.
 
 Keep views small. The whole HTML is sent on every `resources/read`, so prefer system fonts and SVG icons, and avoid heavy dependencies unless a view really needs them.
