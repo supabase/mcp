@@ -1,0 +1,91 @@
+{
+  "name": "@supabase/mcp-server-supabase",
+  "mcpName": "com.supabase/mcp",
+  "version": "0.17.0",
+  "description": "MCP server for interacting with Supabase",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supabase/mcp.git"
+  },
+  "type": "module",
+  "main": "dist/index.cjs",
+  "types": "dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "dist/**/*"
+  ],
+  "bin": {
+    "mcp-server-supabase": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.cjs"
+    },
+    "./platform": {
+      "types": "./dist/platform/index.d.ts",
+      "import": "./dist/platform/index.js",
+      "default": "./dist/platform/index.cjs"
+    },
+    "./platform/api": {
+      "types": "./dist/platform/api-platform.d.ts",
+      "import": "./dist/platform/api-platform.js",
+      "default": "./dist/platform/api-platform.cjs"
+    }
+  },
+  "dependencies": {
+    "@mjackson/multipart-parser": "^0.10.1",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "common-tags": "^1.8.2",
+    "gqlmin": "^0.3.1",
+    "graphql": "^16.11.0",
+    "openapi-fetch": "^0.13.5",
+    "@supabase/mcp-utils": "^0.10.0"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "@ai-sdk/anthropic": "^3.0.47",
+    "@ai-sdk/mcp": "^1.0.21",
+    "@electric-sql/pglite": "^0.2.17",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@total-typescript/tsconfig": "^1.0.4",
+    "@types/common-tags": "^1.8.4",
+    "@types/node": "^22.8.6",
+    "@vitest/coverage-v8": "^2.1.9",
+    "ai": "^6.0.100",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.5.0",
+    "msw": "^2.7.3",
+    "nanoid": "^5.1.5",
+    "openapi-typescript": "^7.5.0",
+    "openapi-typescript-helpers": "^0.0.15",
+    "prettier": "^3.3.3",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.19",
+    "vitest": "^2.1.9",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "scripts": {
+    "build": "tsup --clean",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prebuild": "pnpm typecheck",
+    "registry:update": "tsx scripts/registry/update-version.ts && biome format --write server.json",
+    "registry:login": "scripts/registry/login.sh",
+    "registry:publish": "mcp-publisher publish",
+    "test": "vitest",
+    "test:unit": "vitest --project unit",
+    "test:e2e": "vitest --project e2e",
+    "test:integration": "vitest --project integration",
+    "test:coverage": "vitest --coverage",
+    "generate:management-api-types": "node scripts/generate-management-api-types.mjs"
+  }
+}
