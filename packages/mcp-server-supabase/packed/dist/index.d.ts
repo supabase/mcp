@@ -11,17 +11,17 @@ declare const CURRENT_FEATURE_GROUPS: readonly ["docs", "account", "database", "
 declare const featureGroupSchema: z.ZodPipe<z.ZodUnion<readonly [z.ZodEnum<{
     debug: "debug";
 }>, z.ZodEnum<{
+    storage: "storage";
+    database: "database";
+    feedback: "feedback";
     docs: "docs";
     account: "account";
-    database: "database";
     debugging: "debugging";
     development: "development";
     functions: "functions";
     branching: "branching";
-    storage: "storage";
     notebooks: "notebooks";
-    feedback: "feedback";
-}>]>, z.ZodTransform<"docs" | "account" | "database" | "debugging" | "development" | "functions" | "branching" | "storage" | "notebooks" | "feedback", "debug" | "docs" | "account" | "database" | "debugging" | "development" | "functions" | "branching" | "storage" | "notebooks" | "feedback">>;
+}>]>, z.ZodTransform<"storage" | "database" | "feedback" | "docs" | "account" | "debugging" | "development" | "functions" | "branching" | "notebooks", "storage" | "database" | "feedback" | "docs" | "account" | "debugging" | "development" | "functions" | "branching" | "notebooks" | "debug">>;
 type FeatureGroup = z.infer<typeof featureGroupSchema>;
 
 type ObservedTool = ElicitationToolName | 'other';
@@ -679,13 +679,13 @@ declare const debuggingToolDefs: {
         readonly parameters: z.ZodObject<{
             project_id: z.ZodString;
             service: z.ZodEnum<{
-                storage: "storage";
                 api: "api";
                 "branch-action": "branch-action";
                 postgres: "postgres";
                 "edge-function": "edge-function";
                 "edge-function-runtime": "edge-function-runtime";
                 auth: "auth";
+                storage: "storage";
                 realtime: "realtime";
             }>;
             iso_timestamp_start: z.ZodOptional<z.ZodISODateTime>;
@@ -1798,13 +1798,13 @@ declare const supabaseMcpToolSchemas: {
         inputSchema: z.ZodObject<{
             project_id: z.ZodString;
             service: z.ZodEnum<{
-                storage: "storage";
                 api: "api";
                 "branch-action": "branch-action";
                 postgres: "postgres";
                 "edge-function": "edge-function";
                 "edge-function-runtime": "edge-function-runtime";
                 auth: "auth";
+                storage: "storage";
                 realtime: "realtime";
             }>;
             iso_timestamp_start: z.ZodOptional<z.ZodISODateTime>;

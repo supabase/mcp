@@ -148,24 +148,24 @@ declare const migrationSchema: z.ZodObject<{
     name: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 declare const logsServiceSchema: z.ZodEnum<{
-    storage: "storage";
     api: "api";
     "branch-action": "branch-action";
     postgres: "postgres";
     "edge-function": "edge-function";
     "edge-function-runtime": "edge-function-runtime";
     auth: "auth";
+    storage: "storage";
     realtime: "realtime";
 }>;
 declare const getLogsOptionsSchema: z.ZodObject<{
     service: z.ZodEnum<{
-        storage: "storage";
         api: "api";
         "branch-action": "branch-action";
         postgres: "postgres";
         "edge-function": "edge-function";
         "edge-function-runtime": "edge-function-runtime";
         auth: "auth";
+        storage: "storage";
         realtime: "realtime";
     }>;
     iso_timestamp_start: z.ZodOptional<z.ZodString>;
