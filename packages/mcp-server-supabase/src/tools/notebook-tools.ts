@@ -5,7 +5,7 @@ import {
 } from '@modelcontextprotocol/server';
 import type { ToolObservation } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
-import { ToolCallerError } from '../errors.js';
+import { ToolCallerError } from '@supabase/mcp-utils';
 import type { ObservationFact } from '../observation.js';
 import { resolveLogWindow } from '../logs.js';
 import type {

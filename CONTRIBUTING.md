@@ -53,7 +53,7 @@ For a custom local API, replace the placeholders:
 pnpm dev:http --api-url 'http://127.0.0.1:<port>' --secret-url-template '<absolute URL containing {ref} and {name}>'
 ```
 
-In this package's local HTTP server, signed `requestState` used by secret collection, cost confirmation, destructive SQL confirmation, mutating notebook run confirmation, and notebook deletion confirmation expires after 120 seconds. The secret tool retains a separate 600-second timestamp-based recovery window for fresh calls; this does not extend URL or token validity. Watch restarts invalidate pending state. Restart the server in your MCP client after each change.
+In this package's local HTTP server, signed `requestState` used by cost confirmation, destructive SQL confirmation, mutating notebook run confirmation, and notebook deletion confirmation expires after 600 seconds; URL secret-collection state expires after 120 seconds. The secret tool retains a separate 600-second timestamp-based recovery window for fresh calls; this does not extend URL or token validity. Watch restarts invalidate pending state. Restart the server in your MCP client after each change.
 
 Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--secret-url-template`, `--version`.
 

@@ -3,9 +3,12 @@ import {
   type RequestStateCodec,
   type ServerContext,
 } from '@modelcontextprotocol/server';
-import { type ToolObservation, tool } from '@supabase/mcp-utils';
+import {
+  type ToolObservation,
+  tool,
+  ToolCallerError,
+} from '@supabase/mcp-utils';
 import type { ObservationFact } from '../observation.js';
-import { ToolCallerError } from '../errors.js';
 import { z } from 'zod/v4';
 import type { ToolDefs } from './util.js';
 import {
@@ -174,7 +177,8 @@ export const accountToolDefs = {
     },
   },
   get_project: {
-    description: 'Gets details for a Supabase project.',
+    description:
+      'Gets details for a Supabase project. `status` is `ACTIVE_HEALTHY` when the project is ready for database tools; other values such as `COMING_UP`, `RESTORING`, or `INACTIVE` (paused) mean database calls will fail or time out.',
     parameters: getProjectInputSchema,
     outputSchema: getProjectOutputSchema,
     annotations: {
@@ -212,7 +216,7 @@ export const accountToolDefs = {
     },
   },
   create_project: {
-    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to any nonzero quoted cost before the project is created. ${callBeforeConfirmingDescription} A project quoted at $0 may be created without a cost-confirmation form. Always ask the user which organization to create the project in. The project can take a few minutes to initialize - use \`get_project\` to check the status.`,
+    description: `Creates a new Supabase project, which can add to the organization's bill. The user must agree to any nonzero quoted cost before the project is created. ${callBeforeConfirmingDescription} A project quoted at $0 may be created without a cost-confirmation form. Always ask the user which organization to create the project in. The project can take a few minutes to initialize. Call \`get_project\`, waiting a few seconds between checks, until \`status\` is \`ACTIVE_HEALTHY\` before running SQL, migrations, or other database tools against it. If \`status\` becomes \`INIT_FAILED\` or \`REMOVED\`, stop and tell the user.`,
     parameters: createProjectInputSchema,
     outputSchema: createProjectOutputSchema,
     annotations: {
@@ -415,7 +419,9 @@ export function getAccountTools({
         // Legacy clients only: form-capable clients returned above. Without
         // this, a missing ID would hit the opaque hash-mismatch error below.
         if (!confirm_cost_id) {
-          throw new ToolCallerError(missingConfirmCostIdMessage);
+          throw new ToolCallerError(missingConfirmCostIdMessage, {
+            kind: 'confirmation_required',
+          });
         }
 
         const cost = await getNextProjectCost(account, organization_id);
@@ -430,7 +436,8 @@ export function getAccountTools({
         const costHash = await hashObject(cost);
         if (costHash !== confirm_cost_id) {
           throw new ToolCallerError(
-            'Cost confirmation ID does not match the expected cost of creating a project.'
+            'Cost confirmation ID does not match the expected cost of creating a project.',
+            { kind: 'confirmation_required' }
           );
         }
 

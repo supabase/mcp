@@ -7,7 +7,7 @@ import {
   type DocumentNode,
 } from 'graphql';
 import { z } from 'zod/v4';
-import { ToolCallerError } from '../errors.js';
+import { ToolCallerError } from '@supabase/mcp-utils';
 
 export const graphqlRequestSchema = z.object({
   query: z.string(),
@@ -24,7 +24,16 @@ export const graphqlErrorSchema = z.object({
       })
     )
     .optional(),
+  path: z.array(z.union([z.string(), z.number()])).optional(),
 });
+
+// Request-validation messages the Content API route
+// (supabase/supabase apps/docs/app/api/graphql/route.ts) returns for GET
+// requests, without `locations`.
+const getOperationValidationMessages: readonly string[] = [
+  'GET requests must specify an operation name or send only a single operation',
+  'GET requests may only execute query operations',
+];
 
 export const graphqlResponseSchema = z.object({
   data: z.record(z.string(), z.unknown()).nullish(),
@@ -129,7 +138,8 @@ export class GraphQLClient {
     }
 
     if (options.validateSchema) {
-      // Schema load failures are server faults, so they stay unbranded.
+      // Schema load failures reject `schemaLoaded`. Outages stay plain errors; a validation
+      // error from the schema query is branded like any other by `#query`.
       const { schema } = await this.schemaLoaded;
       const errors = validate(schema, documentNode);
       if (errors.length > 0) {
@@ -189,16 +199,26 @@ export class GraphQLClient {
     }
 
     if (data.errors?.length) {
-      throw new Error(
-        `Supabase Content API GraphQL error: ${data.errors
-          .map((err) => {
-            const location = err.locations?.[0];
-            return location
-              ? `${err.message} (line ${location.line}, column ${location.column})`
-              : err.message;
-          })
-          .join(', ')}`
+      const message = `Supabase Content API GraphQL error: ${data.errors
+        .map((err) => {
+          const location = err.locations?.[0];
+          return location
+            ? `${err.message} (line ${location.line}, column ${location.column})`
+            : err.message;
+        })
+        .join(', ')}`;
+
+      // Only request-validation errors reflect the caller's query: no `path`,
+      // and either `locations` or a known GET-operation message. Anything else
+      // (an execution error with a `path`, or an outage envelope such as
+      // `Internal Server Error`) is a Content API fault.
+      const isCallerError = data.errors.every(
+        (err) =>
+          !err.path &&
+          (err.locations !== undefined ||
+            getOperationValidationMessages.includes(err.message))
       );
+      throw isCallerError ? new ToolCallerError(message) : new Error(message);
     }
 
     if (!data.data) {

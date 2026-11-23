@@ -25,9 +25,11 @@ const confirmation = {
   requestState: {
     key: 'a'.repeat(32),
     principal: 'PRIVATE_PRINCIPAL',
+  },
+  confirmation: {
+    enabledTools: ['create_project', 'create_branch'],
     ttlSeconds: 60,
   },
-  confirmation: { enabledTools: ['create_project', 'create_branch'] },
 } satisfies NonNullable<SupabaseMcpServerOptions['elicitation']>;
 const form: ClientCapabilities = { elicitation: { form: {} } };
 const tools = ['create_project', 'create_branch'] as const;

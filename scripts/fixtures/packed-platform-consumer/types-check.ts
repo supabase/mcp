@@ -55,12 +55,12 @@ const optionsWithElicitation: SupabaseMcpServerOptions = {
     requestState: {
       key: 'a'.repeat(32),
       principal: 'packed-consumer-fixture',
-      ttlSeconds: 120,
     },
-    confirmation: { enabledTools },
+    confirmation: { enabledTools, ttlSeconds: 600 },
     secretCollection: {
       connectUrlTemplate:
         'https://example.com/dashboard/mcp/secrets?ref={ref}&name={name}',
+      ttlSeconds: 120,
     },
   },
 };

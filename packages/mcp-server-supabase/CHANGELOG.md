@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.17.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.16.1...mcp-server-supabase-v0.17.0) (2026-11-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **elicitation:** split confirmation and secret collection TTLs ([#538](https://github.com/supabase/mcp/issues/538))
+
+### Features
+
+* agent feedback capabilities including docs ([#488](https://github.com/supabase/mcp/issues/488)) ([698ccd5](https://github.com/supabase/mcp/commit/698ccd5affc847c37b7d57dd719afe9bc97588d7))
+* **elicitation:** split confirmation and secret collection TTLs ([#538](https://github.com/supabase/mcp/issues/538)) ([8a08e48](https://github.com/supabase/mcp/commit/8a08e48de4af80d26bf5d64dc812e865083eb6ff))
+* tag cost-confirmation errors and report caller-input errors as ToolCallerError ([#543](https://github.com/supabase/mcp/issues/543)) ([ac366c4](https://github.com/supabase/mcp/commit/ac366c4fcad94b6b6b2aea04d9c3519ceca14975))
+
+
+### Bug Fixes
+
+* **content api:** report GraphQL errors that have no locations ([#528](https://github.com/supabase/mcp/issues/528)) ([6b2fca9](https://github.com/supabase/mcp/commit/6b2fca972b5264474949fd738f02537082f5c898))
+* **mcp:** confirm UPDATEs without WHERE that have a leading comment, ONLY or an alias ([#524](https://github.com/supabase/mcp/issues/524)) ([7df9fb8](https://github.com/supabase/mcp/commit/7df9fb83c60b35b1f951526042ffef992b81f821))
+* **mcp:** don't read semicolons or EXECUTE inside data literals as destructive SQL ([#533](https://github.com/supabase/mcp/issues/533)) ([0dcdd2d](https://github.com/supabase/mcp/commit/0dcdd2d0cb0eaef5eb673f649d36f98783c36876))
+* tell agents the log window, project readiness, docs query and SQL size rules up front ([#542](https://github.com/supabase/mcp/issues/542)) ([23f0df0](https://github.com/supabase/mcp/commit/23f0df0ff598ef35a25ef66e5faae9fe44a7190f))
+
 ## [0.16.1](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.16.0...mcp-server-supabase-v0.16.1) (2026-11-06)
 
 

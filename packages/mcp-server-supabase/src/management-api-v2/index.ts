@@ -9,7 +9,7 @@ import type {
   SuccessResponse as OpenApiSuccessResponse,
 } from 'openapi-typescript-helpers';
 import { z } from 'zod/v4';
-import { ToolCallerError } from '../errors.js';
+import { ToolCallerError } from '@supabase/mcp-utils';
 import type { paths } from './types.js';
 
 export function createManagementApiV2Client(
