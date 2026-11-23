@@ -116,7 +116,7 @@
     /* LogList. */
     :where([data-slot="body"] [data-slot="list"]) {
       flex: 1;
-      min-block-size: 0;
+      min-block-size: 120px;
       min-inline-size: 0;
       padding: var(--sb-space-1);
       overflow: auto;
@@ -218,24 +218,26 @@
       white-space: nowrap;
     }
 
-    /* LogDetailPanel: inset 8px, a lg-radius panel on the muted surface;
-       below the list at half its height, or 288px beside it. */
+    /* LogDetailPanel: a section docked under the list, or beside it on wide
+       views, edge to edge with only a hairline between them, so the list
+       keeps the rest of the height and stays scrollable. */
     :where([data-slot="body"] [data-slot="detail"]) {
       display: flex;
       flex: none;
       flex-direction: column;
       min-block-size: 0;
-      max-block-size: 50%;
-      margin: var(--sb-space-2);
+      max-block-size: 240px;
       overflow: hidden;
-      border: var(--border-width-regular) solid var(--sb-color-border);
-      border-radius: var(--border-radius-lg);
-      background: var(--sb-color-muted);
+      border-block-start: var(--border-width-regular) solid
+        var(--sb-color-border);
 
       @container (min-width: 48rem) {
         inline-size: 288px;
         min-inline-size: 240px;
         max-block-size: none;
+        border-block-start: none;
+        border-inline-start: var(--border-width-regular) solid
+          var(--sb-color-border);
       }
     }
 
