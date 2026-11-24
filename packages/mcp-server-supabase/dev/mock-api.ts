@@ -649,7 +649,7 @@ route('GET', '/v1/profile', () => ({
 // Advisor lints, as the database linter reports them: a few warning and
 // error lints over several objects, and info lints the issues view leaves out.
 function lint(
-  category: 'SECURITY' | 'PERFORMANCE',
+  category: 'SECURITY' | 'PERFORMANCE' | 'HEALTH',
   name: string,
   title: string,
   level: 'ERROR' | 'WARN' | 'INFO',
@@ -753,6 +753,30 @@ route('GET', '/v1/projects/{ref}/advisors/{type}', ({ params }) => {
   const lints = ADVISOR_LINTS[params.type as keyof typeof ADVISOR_LINTS];
   if (!lints) return notFound(`Unknown advisor: ${params.type}`);
   return { body: { lints } };
+});
+
+// The health advisor runs log-based checks, as the v2 API does.
+route('POST', '/v2/projects/{ref}/advisors/run', ({ params }) => {
+  if (!projects.has(params.ref!))
+    return notFound(`Project not found: ${params.ref}`);
+  return {
+    body: {
+      data: {
+        type: 'project_advisors',
+        attributes: {
+          lints: [
+            lint(
+              'HEALTH',
+              'log_auth_error_rate_high',
+              'Auth error rate is high',
+              'WARN',
+              'auth'
+            ),
+          ],
+        },
+      },
+    },
+  };
 });
 
 // What `--secret-url-template` points at, so clicking it doesn't 404.

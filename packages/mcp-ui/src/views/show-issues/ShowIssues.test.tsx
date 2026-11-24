@@ -107,6 +107,35 @@ describe('ShowIssues', () => {
     ).toBe('critical');
   });
 
+  it('lists health issues after security and performance, where the server reads them', () => {
+    host.toolCall = {
+      status: 'ready',
+      data: {
+        ...ISSUES,
+        health: {
+          status: 'ready',
+          data: {
+            total: 1,
+            truncated: false,
+            issues: [
+              {
+                name: 'log_auth_error_rate_high',
+                title: 'Auth error rate is high',
+                level: 'WARN',
+                count: 1,
+              },
+            ],
+          },
+        },
+      },
+    };
+    render(<ShowIssues />);
+
+    expect(rows().at(-1)).toBe(
+      'Auth error rate is highHealth · Warning · 1 finding'
+    );
+  });
+
   it('says an advisor found nothing, rather than showing an empty list', () => {
     host.toolCall = {
       status: 'ready',
