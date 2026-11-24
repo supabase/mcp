@@ -65,16 +65,6 @@
       color: var(--sb-color-primary);
     }
 
-    :where([data-slot="issue"] [data-slot="issue-level"]) {
-      display: flex;
-      flex: none;
-      color: var(--sb-color-warning);
-
-      &:where([data-tone="destructive"]) {
-        color: var(--sb-color-destructive);
-      }
-    }
-
     :where([data-slot="issue"] [data-slot="issue-text"]) {
       display: flex;
       flex: 1;

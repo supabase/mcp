@@ -4,7 +4,8 @@ import './issues-list.css';
 import { type ReactNode, useId, useRef, useState } from 'react';
 
 import { Admonition } from './Admonition';
-import { CircleAlertIcon, CircleCheckIcon, TriangleAlertIcon } from './icons';
+import { CircleCheckIcon } from './icons';
+import { SeverityIndicator } from './SeverityIndicator';
 
 export const ADVISOR_CATEGORIES = {
   security: 'Security',
@@ -100,18 +101,10 @@ function CategoryRows({
         <IssueRow
           key={`${category}:${issue.name}:${issue.level}:${issue.title}`}
           icon={
-            <span
-              role="img"
-              aria-label={levelLabel(issue.level)}
-              data-slot="issue-level"
-              data-tone={issue.level === 'ERROR' ? 'destructive' : 'warning'}
-            >
-              {issue.level === 'ERROR' ? (
-                <CircleAlertIcon />
-              ) : (
-                <TriangleAlertIcon />
-              )}
-            </span>
+            <SeverityIndicator
+              severity={issue.level === 'ERROR' ? 'critical' : 'warning'}
+              label={levelLabel(issue.level)}
+            />
           }
           title={issue.title}
           description={`${label} · ${levelLabel(issue.level)} · ${issue.count} ${issue.count === 1 ? 'finding' : 'findings'}`}
