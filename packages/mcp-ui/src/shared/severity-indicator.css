@@ -1,0 +1,26 @@
+@layer components {
+  /* Severity bars (see SeverityIndicator), 12px, filled in the severity's
+     color, the rest in Studio's stronger border. */
+  :where(.severity-indicator) {
+    flex: none;
+    inline-size: 12px;
+    block-size: 12px;
+    color: var(--sb-color-tertiary-foreground);
+
+    &:where([data-severity="warning"]) {
+      color: var(--sb-color-warning);
+    }
+
+    &:where([data-severity="critical"]) {
+      color: var(--sb-color-destructive);
+    }
+
+    :where(rect) {
+      fill: var(--sb-color-border-stronger);
+
+      &:where([data-filled="true"]) {
+        fill: currentColor;
+      }
+    }
+  }
+}

@@ -90,7 +90,21 @@ describe('ShowIssues', () => {
       'Function Search Path MutableSecurity · Warning · 1 finding',
       'PerformanceFailed to fetch performance advisors',
     ]);
-    expect(screen.getByRole('img', { name: 'Error' })).toBeTruthy();
+  });
+
+  it('ranks each issue with severity bars, as Studio’s issues page does', () => {
+    render(<ShowIssues />);
+
+    // Errors fill all three bars (red), warnings two (yellow).
+    const filled = (label: string) =>
+      screen
+        .getByRole('img', { name: label })
+        .querySelectorAll('rect[data-filled="true"]').length;
+    expect(filled('Error')).toBe(3);
+    expect(filled('Warning')).toBe(2);
+    expect(
+      screen.getByRole('img', { name: 'Error' }).getAttribute('data-severity')
+    ).toBe('critical');
   });
 
   it('says an advisor found nothing, rather than showing an empty list', () => {
