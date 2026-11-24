@@ -67,10 +67,26 @@ type DatabaseOperationToolsOptions = {
   };
 };
 
+// Why a SQL call needs confirmation, as shown in the prompt. `reconfirm` is a
+// resend of a confirmation this server already issued for SQL that no longer
+// classifies as destructive.
+type SqlConfirmationPromptReason = 'destructive' | 'reconfirm';
+
+function sqlConfirmationFirstLine(reason: SqlConfirmationPromptReason) {
+  switch (reason) {
+    case 'destructive':
+      return 'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).';
+    case 'reconfirm':
+      return 'This SQL was flagged for confirmation earlier and still needs your approval.';
+  }
+}
+
 async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
   query: string,
   options: ConfirmationStateOptions<S> & {
-    askForConfirmation: () => Promise<InputRequiredResult>;
+    askForConfirmation: (
+      reason: SqlConfirmationPromptReason
+    ) => Promise<InputRequiredResult>;
   }
 ): Promise<CallToolResult | InputRequiredResult | undefined> {
   const { observation, askForConfirmation } = options;
@@ -92,7 +108,26 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
       : undefined,
   });
 
-  if (confirmationState.kind !== 'proceed' && !isDestructiveSql(query)) {
+  // A decline or cancel ends the request before classifying, so a classifier
+  // failure can't hide the user's answer.
+  const classify =
+    confirmationState.kind === 'reprompt' ||
+    confirmationState.kind === 'terminal';
+  // A reprompt for any reason but `initial` means the request carries state
+  // this server issued for this tool and these arguments.
+  const hasMatchingState =
+    confirmationState.kind === 'reprompt' &&
+    confirmationState.reason !== 'initial';
+  // Once this server has issued a confirmation for this exact SQL, only an
+  // accepted resend runs it, whatever the classifier says now.
+  const reason: SqlConfirmationPromptReason | undefined = classify
+    ? isDestructiveSql(query)
+      ? 'destructive'
+      : hasMatchingState
+        ? 'reconfirm'
+        : undefined
+    : undefined;
+  if (classify && !reason) {
     record?.({
       kind: 'confirmation_decision',
       feature: 'destructive_sql',
@@ -116,8 +151,8 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
       record(fact);
     }
   }
-  if (confirmationState.kind === 'reprompt') {
-    const result = await askForConfirmation();
+  if (confirmationState.kind === 'reprompt' && reason) {
+    const result = await askForConfirmation(reason);
     record?.({
       kind: 'input_required',
       feature: 'destructive_sql',
@@ -126,7 +161,10 @@ async function checkDestructiveSqlConfirmation<S extends DestructiveSqlState>(
     });
     return result;
   }
-  if (confirmationState.kind === 'terminal') {
+  if (
+    confirmationState.kind === 'terminal' ||
+    confirmationState.kind === 'answered'
+  ) {
     return confirmationState.result;
   }
 }
@@ -649,13 +687,15 @@ export function getDatabaseTools({
             ctx.mcpReq.requestState() === undefined
               ? undefined
               : await hashObject({ query });
-          const askForConfirmation = async () =>
+          const askForConfirmation = async (
+            reason: SqlConfirmationPromptReason
+          ) =>
             inputRequired({
               inputRequests: {
                 confirm_destructive: inputRequired.elicit({
                   mode: 'form',
                   message: [
-                    'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
+                    sqlConfirmationFirstLine(reason),
                     'It may permanently remove data, tables, schemas or other objects.',
                     `Apply the migration to project ${project_id}?`,
                   ].join('\n'),
@@ -739,13 +779,15 @@ export function getDatabaseTools({
             ctx.mcpReq.requestState() === undefined
               ? undefined
               : await hashObject({ query });
-          const askForConfirmation = async () =>
+          const askForConfirmation = async (
+            reason: SqlConfirmationPromptReason
+          ) =>
             inputRequired({
               inputRequests: {
                 confirm_destructive: inputRequired.elicit({
                   mode: 'form',
                   message: [
-                    'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
+                    sqlConfirmationFirstLine(reason),
                     'It may permanently remove data, tables, schemas or other objects.',
                     `Run it on project ${project_id}?`,
                   ].join('\n'),

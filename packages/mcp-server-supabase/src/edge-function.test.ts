@@ -71,6 +71,11 @@ describe('getDefaultImportMapPath', () => {
     [['index.ts', 'import_map.json', 'deno.jsonc', 'deno.json'], 'deno.json'],
     [['import_map.json', 'deno.jsonc', 'index.ts'], 'deno.jsonc'],
     [['deno.json', 'deno.jsonc', 'import_map.json'], 'deno.json'],
+    [['./index.ts', './deno.json'], './deno.json'],
+    [['./index.ts', './deno.jsonc'], './deno.jsonc'],
+    [['./index.ts', './import_map.json'], './import_map.json'],
+    [['./import_map.json', './deno.jsonc', './deno.json'], './deno.json'],
+    [['import_map.json', './deno.jsonc'], './deno.jsonc'],
   ])('%j resolves to %s', (names, expected) => {
     expect(getDefaultImportMapPath(files(...names))).toBe(expected);
   });
@@ -85,6 +90,9 @@ describe('getDefaultImportMapPath', () => {
   it('returns undefined without a root-level import map file', () => {
     expect(
       getDefaultImportMapPath(files('index.ts', 'src/deno.json'))
+    ).toBeUndefined();
+    expect(
+      getDefaultImportMapPath(files('./index.ts', './lib/deno.json'))
     ).toBeUndefined();
   });
 });

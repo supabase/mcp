@@ -1,5 +1,5 @@
 import { codeBlock } from 'common-tags';
-import { resolve } from 'node:path/posix';
+import { normalize, resolve } from 'node:path/posix';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -73,12 +73,16 @@ export const DEFAULT_IMPORT_MAP_FILENAMES = [
 
 /**
  * Picks the import map to deploy with when none was given or previously set,
- * independent of the order the files were passed in.
+ * independent of the order the files were passed in. Matches names with or
+ * without a leading `./` and returns the name as given.
  */
 export function getDefaultImportMapPath(files: { name: string }[]) {
-  return DEFAULT_IMPORT_MAP_FILENAMES.find((filename) =>
-    files.some((file) => file.name === filename)
-  );
+  for (const filename of DEFAULT_IMPORT_MAP_FILENAMES) {
+    const match = files.find((file) => normalize(file.name) === filename);
+    if (match) {
+      return match.name;
+    }
+  }
 }
 
 export const edgeFunctionExample = codeBlock`

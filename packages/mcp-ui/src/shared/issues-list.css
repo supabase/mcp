@@ -1,0 +1,103 @@
+@layer components {
+  /*
+   * A project's advisor issues (see IssuesList), after the surfaces'
+   * IssuesList: a heading with the send confirmation and Refresh, then the
+   * issues in a card, one 56px row each, divided by hairlines.
+   */
+  :where(.issues-list) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-space-2);
+    color: var(--sb-color-foreground);
+
+    :where([data-slot="header"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-2);
+    }
+
+    :where([data-slot="header"] [data-slot="title"]) {
+      flex: 1;
+      margin: 0;
+      font-size: var(--font-text-sm-size);
+      font-weight: var(--font-weight-normal);
+      line-height: var(--font-text-sm-line-height);
+    }
+
+    :where([data-slot="header"] [data-slot="status"]) {
+      margin: 0;
+      color: var(--sb-color-tertiary-foreground);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+    }
+
+    /* Studio's text button: no outline until hovered. */
+    :where([data-slot="header"] [data-slot="refresh"]) {
+      border-color: transparent;
+    }
+
+    /* Card. */
+    :where([data-slot="list"]) {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      border: var(--border-width-regular) solid var(--sb-color-border);
+      border-radius: var(--border-radius-md);
+      background: var(--sb-color-card);
+      list-style: none;
+    }
+
+    :where([data-slot="list"] [data-slot="issue"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-3);
+      min-block-size: 56px;
+      padding: var(--sb-space-3) var(--sb-space-4);
+      border-block-end: var(--border-width-regular) solid var(--sb-color-border);
+
+      &:where(:last-child) {
+        border-block-end: none;
+      }
+    }
+
+    :where([data-slot="issue"] [data-slot="issue-icon"]) {
+      flex: none;
+      color: var(--sb-color-primary);
+    }
+
+    :where([data-slot="issue"] [data-slot="issue-level"]) {
+      display: flex;
+      flex: none;
+      color: var(--sb-color-warning);
+
+      &:where([data-tone="destructive"]) {
+        color: var(--sb-color-destructive);
+      }
+    }
+
+    :where([data-slot="issue"] [data-slot="issue-text"]) {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-inline-size: 0;
+    }
+
+    :where([data-slot="issue-text"] [data-slot="issue-title"]) {
+      overflow: hidden;
+      font-size: var(--font-text-sm-size);
+      line-height: var(--font-text-sm-line-height);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    :where([data-slot="issue-text"] [data-slot="issue-description"]) {
+      color: var(--sb-color-muted-foreground);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+    }
+
+    :where([data-slot="issue"] button) {
+      flex: none;
+    }
+  }
+}

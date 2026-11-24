@@ -683,6 +683,143 @@ describe('tools', () => {
     expect(result.import_map_path).toMatch(/custom-map\.json$/);
   });
 
+  test('updating edge function without the previous import map detects the new one', async () => {
+    const { callTool } = await setup();
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    const functionName = 'hello-world';
+
+    await project.deployEdgeFunction(
+      {
+        name: functionName,
+        entrypoint_path: 'index.ts',
+        import_map_path: 'import_map.json',
+      },
+      [
+        new File(['console.log("Hello, world!");'], 'index.ts', {
+          type: 'application/typescript',
+        }),
+        new File(['{}'], 'import_map.json', {
+          type: 'application/json',
+        }),
+      ]
+    );
+
+    const result = await callTool({
+      name: 'deploy_edge_function',
+      arguments: {
+        project_id: project.id,
+        name: functionName,
+        files: [
+          {
+            name: 'index.ts',
+            content: 'console.log("Hello, world! v2");',
+          },
+          {
+            name: 'deno.jsonc',
+            content: '{}',
+          },
+        ],
+      },
+    });
+
+    expect(result.import_map).toBe(true);
+    expect(result.import_map_path).toMatch(/deno\.jsonc$/);
+  });
+
+  test('updating edge function without any import map drops the previous one', async () => {
+    const { callTool } = await setup();
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    const functionName = 'hello-world';
+
+    await project.deployEdgeFunction(
+      {
+        name: functionName,
+        entrypoint_path: 'index.ts',
+        import_map_path: 'import_map.json',
+      },
+      [
+        new File(['console.log("Hello, world!");'], 'index.ts', {
+          type: 'application/typescript',
+        }),
+        new File(['{}'], 'import_map.json', {
+          type: 'application/json',
+        }),
+      ]
+    );
+
+    const result = await callTool({
+      name: 'deploy_edge_function',
+      arguments: {
+        project_id: project.id,
+        name: functionName,
+        files: [
+          {
+            name: 'index.ts',
+            content: 'console.log("Hello, world! v2");',
+          },
+        ],
+      },
+    });
+
+    expect(result.import_map).toBe(false);
+    expect(result.import_map_path).toBeUndefined();
+  });
+
+  test('updating edge function with ./ file names keeps the previous import map', async () => {
+    const { callTool } = await setup();
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    const functionName = 'hello-world';
+
+    await project.deployEdgeFunction(
+      {
+        name: functionName,
+        entrypoint_path: 'index.ts',
+        import_map_path: 'import_map.json',
+      },
+      [
+        new File(['console.log("Hello, world!");'], 'index.ts', {
+          type: 'application/typescript',
+        }),
+        new File(['{}'], 'import_map.json', {
+          type: 'application/json',
+        }),
+      ]
+    );
+
+    const result = await callTool({
+      name: 'deploy_edge_function',
+      arguments: {
+        project_id: project.id,
+        name: functionName,
+        files: [
+          {
+            name: './index.ts',
+            content: 'console.log("Hello, world! v2");',
+          },
+          {
+            name: './import_map.json',
+            content: '{}',
+          },
+        ],
+      },
+    });
+
+    expect(result.import_map).toBe(true);
+    expect(result.import_map_path).toMatch(/import_map\.json$/);
+  });
+
   test('deploy edge function with verify_jwt disabled', async () => {
     const { callTool } = await setup();
 
