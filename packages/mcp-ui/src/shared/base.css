@@ -83,6 +83,11 @@
       --color-border-tertiary,
       color-mix(in oklab, var(--sb-color-foreground) 13.5%, transparent)
     );
+    /* Studio's --border-stronger, e.g. the empty severity bars. */
+    --sb-color-border-stronger: var(
+      --color-border-secondary,
+      color-mix(in oklab, var(--sb-color-foreground) 25%, transparent)
+    );
     --sb-color-input: var(--sb-color-border);
     --sb-color-ring: var(
       --color-ring-primary,
