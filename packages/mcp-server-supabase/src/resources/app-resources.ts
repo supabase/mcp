@@ -119,7 +119,7 @@ export function getAppResources(): Resource[] {
     appResource(
       SHOW_ISSUES_UI_URI,
       'Issues view',
-      "A project's security and performance advisor issues, for the show_issues tool.",
+      "A project's security, performance and health advisor issues, for the show_issues tool.",
       showIssuesHtml,
       'panel'
     ),

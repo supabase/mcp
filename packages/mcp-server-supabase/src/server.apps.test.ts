@@ -342,6 +342,7 @@ describe('show_issues', () => {
     expect(JSON.parse(textOf(result))).toEqual({
       security: 2,
       performance: 0,
+      health: 1,
     });
     expect(result._meta?.[VIEW_DATA_META_KEY]).toEqual({
       security: {
@@ -369,6 +370,23 @@ describe('show_issues', () => {
         status: 'ready',
         data: { total: 0, truncated: false, issues: [] },
       },
+      // The health advisor's own check results (project inactive, check
+      // unavailable) are left out, as get_advisors leaves them out.
+      health: {
+        status: 'ready',
+        data: {
+          total: 1,
+          truncated: false,
+          issues: [
+            {
+              name: 'log_data_api_error_rate_high',
+              title: 'Data API error rate is high',
+              level: 'ERROR',
+              count: 1,
+            },
+          ],
+        },
+      },
     });
   });
 
@@ -384,6 +402,7 @@ describe('show_issues', () => {
     expect(JSON.parse(textOf(result))).toEqual({
       security: 0,
       performance: null,
+      health: 1,
     });
     const viewData = result._meta?.[VIEW_DATA_META_KEY] as {
       performance: { status: string; message: string };
