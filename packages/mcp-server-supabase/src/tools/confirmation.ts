@@ -233,6 +233,8 @@ const OUTCOME = {
 type ConfirmationDecision<S extends ConfirmationState> =
   | { kind: 'proceed'; state: S }
   | { kind: 'reprompt'; reason: RepromptReason }
+  // The user declined or cancelled the confirmation this state was issued for.
+  | { kind: 'answered'; result: CallToolResult }
   | { kind: 'terminal'; result: CallToolResult };
 
 const FEATURE = {
@@ -320,6 +322,9 @@ export async function checkConfirmationState<S extends ConfirmationState>(
     )
 > {
   const decision = inspectConfirmationState(options);
+  if (decision.kind === 'answered') {
+    return { kind: 'terminal', result: decision.result };
+  }
   if (decision.kind !== 'reprompt') {
     return decision;
   }
@@ -422,7 +427,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
 
   if (response.action === 'decline') {
     return {
-      kind: 'terminal',
+      kind: 'answered',
       result: terminalResult('declined', declinedText),
     };
   }
@@ -433,7 +438,7 @@ export function inspectConfirmationState<S extends ConfirmationState>(
         ? ''
         : `The client cancelled this confirmation ${(Math.round(elapsedMs / 100) / 10).toFixed(1)} s after it was sent. `;
     return {
-      kind: 'terminal',
+      kind: 'answered',
       result: terminalResult(
         'cancelled',
         `${timing}Nothing was run. If you didn't see a confirmation prompt, your client may have cancelled it automatically.`

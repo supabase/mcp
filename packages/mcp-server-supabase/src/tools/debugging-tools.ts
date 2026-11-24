@@ -1,4 +1,6 @@
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
+import { VIEW_DATA_META_KEY } from '../apps/index.js';
 import { resolveLogWindow } from '../logs.js';
 import {
   logsServiceSchema,
@@ -10,6 +12,10 @@ import {
   type ToolDefs,
   wrapWithUntrustedDataBoundary,
 } from './util.js';
+import {
+  SHOW_ISSUES_UI_URI,
+  viewToolMeta,
+} from '../resources/app-resources.js';
 
 export const DEFAULT_LOGS_DIALECT: LogsDialect = 'clickhouse';
 
@@ -224,6 +230,90 @@ export function groupAdvisorsResult(result: unknown): unknown {
   return { ...result, lints: groupAdvisorLints(lints) };
 }
 
+/** Most issue types `show_issues` sends its view per advisor. */
+export const SHOW_ISSUES_TYPE_LIMIT = 20;
+
+const showIssuesInputSchema = z.object({
+  project_id: z.string(),
+});
+
+const issueTypeCountSchema = z
+  .number()
+  .nullable()
+  .describe(
+    "Warning and error issue types the advisor found; null when it couldn't be read."
+  );
+
+const showIssuesOutputSchema = z.object({
+  security: issueTypeCountSchema,
+  performance: issueTypeCountSchema,
+});
+
+/** One kind of advisor finding, with how many objects it applies to. */
+export type AdvisorIssue = {
+  name: string;
+  title: string;
+  level: 'ERROR' | 'WARN';
+  count: number;
+};
+
+/** One advisor's issues, or why it couldn't be read (never "no issues"). */
+export type AdvisorSection =
+  | {
+      status: 'ready';
+      data: { total: number; issues: AdvisorIssue[]; truncated: boolean };
+    }
+  | { status: 'unavailable'; message: string };
+
+/** What `show_issues` sends its view in result `_meta`. */
+export type ShowIssuesViewData = {
+  security: AdvisorSection;
+  performance: AdvisorSection;
+};
+
+/**
+ * Summarizes an advisors response as the Supabase surfaces show it: one
+ * issue per warning or error lint, errors first, then the most findings.
+ */
+export function advisorSection(result: unknown): AdvisorSection {
+  const lints =
+    typeof result === 'object' && result !== null && 'lints' in result
+      ? (result as { lints: unknown }).lints
+      : undefined;
+  if (!isAdvisorLintArray(lints)) {
+    return {
+      status: 'unavailable',
+      message: 'The advisor returned an unexpected response.',
+    };
+  }
+
+  const issues = new Map<string, AdvisorIssue>();
+  for (const lint of lints) {
+    const { name, title, level } = lint;
+    if (level !== 'ERROR' && level !== 'WARN') continue;
+    if (typeof name !== 'string' || typeof title !== 'string') continue;
+    const key = JSON.stringify([name, title, level]);
+    const issue = issues.get(key);
+    if (issue) issue.count += 1;
+    else issues.set(key, { name, title, level, count: 1 });
+  }
+
+  const sorted = Array.from(issues.values()).sort(
+    (a, b) =>
+      Number(b.level === 'ERROR') - Number(a.level === 'ERROR') ||
+      b.count - a.count ||
+      a.title.localeCompare(b.title)
+  );
+  return {
+    status: 'ready',
+    data: {
+      total: sorted.length,
+      issues: sorted.slice(0, SHOW_ISSUES_TYPE_LIMIT),
+      truncated: sorted.length > SHOW_ISSUES_TYPE_LIMIT,
+    },
+  };
+}
+
 export const debuggingToolDefs = {
   get_logs: {
     description:
@@ -257,6 +347,20 @@ export const debuggingToolDefs = {
     outputSchema: getAdvisorsOutputSchema,
     annotations: {
       title: 'Get project advisors',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  show_issues: {
+    description:
+      'Shows the user their project\'s security and performance issues from its advisors, as a list where they can send one to you to review. Use it when the user wants to see their issues, such as "what\'s wrong with my project?"; to read advisors yourself, use `get_advisors`. Returns only how many issue types each advisor found: the issues go to the user, not to you.',
+    parameters: showIssuesInputSchema,
+    outputSchema: showIssuesOutputSchema,
+    _meta: viewToolMeta(SHOW_ISSUES_UI_URI, 'panel'),
+    annotations: {
+      title: 'Show issues',
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -345,6 +449,45 @@ export function getDebuggingTools({
             throw new Error(`Unknown advisor type: ${type}`);
         }
         return { result: groupAdvisorsResult(result) };
+      },
+    }),
+    show_issues: injectableTool({
+      ...debuggingToolDefs.show_issues,
+      inject: { project_id },
+      execute: async ({ project_id }): Promise<CallToolResult> => {
+        // Each advisor stands alone: one that fails shows as unavailable.
+        const read = async (
+          get: (projectId: string) => Promise<unknown>
+        ): Promise<AdvisorSection> => {
+          try {
+            return advisorSection(await get(project_id));
+          } catch (error) {
+            return {
+              status: 'unavailable',
+              message: error instanceof Error ? error.message : String(error),
+            };
+          }
+        };
+        const [security, performance] = await Promise.all([
+          read((id) => debugging.getSecurityAdvisors(id)),
+          read((id) => debugging.getPerformanceAdvisors(id)),
+        ]);
+        const viewData: ShowIssuesViewData = { security, performance };
+        const count = (section: AdvisorSection) =>
+          section.status === 'ready' ? section.data.total : null;
+        return {
+          // The model gets counts; the issues go to the view alone.
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                security: count(security),
+                performance: count(performance),
+              }),
+            },
+          ],
+          _meta: { [VIEW_DATA_META_KEY]: viewData },
+        };
       },
     }),
   };

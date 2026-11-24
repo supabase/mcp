@@ -51,4 +51,7 @@ export const VIEW_DATA_META_KEY = 'supabase.com/view';
  * Tools that exist only to show the user a view. Clients that can't render
  * views don't list them: other tools already give the model the same data.
  */
-export const VIEW_TOOLS: ReadonlySet<string> = new Set(['show_query']);
+export const VIEW_TOOLS: ReadonlySet<string> = new Set([
+  'show_issues',
+  'show_query',
+]);

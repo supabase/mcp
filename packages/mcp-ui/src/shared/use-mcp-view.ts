@@ -32,6 +32,12 @@ export type McpView<T> = {
    * connected, and when the host can't proxy tool calls.
    */
   callTool: CallTool | undefined;
+  /**
+   * Asks the host to show the view fullscreen (Claude's side panel). Defined
+   * only when the view lists fullscreen, the host offers it, and the view
+   * isn't fullscreen already. Rejects when the host keeps it where it is.
+   */
+  expand: (() => Promise<void>) | undefined;
   /** A string argument of the tool call, if sent and a string. */
   inputText: (key: string) => string | undefined;
   /**
@@ -47,7 +53,17 @@ export type McpView<T> = {
  * the host context and capabilities, and helpers built on them (`callTool`,
  * `inputText`, `openLink`). Also applies the host's styles (see `useHostStyles`).
  */
-export function useMcpView<T>(name: string): McpView<T> {
+export function useMcpView<T>(
+  name: string,
+  options: {
+    /**
+     * Where the view can show, declared in the handshake: the server's
+     * presentation for it (`viewResourceMeta`). A panel lists only
+     * `fullscreen`, so Claude opens it in its side panel. Inline by default.
+     */
+    displayModes?: ('inline' | 'fullscreen')[];
+  } = {}
+): McpView<T> {
   const [toolCall, setToolCall] = useState<ToolCallState<T>>({
     status: 'loading',
   });
@@ -60,7 +76,9 @@ export function useMcpView<T>(name: string): McpView<T> {
 
   const { app, error } = useApp({
     appInfo: { name, version: '0.0.0' },
-    capabilities: {},
+    capabilities: options.displayModes
+      ? { availableDisplayModes: options.displayModes }
+      : {},
     onAppCreated: (app) => {
       app.ontoolinput = ({ arguments: args }) => setInput(args);
       app.ontoolresult = (result) => {
@@ -103,6 +121,14 @@ export function useMcpView<T>(name: string): McpView<T> {
   useHostStyles(app, hostContext);
 
   const hostCapabilities = app?.getHostCapabilities() ?? {};
+  // A host that doesn't list its modes may still offer fullscreen; Claude
+  // lists only inline where views can't leave the conversation.
+  const offered = hostContext?.availableDisplayModes;
+  const canExpand =
+    !!app &&
+    !!options.displayModes?.includes('fullscreen') &&
+    (!offered || offered.includes('fullscreen')) &&
+    hostContext?.displayMode !== 'fullscreen';
   return {
     toolCall: error ? { status: 'error', message: error.message } : toolCall,
     app,
@@ -114,6 +140,16 @@ export function useMcpView<T>(name: string): McpView<T> {
       app && hostCapabilities.serverTools
         ? (name, args) => callServerTool(app, name, args)
         : undefined,
+    expand: canExpand
+      ? async () => {
+          const result = await app.requestDisplayMode({ mode: 'fullscreen' });
+          if (result.mode !== 'fullscreen') {
+            throw new Error(
+              'This host could not expand the view. You can keep working here.'
+            );
+          }
+        }
+      : undefined,
     inputText: (key) => {
       const value = input?.[key];
       return typeof value === 'string' ? value : undefined;
