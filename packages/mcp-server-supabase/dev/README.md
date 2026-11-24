@@ -65,7 +65,9 @@ parameters on the MCP URL (CLI flags like `--features` don't apply). Set
 Orgs `acme` (pro plan, so a new project quotes $10/month and shows cost
 confirmation) and `hobby` (free, $0 so no confirmation). Project
 `abcdefghijklmnopqrst` ("Acme production") with a branch named `other`; use it
-as `project_id` for `create_branch`.
+as `project_id` for `create_branch`. The advisors endpoints return sample
+security and performance lints, so `show_issues` has warnings and errors to
+show.
 
 Each project's SQL runs against its own in-memory Postgres (PGlite), created
 on first use with sample `customers` and `orders` tables, so `execute_sql`,

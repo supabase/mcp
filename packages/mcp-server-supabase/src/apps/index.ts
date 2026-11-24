@@ -52,6 +52,7 @@ export const VIEW_DATA_META_KEY = 'supabase.com/view';
  * views don't list them: other tools already give the model the same data.
  */
 export const VIEW_TOOLS: ReadonlySet<string> = new Set([
+  'show_issues',
   'show_query',
   'show_row',
   'show_logs',
