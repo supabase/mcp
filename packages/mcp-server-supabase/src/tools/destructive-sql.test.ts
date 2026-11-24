@@ -80,6 +80,8 @@ describe('isUpdateWithoutWhere', () => {
     'UPDATE films SET elsewhere = 1;',
     'UPDATE films SET nowhere = 1;',
     'UPDATE films SET elsewhere = 1, title = nowhere;',
+    'UPDATE films SET where$x = 1;',
+    'UPDATE films SET éwhere = 1;',
   ])('identifier containing where without WHERE matches: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(true);
   });
