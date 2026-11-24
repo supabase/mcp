@@ -289,6 +289,11 @@ const issueTypeCountSchema = z
 const showIssuesOutputSchema = z.object({
   security: issueTypeCountSchema,
   performance: issueTypeCountSchema,
+  health: issueTypeCountSchema
+    .optional()
+    .describe(
+      "Warning and error issue types the health advisor found; null when it couldn't be read, and absent where the platform has no health advisor."
+    ),
 });
 
 /** One kind of advisor finding, with how many objects it applies to. */
@@ -311,6 +316,8 @@ export type AdvisorSection =
 export type ShowIssuesViewData = {
   security: AdvisorSection;
   performance: AdvisorSection;
+  /** Absent where the platform has no health advisor. */
+  health?: AdvisorSection;
 };
 
 /**
@@ -411,7 +418,7 @@ export const debuggingToolDefs = {
   },
   show_issues: {
     description:
-      'Shows the user their project\'s security and performance issues from its advisors, as a list where they can send one to you to review. Use it when the user wants to see their issues, such as "what\'s wrong with my project?"; to read advisors yourself, use `get_advisors`. Returns only how many issue types each advisor found: the issues go to the user, not to you.',
+      'Shows the user their project\'s security, performance and health issues from its advisors, as a list where they can send one to you to review. Use it when the user wants to see their issues, such as "what\'s wrong with my project?"; to read advisors yourself, use `get_advisors`. Returns only how many issue types each advisor found: the issues go to the user, not to you.',
     parameters: showIssuesInputSchema,
     outputSchema: showIssuesOutputSchema,
     _meta: viewToolMeta(SHOW_ISSUES_UI_URI, 'panel'),
@@ -566,11 +573,19 @@ export function getDebuggingTools({
             };
           }
         };
-        const [security, performance] = await Promise.all([
+        const { getHealthAdvisors } = debugging;
+        const [security, performance, health] = await Promise.all([
           read((id) => debugging.getSecurityAdvisors(id)),
           read((id) => debugging.getPerformanceAdvisors(id)),
+          getHealthAdvisors
+            ? read((id) => getHealthAdvisors.call(debugging, id))
+            : undefined,
         ]);
-        const viewData: ShowIssuesViewData = { security, performance };
+        const viewData: ShowIssuesViewData = {
+          security,
+          performance,
+          ...(health && { health }),
+        };
         const count = (section: AdvisorSection) =>
           section.status === 'ready' ? section.data.total : null;
         return {
@@ -581,6 +596,7 @@ export function getDebuggingTools({
               text: JSON.stringify({
                 security: count(security),
                 performance: count(performance),
+                ...(health && { health: count(health) }),
               }),
             },
           ],

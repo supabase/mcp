@@ -10,6 +10,7 @@ import { SeverityIndicator } from './SeverityIndicator';
 export const ADVISOR_CATEGORIES = {
   security: 'Security',
   performance: 'Performance',
+  health: 'Health',
 } as const;
 export type AdvisorCategory = keyof typeof ADVISOR_CATEGORIES;
 const CATEGORIES = Object.keys(ADVISOR_CATEGORIES) as AdvisorCategory[];
@@ -33,7 +34,12 @@ export type AdvisorSection =
     }
   | { status: 'unavailable'; message: string };
 
-export type ProjectIssues = Record<AdvisorCategory, AdvisorSection>;
+export type ProjectIssues = {
+  security: AdvisorSection;
+  performance: AdvisorSection;
+  /** Absent where the server has no health advisor. */
+  health?: AdvisorSection;
+};
 
 /** The issues as read so far. */
 export type LoadedIssues =
@@ -80,6 +86,7 @@ function CategoryRows({
 }) {
   const label = ADVISOR_CATEGORIES[category];
   const result = issues[category];
+  if (!result) return null;
 
   // A section that failed is shown as unavailable, never as "no issues".
   if (result.status === 'unavailable')
@@ -132,7 +139,7 @@ function CategoryRows({
 }
 
 /**
- * A project's open issues from its security and performance advisors, after
+ * A project's open issues from its security, performance and health advisors, after
  * the surfaces' IssuesList: one row per failing check, each of which the user
  * can send to the agent to review. A send is confirmed beside the heading,
  * and a failed one is shown below the list.
