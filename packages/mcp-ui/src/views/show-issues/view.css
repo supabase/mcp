@@ -1,0 +1,26 @@
+@layer view {
+  /*
+   * In the host's panel (fullscreen), the issues fill the frame the way the
+   * surfaces' issues panel does: no card of its own, the heading and rows
+   * inset to line up, and hairlines between them.
+   */
+  :where([data-display-mode="fullscreen"] .issues-list) {
+    gap: 0;
+
+    :where([data-slot="header"]) {
+      min-block-size: 40px;
+      padding-inline: var(--sb-space-4);
+      border-block-end: var(--border-width-regular) solid var(--sb-color-border);
+    }
+
+    :where([data-slot="list"]) {
+      border: none;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    :where(.admonition) {
+      margin: var(--sb-space-3) var(--sb-space-4);
+    }
+  }
+}

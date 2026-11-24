@@ -177,6 +177,14 @@
     background: transparent;
   }
 
+  /* In the host's panel (fullscreen), a view meets the frame's edges: the
+     gutter that sets an inline card apart from the conversation goes, and
+     only the host's safe area stays. */
+  :where([data-display-mode="fullscreen"] body) {
+    padding: var(--sb-inset-top) var(--sb-inset-right) var(--sb-inset-bottom)
+      var(--sb-inset-left);
+  }
+
   :where(:focus-visible) {
     outline: 2px solid var(--sb-color-ring);
     outline-offset: 2px;

@@ -58,4 +58,15 @@ The full rules are in [`.agents/skills/mcp-ui-css/SKILL.md`](.agents/skills/mcp-
 2. In `packages/mcp-server-supabase/src/resources/app-resources.ts`, import `@supabase/mcp-ui/<name>.html` and register it as a resource.
 3. Link the tool to it with `_meta: { ui: { resourceUri } }` in its definition.
 
+### Always shown, or a `show_*` tool
+
+Decide whether the user wants the view every time the tool runs:
+
+- **Every call** (`create_project`, `create_branch`): link the existing tool to the view. The view reads the tool's normal result.
+- **Only when asked** (issues, query results, a row, logs): the model reads data with its usual tools (`get_advisors`, `execute_sql`, `query_logs`) without putting a view in front of the user. Add a separate `show_<thing>` tool for the view, and add its name to `VIEW_TOOLS` in `packages/mcp-server-supabase/src/apps/index.ts` so clients without MCP Apps don't list it. It returns a short summary for the model and puts what the view shows in the result's `_meta` under `VIEW_DATA_META_KEY`, which `useMcpView` reads in place of the text result. Actions in the view call the usual tools (`callTool('execute_sql', …)`), so the server's permissions and confirmations still apply.
+
+### Inline, or a panel
+
+Give the view's resource and tool `viewResourceMeta` and `viewToolMeta` with where the Supabase surfaces show it: `inline` (a card), `expandable` (inline, and the user can open it in a panel) or `panel` (beside the conversation). Declare the same modes from the view with `useMcpView`'s `displayModes`. In a panel the document carries `data-display-mode="fullscreen"`, so the view's `view.css` can drop its card frame and fill the height.
+
 Keep views small. The whole HTML is sent on every `resources/read`, so prefer system fonts and SVG icons, and avoid heavy dependencies unless a view really needs them.

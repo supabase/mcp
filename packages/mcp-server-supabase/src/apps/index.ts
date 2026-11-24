@@ -40,3 +40,15 @@ export const APPS_EXTENSIONS = {
 
 /** Tool result `_meta` key with the dashboard base URL the server links to. */
 export const DASHBOARD_URL_META_KEY = 'supabase.com/dashboardUrl';
+
+/**
+ * Tool result `_meta` key with what a view shows, kept out of the text the
+ * model reads: `show_*` tools send their rows here.
+ */
+export const VIEW_DATA_META_KEY = 'supabase.com/view';
+
+/**
+ * Tools that exist only to show the user a view. Clients that can't render
+ * views don't list them: other tools already give the model the same data.
+ */
+export const VIEW_TOOLS: ReadonlySet<string> = new Set(['show_issues']);

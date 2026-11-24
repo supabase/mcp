@@ -6,15 +6,23 @@ import {
   isInputRequiredResult,
   type Client,
 } from '@modelcontextprotocol/client';
+import { HttpResponse, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { createOrganization, createProject } from '../test/mocks.js';
+import {
+  API_URL,
+  createOrganization,
+  createProject,
+  createProjectFixture,
+} from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
-import { DASHBOARD_URL_META_KEY } from './apps/index.js';
+import { DASHBOARD_URL_META_KEY, VIEW_DATA_META_KEY } from './apps/index.js';
 import {
   CREATE_BRANCH_UI_URI,
   CREATE_PROJECT_UI_URI,
   getAppResources,
+  SHOW_ISSUES_UI_URI,
 } from './resources/app-resources.js';
+import { SHOW_ISSUES_TYPE_LIMIT } from './tools/debugging-tools.js';
 
 const harness = createServerHarness();
 
@@ -100,6 +108,7 @@ describe('MCP Apps', () => {
       )?.resourceUri;
     expect(linkOf('create_project')).toBe(CREATE_PROJECT_UI_URI);
     expect(linkOf('create_branch')).toBe(CREATE_BRANCH_UI_URI);
+    expect(linkOf('show_issues')).toBe(SHOW_ISSUES_UI_URI);
 
     expect(await listedViewUris(client)).toEqual([...VIEW_URIS].sort());
     expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
@@ -111,23 +120,47 @@ describe('MCP Apps', () => {
       clientCapabilities: APPS_CLIENT_CAPABILITIES,
     });
 
-    const expectedMeta = {
-      ui: {
-        csp: { connectDomains: [], resourceDomains: [] },
-        prefersBorder: false,
-        permissions: { clipboardWrite: {} },
-      },
+    const baseUi = {
+      csp: { connectDomains: [], resourceDomains: [] },
+      prefersBorder: false,
+      permissions: { clipboardWrite: {} },
+    };
+    // Panels (issues) open beside the conversation; the cards stay inline.
+    const panels = [SHOW_ISSUES_UI_URI];
+    const expectedMeta = (uri: string) => {
+      const mode = panels.includes(uri) ? 'fullscreen' : 'inline';
+      return {
+        ui: { ...baseUi, preferredDisplayMode: mode },
+        'openai/ui': {
+          preferredDisplayMode: mode,
+          availableDisplayModes: [mode],
+        },
+      };
     };
 
     const { resources } = await client.listResources();
     for (const uri of VIEW_URIS) {
       const resource = resources.find((r) => r.uri === uri);
-      expect(resource?._meta, uri).toEqual(expectedMeta);
+      expect(resource?._meta, uri).toEqual(expectedMeta(uri));
       expect(resource?.description, uri).toBeTruthy();
 
       const { contents } = await client.readResource({ uri });
-      expect(contents[0]?._meta, uri).toEqual(expectedMeta);
+      expect(contents[0]?._meta, uri).toEqual(expectedMeta(uri));
     }
+  });
+
+  test('tools that open a panel ask ChatGPT to open it fullscreen', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+
+    const { tools } = await client.listTools();
+    const openaiUi = (name: string) =>
+      tools.find((tool) => tool.name === name)?._meta?.['openai/ui'];
+    expect(openaiUi('show_issues')).toEqual({
+      preferredModelDisplayMode: 'fullscreen',
+    });
   });
 
   test('views are self-contained HTML', async () => {
@@ -209,5 +242,158 @@ describe('MCP Apps', () => {
     });
 
     expect(isInputRequiredResult(result)).toBe(true);
+  });
+});
+
+describe('show_issues', () => {
+  const lint = (name: string, level: string, object: string) => ({
+    name,
+    title: name.replaceAll('_', ' '),
+    level,
+    facing: 'EXTERNAL',
+    categories: ['SECURITY'],
+    description: name,
+    detail: object,
+    remediation: 'https://supabase.com/docs/guides/database/database-linter',
+    metadata: { schema: 'public', name: object, type: 'table' },
+    cache_key: `${name}_${object}`,
+  });
+
+  async function setupApps(advisors: {
+    security?: () => Response;
+    performance?: () => Response;
+  }) {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+    for (const type of ['security', 'performance'] as const) {
+      const respond = advisors[type];
+      if (respond)
+        harness.mockServer!.use(
+          http.get(
+            `${API_URL}/v1/projects/:projectId/advisors/${type}`,
+            respond
+          )
+        );
+    }
+    const show = async () => {
+      const result = await callModernTool(client, {
+        name: 'show_issues',
+        arguments: { project_id: project.id },
+      });
+      if (isInputRequiredResult(result)) throw new Error('expected a result');
+      return result;
+    };
+    return { show };
+  }
+
+  const textOf = (result: { content: unknown[] }) =>
+    (result.content[0] as { text: string }).text;
+
+  test('is listed only for clients that can render its view', async () => {
+    const { client: plain } = await harness.setupModern({
+      experimentalApps: true,
+    });
+    const { tools } = await plain.listTools();
+    // get_advisors already gives the model the issues; the view is the point.
+    expect(tools.map((tool) => tool.name)).toContain('get_advisors');
+    expect(tools.map((tool) => tool.name)).not.toContain('show_issues');
+  });
+
+  test('sends one row per warning or error to the view, errors first, and only counts to the model', async () => {
+    const { show } = await setupApps({
+      security: () =>
+        HttpResponse.json({
+          lints: [
+            lint('function_search_path_mutable', 'WARN', 'a'),
+            lint('rls_disabled_in_public', 'ERROR', 'orders'),
+            lint('rls_disabled_in_public', 'ERROR', 'notes'),
+            lint('function_search_path_mutable', 'WARN', 'b'),
+            lint('function_search_path_mutable', 'WARN', 'c'),
+            // Info lints are suggestions, not issues.
+            lint('unused_index', 'INFO', 'orders'),
+          ],
+        }),
+    });
+
+    const result = await show();
+
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(textOf(result))).toEqual({
+      security: 2,
+      performance: 0,
+    });
+    expect(result._meta?.[VIEW_DATA_META_KEY]).toEqual({
+      security: {
+        status: 'ready',
+        data: {
+          total: 2,
+          truncated: false,
+          issues: [
+            {
+              name: 'rls_disabled_in_public',
+              title: 'rls disabled in public',
+              level: 'ERROR',
+              count: 2,
+            },
+            {
+              name: 'function_search_path_mutable',
+              title: 'function search path mutable',
+              level: 'WARN',
+              count: 3,
+            },
+          ],
+        },
+      },
+      performance: {
+        status: 'ready',
+        data: { total: 0, truncated: false, issues: [] },
+      },
+    });
+  });
+
+  test('shows an advisor that fails as unavailable, never as no issues', async () => {
+    const { show } = await setupApps({
+      performance: () =>
+        HttpResponse.json({ message: 'Upgrade required' }, { status: 403 }),
+    });
+
+    const result = await show();
+
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(textOf(result))).toEqual({
+      security: 0,
+      performance: null,
+    });
+    const viewData = result._meta?.[VIEW_DATA_META_KEY] as {
+      performance: { status: string; message: string };
+    };
+    expect(viewData.performance.status).toBe('unavailable');
+    expect(viewData.performance.message).toBeTruthy();
+  });
+
+  test('sends the view at most the issue type limit and says so', async () => {
+    const lints = Array.from({ length: SHOW_ISSUES_TYPE_LIMIT + 3 }, (_, i) =>
+      lint(`lint_${i}`, 'WARN', 'orders')
+    );
+    const { show } = await setupApps({
+      security: () => HttpResponse.json({ lints }),
+    });
+
+    const result = await show();
+
+    expect(JSON.parse(textOf(result)).security).toBe(
+      SHOW_ISSUES_TYPE_LIMIT + 3
+    );
+    const viewData = result._meta?.[VIEW_DATA_META_KEY] as {
+      security: { data: { issues: unknown[]; truncated: boolean } };
+    };
+    expect(viewData.security.data.issues).toHaveLength(SHOW_ISSUES_TYPE_LIMIT);
+    expect(viewData.security.data.truncated).toBe(true);
   });
 });
