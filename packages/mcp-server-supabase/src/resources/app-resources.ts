@@ -11,12 +11,14 @@ import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { resource, type Resource } from '@supabase/mcp-utils';
 import createBranchHtml from '@supabase/mcp-ui/create-branch.html';
 import createProjectHtml from '@supabase/mcp-ui/create-project.html';
+import showIssuesHtml from '@supabase/mcp-ui/show-issues.html';
 import showLogsHtml from '@supabase/mcp-ui/show-logs.html';
 import showQueryHtml from '@supabase/mcp-ui/show-query.html';
 import showRowHtml from '@supabase/mcp-ui/show-row.html';
 
 export const CREATE_PROJECT_UI_URI = 'ui://supabase/create-project';
 export const CREATE_BRANCH_UI_URI = 'ui://supabase/create-branch';
+export const SHOW_ISSUES_UI_URI = 'ui://supabase/show-issues';
 export const SHOW_QUERY_UI_URI = 'ui://supabase/show-query';
 export const SHOW_ROW_UI_URI = 'ui://supabase/show-row';
 export const SHOW_LOGS_UI_URI = 'ui://supabase/show-logs';
@@ -33,8 +35,8 @@ const BASE_VIEW_UI: McpUiResourceMeta = {
 /**
  * Where a host shows a view, as the Supabase surfaces define it: `inline` in
  * the conversation (a card), `expandable` inline with a way to open it in a
- * panel (a query block), or a `panel` beside the conversation (logs, a row)
- * that the user works in. A panel prefers fullscreen, which Claude opens in
+ * panel (a query block), or a `panel` beside the conversation (issues, logs,
+ * a row) that the user works in. A panel prefers fullscreen, which Claude opens in
  * its side panel without a click and ChatGPT opens fullscreen.
  */
 export type ViewPresentation = 'inline' | 'expandable' | 'panel';
@@ -115,6 +117,13 @@ export function getAppResources(): Resource[] {
       'Create branch view',
       'Live setup progress for the create_branch tool.',
       createBranchHtml
+    ),
+    appResource(
+      SHOW_ISSUES_UI_URI,
+      'Issues view',
+      "A project's security and performance advisor issues, for the show_issues tool.",
+      showIssuesHtml,
+      'panel'
     ),
     appResource(
       SHOW_QUERY_UI_URI,
