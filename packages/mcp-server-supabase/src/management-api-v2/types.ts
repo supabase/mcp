@@ -114,6 +114,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/projects/{ref}/warehouse/ingestion-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect Warehouse ingestion throughput and WAL lag
+         * @description Returns DuckLake ingestion throughput and WAL lag from the authorized pipelines and their independently resolved ETL regions. Select from six measurements: events received/processed per second, bytes received/processed per second, replication WAL lag and receive WAL lag. All six are selected by default. Use since or both from and to; defaults to the last 30 minutes. Rates describe each effective rate window. Pipeline IDs and worker, replication-path or event-type dimensions are retained. WAL lag is bytes; negative sentinels become null. Processed throughput acknowledges destination acceptance, not guaranteed durability. Missing, stale and unavailable values remain null. No raw queries or backend selection are accepted. A failure of one measurement does not discard successful siblings. Maintenance, inline-flush and sampled storage-health measurements are available from storage-stats.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        get: operations["v2-get-warehouse-ingestion-stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/warehouse/storage-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect Warehouse storage and maintenance statistics
+         * @description Returns up to eight DuckLake maintenance, inline-flush or sampled storage-health measurements from the authorized pipelines and their independently resolved ETL regions. Use since or both from and to; defaults to the last 30 minutes. Rates describe each effective rate window. Pipeline IDs and allowed operation, outcome, table or controller-process dimensions are retained. Table summary means are observations across tables and time, not current inventories. Sampled health has unknown observation freshness: last_sample_at is scrape receipt, not a successful recent health sample. Catalog-wide metrics require the collector exclusive-ownership gate; shared catalogs remain unavailable. Maintenance pause outcomes differ from run outcomes, and result availability is per controller process without global latest-run ordering. Missing, stale and unavailable values remain null. No raw queries or backend selection are accepted. A failure of one measurement does not discard successful siblings. Throughput and WAL lag are available from ingestion-stats.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        get: operations["v2-get-warehouse-storage-stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/projects/{ref}/warehouse/query-stats": {
         parameters: {
             query?: never;
@@ -1232,7 +1276,7 @@ export interface components {
         APIErrorObject: {
             id?: string;
             /** @enum {string} */
-            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "environment_secret_not_found" | "environment_variable_already_exists" | "environment_variable_limit_reached" | "environment_variable_not_found" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
             message: string;
             description?: string;
             links?: {
@@ -1439,23 +1483,10 @@ export interface components {
                  */
                 type: "warehouse_metric";
                 /** @enum {string} */
-                id: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
+                id: "query_in_flight" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "admission_rejection_rate" | "assignment_wait_mean" | "assignment_wait_p95" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95";
                 attributes: {
                     project_ref: string;
-                    /** @enum {string} */
-                    metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
-                    /** @enum {string} */
-                    unit: "per_second" | "seconds" | "queries" | "grants";
-                    /** @enum {string} */
-                    aggregation: "rate" | "sum" | "mean" | "p50" | "p95" | "p99" | "occupied";
                     definition: string;
-                    requested: {
-                        /** @enum {string} */
-                        metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
-                        start: number;
-                        end: number;
-                        step?: number;
-                    };
                     effective: {
                         start: number;
                         end: number;
@@ -1465,7 +1496,7 @@ export interface components {
                     scrape_interval_seconds: number;
                     /** @enum {string} */
                     availability: "ok" | "partial" | "stale" | "no_data" | "insufficient_data" | "not_provisioned" | "disabled" | "unavailable";
-                    /** @description Latest observed source sample timestamp in Unix seconds; not the query evaluation timestamp. */
+                    /** @description Latest scraped sample timestamp in Unix seconds; not the query evaluation timestamp or proof of a successful recent health observation. */
                     last_sample_at: number | null;
                     series: {
                         labels: {
@@ -1481,6 +1512,130 @@ export interface components {
                             expected_points: number;
                         };
                     }[];
+                    /** @enum {string} */
+                    metric: "query_in_flight" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "admission_rejection_rate" | "assignment_wait_mean" | "assignment_wait_p95" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95";
+                    /** @enum {string} */
+                    unit: "queries" | "grants" | "per_second" | "seconds";
+                    /** @enum {string} */
+                    aggregation: "sum" | "occupied" | "rate" | "mean" | "p95";
+                    requested: {
+                        /** @enum {string} */
+                        metric: "query_in_flight" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "admission_rejection_rate" | "assignment_wait_mean" | "assignment_wait_p95" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95";
+                        start: number;
+                        end: number;
+                        step?: number;
+                    };
+                };
+            }[];
+        };
+        V2WarehouseIngestionStatsResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_metric";
+                /** @enum {string} */
+                id: "ingestion_events_received_rate" | "ingestion_events_processed_rate" | "ingestion_bytes_received_rate" | "ingestion_bytes_processed_rate" | "replication_wal_lag_bytes" | "replication_receive_wal_lag_bytes";
+                attributes: {
+                    project_ref: string;
+                    definition: string;
+                    effective: {
+                        start: number;
+                        end: number;
+                        step: number;
+                        rate_window_seconds: number;
+                    };
+                    scrape_interval_seconds: number;
+                    /** @enum {string} */
+                    availability: "ok" | "partial" | "stale" | "no_data" | "insufficient_data" | "not_provisioned" | "disabled" | "unavailable";
+                    /** @description Latest scraped sample timestamp in Unix seconds; not the query evaluation timestamp or proof of a successful recent health observation. */
+                    last_sample_at: number | null;
+                    series: {
+                        labels: {
+                            [key: string]: string;
+                        };
+                        points: {
+                            timestamp: number;
+                            value: number | null;
+                        }[];
+                        /** @description Grid point coverage, not proof that every worker was scraped. */
+                        coverage: {
+                            returned_points: number;
+                            expected_points: number;
+                        };
+                    }[];
+                    /** @enum {string} */
+                    metric: "ingestion_events_received_rate" | "ingestion_events_processed_rate" | "ingestion_bytes_received_rate" | "ingestion_bytes_processed_rate" | "replication_wal_lag_bytes" | "replication_receive_wal_lag_bytes";
+                    /** @enum {string} */
+                    unit: "per_second" | "bytes_per_second" | "bytes";
+                    /** @enum {string} */
+                    aggregation: "rate" | "max";
+                    requested: {
+                        /** @enum {string} */
+                        metric: "ingestion_events_received_rate" | "ingestion_events_processed_rate" | "ingestion_bytes_received_rate" | "ingestion_bytes_processed_rate" | "replication_wal_lag_bytes" | "replication_receive_wal_lag_bytes";
+                        start: number;
+                        end: number;
+                        step?: number;
+                    };
+                };
+            }[];
+        };
+        V2WarehouseStorageStatsResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_metric";
+                /** @enum {string} */
+                id: "maintenance_request_rate" | "maintenance_pause_active" | "maintenance_pause_duration_mean" | "maintenance_run_rate" | "maintenance_results_available" | "maintenance_merge_adjacent_files_created_rate" | "maintenance_rewrite_data_files_created_rate" | "maintenance_expired_snapshots_rate" | "maintenance_cleaned_up_files_rate" | "inline_flush_rows_rate" | "inline_flush_rows_mean" | "inline_flush_duration_mean" | "table_active_data_files_mean" | "table_active_data_bytes_mean" | "table_active_data_file_avg_size_bytes_mean" | "table_small_file_ratio_mean" | "table_active_delete_files_mean" | "table_active_delete_bytes_mean" | "table_deleted_row_ratio_mean" | "table_inlined_data_bytes" | "catalog_active_data_files" | "catalog_snapshots" | "catalog_oldest_snapshot_age" | "catalog_deletion_backlog_files" | "catalog_deletion_backlog_bytes" | "catalog_oldest_deletion_age";
+                attributes: {
+                    project_ref: string;
+                    definition: string;
+                    effective: {
+                        start: number;
+                        end: number;
+                        step: number;
+                        rate_window_seconds: number;
+                    };
+                    scrape_interval_seconds: number;
+                    /** @enum {string} */
+                    availability: "ok" | "partial" | "stale" | "no_data" | "insufficient_data" | "not_provisioned" | "disabled" | "unavailable";
+                    /** @description Latest scraped sample timestamp in Unix seconds; not the query evaluation timestamp or proof of a successful recent health observation. */
+                    last_sample_at: number | null;
+                    series: {
+                        labels: {
+                            [key: string]: string;
+                        };
+                        points: {
+                            timestamp: number;
+                            value: number | null;
+                        }[];
+                        /** @description Grid point coverage, not proof that every worker was scraped. */
+                        coverage: {
+                            returned_points: number;
+                            expected_points: number;
+                        };
+                    }[];
+                    /** @enum {string} */
+                    metric: "maintenance_request_rate" | "maintenance_pause_active" | "maintenance_pause_duration_mean" | "maintenance_run_rate" | "maintenance_results_available" | "maintenance_merge_adjacent_files_created_rate" | "maintenance_rewrite_data_files_created_rate" | "maintenance_expired_snapshots_rate" | "maintenance_cleaned_up_files_rate" | "inline_flush_rows_rate" | "inline_flush_rows_mean" | "inline_flush_duration_mean" | "table_active_data_files_mean" | "table_active_data_bytes_mean" | "table_active_data_file_avg_size_bytes_mean" | "table_small_file_ratio_mean" | "table_active_delete_files_mean" | "table_active_delete_bytes_mean" | "table_deleted_row_ratio_mean" | "table_inlined_data_bytes" | "catalog_active_data_files" | "catalog_snapshots" | "catalog_oldest_snapshot_age" | "catalog_deletion_backlog_files" | "catalog_deletion_backlog_bytes" | "catalog_oldest_deletion_age";
+                    /** @enum {string} */
+                    unit: "per_second" | "boolean" | "seconds" | "rows" | "files" | "bytes" | "ratio" | "snapshots";
+                    /** @enum {string} */
+                    aggregation: "rate" | "max" | "mean";
+                    requested: {
+                        /** @enum {string} */
+                        metric: "maintenance_request_rate" | "maintenance_pause_active" | "maintenance_pause_duration_mean" | "maintenance_run_rate" | "maintenance_results_available" | "maintenance_merge_adjacent_files_created_rate" | "maintenance_rewrite_data_files_created_rate" | "maintenance_expired_snapshots_rate" | "maintenance_cleaned_up_files_rate" | "inline_flush_rows_rate" | "inline_flush_rows_mean" | "inline_flush_duration_mean" | "table_active_data_files_mean" | "table_active_data_bytes_mean" | "table_active_data_file_avg_size_bytes_mean" | "table_small_file_ratio_mean" | "table_active_delete_files_mean" | "table_active_delete_bytes_mean" | "table_deleted_row_ratio_mean" | "table_inlined_data_bytes" | "catalog_active_data_files" | "catalog_snapshots" | "catalog_oldest_snapshot_age" | "catalog_deletion_backlog_files" | "catalog_deletion_backlog_bytes" | "catalog_oldest_deletion_age";
+                        start: number;
+                        end: number;
+                        step?: number;
+                    };
+                    /**
+                     * @description Present for sampled ETL health: successful source-observation freshness is unknown. last_sample_at reports scrape receipt only, not a successful catalog or table sample.
+                     * @enum {string}
+                     */
+                    observation_freshness?: "unknown";
                 };
             }[];
         };
@@ -1492,23 +1647,10 @@ export interface components {
                  */
                 type: "warehouse_metric";
                 /** @enum {string} */
-                id: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
+                id: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
                 attributes: {
                     project_ref: string;
-                    /** @enum {string} */
-                    metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
-                    /** @enum {string} */
-                    unit: "per_second" | "seconds" | "queries" | "grants";
-                    /** @enum {string} */
-                    aggregation: "rate" | "sum" | "mean" | "p50" | "p95" | "p99" | "occupied";
                     definition: string;
-                    requested: {
-                        /** @enum {string} */
-                        metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
-                        start: number;
-                        end: number;
-                        step?: number;
-                    };
                     effective: {
                         start: number;
                         end: number;
@@ -1518,7 +1660,7 @@ export interface components {
                     scrape_interval_seconds: number;
                     /** @enum {string} */
                     availability: "ok" | "partial" | "stale" | "no_data" | "insufficient_data" | "not_provisioned" | "disabled" | "unavailable";
-                    /** @description Latest observed source sample timestamp in Unix seconds; not the query evaluation timestamp. */
+                    /** @description Latest scraped sample timestamp in Unix seconds; not the query evaluation timestamp or proof of a successful recent health observation. */
                     last_sample_at: number | null;
                     series: {
                         labels: {
@@ -1534,6 +1676,19 @@ export interface components {
                             expected_points: number;
                         };
                     }[];
+                    /** @enum {string} */
+                    metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
+                    /** @enum {string} */
+                    unit: "per_second" | "seconds";
+                    /** @enum {string} */
+                    aggregation: "rate" | "mean" | "p50" | "p95" | "p99";
+                    requested: {
+                        /** @enum {string} */
+                        metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
+                        start: number;
+                        end: number;
+                        step?: number;
+                    };
                 };
             }[];
         };
@@ -3790,7 +3945,7 @@ export interface components {
             error?: {
                 id?: string;
                 /** @enum {string} */
-                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "environment_secret_not_found" | "environment_variable_already_exists" | "environment_variable_limit_reached" | "environment_variable_not_found" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
                 message: string;
                 description?: string;
                 links?: {
@@ -4613,6 +4768,198 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["V2WarehouseCapacityResponse_Output"];
+                };
+            };
+            /** @description validation_failed: Invalid measurement selection, range, interval, or query parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description warehouse_metrics_unavailable: Metrics query capacity is temporarily unavailable; retry after a short delay. warehouse_setup_unavailable: Warehouse feature or project metadata unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-get-warehouse-ingestion-stats": {
+        parameters: {
+            query?: {
+                /** @description Look back from server time, for example 30m, 2h, or 1d. Defaults to 30m when from/to are omitted. Maximum 30d. Cannot be combined with from/to. */
+                since?: string;
+                /** @description Range start as an ISO timestamp, within the last 30 days. Requires to; cannot be combined with since. */
+                from?: string;
+                /** @description Range end as an ISO timestamp, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
+                to?: string;
+                /** @description Up to eight distinct measurements. Defaults to ingestion_events_received_rate, ingestion_events_processed_rate, ingestion_bytes_received_rate, ingestion_bytes_processed_rate, replication_wal_lag_bytes, replication_receive_wal_lag_bytes. Supply a comma-separated list. Allowed measurements: ingestion_events_received_rate, ingestion_events_processed_rate, ingestion_bytes_received_rate, ingestion_bytes_processed_rate, replication_wal_lag_bytes, replication_receive_wal_lag_bytes. */
+                attributes?: string;
+                /** @description Defaults to 1m. The effective step increases to stay within 1441 points per series. Rate and latency windows are at least 5m. */
+                interval?: "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
+            };
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WarehouseIngestionStatsResponse_Output"];
+                };
+            };
+            /** @description validation_failed: Invalid measurement selection, range, interval, or query parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description warehouse_metrics_unavailable: Metrics query capacity is temporarily unavailable; retry after a short delay. warehouse_setup_unavailable: Warehouse feature or project metadata unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-get-warehouse-storage-stats": {
+        parameters: {
+            query?: {
+                /** @description Look back from server time, for example 30m, 2h, or 1d. Defaults to 30m when from/to are omitted. Maximum 30d. Cannot be combined with from/to. */
+                since?: string;
+                /** @description Range start as an ISO timestamp, within the last 30 days. Requires to; cannot be combined with since. */
+                from?: string;
+                /** @description Range end as an ISO timestamp, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
+                to?: string;
+                /** @description Up to eight distinct measurements. Defaults to maintenance_pause_active, maintenance_run_rate, inline_flush_rows_rate, table_active_data_file_avg_size_bytes_mean, table_small_file_ratio_mean, table_deleted_row_ratio_mean, catalog_deletion_backlog_bytes, catalog_oldest_deletion_age. Supply a comma-separated list. Allowed measurements: maintenance_request_rate, maintenance_pause_active, maintenance_pause_duration_mean, maintenance_run_rate, maintenance_results_available, maintenance_merge_adjacent_files_created_rate, maintenance_rewrite_data_files_created_rate, maintenance_expired_snapshots_rate, maintenance_cleaned_up_files_rate, inline_flush_rows_rate, inline_flush_rows_mean, inline_flush_duration_mean, table_active_data_files_mean, table_active_data_bytes_mean, table_active_data_file_avg_size_bytes_mean, table_small_file_ratio_mean, table_active_delete_files_mean, table_active_delete_bytes_mean, table_deleted_row_ratio_mean, table_inlined_data_bytes, catalog_active_data_files, catalog_snapshots, catalog_oldest_snapshot_age, catalog_deletion_backlog_files, catalog_deletion_backlog_bytes, catalog_oldest_deletion_age. */
+                attributes?: string;
+                /** @description Defaults to 1m. The effective step increases to stay within 1441 points per series. Rate and latency windows are at least 5m. */
+                interval?: "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
+            };
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WarehouseStorageStatsResponse_Output"];
                 };
             };
             /** @description validation_failed: Invalid measurement selection, range, interval, or query parameter */
