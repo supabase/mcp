@@ -57,6 +57,12 @@ export function useMcpView<T>(
   name: string,
   options: {
     /**
+     * Runs once the app exists, before it connects: where a view registers
+     * the tools it offers the agent (`app.registerTool`), which must be
+     * declared during the handshake.
+     */
+    onAppCreated?: (app: App) => void;
+    /**
      * Where the view can show, declared in the handshake: the server's
      * presentation for it (`viewResourceMeta`). A panel lists only
      * `fullscreen`, so Claude opens it in its side panel. Inline by default.
@@ -111,6 +117,7 @@ export function useMcpView<T>(
       };
       app.onhostcontextchanged = (changed) =>
         setHostContext((current) => ({ ...current, ...changed }));
+      options.onAppCreated?.(app);
     },
   });
 

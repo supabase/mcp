@@ -1,7 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { callViewTool } from '../../shared/call-tool';
-import type { LogLevelFilter } from '../../shared/logs-model';
+import {
+  LOGS_LABEL,
+  logsContext,
+  logsTools,
+  type OpenLogs,
+} from '../../shared/logs-agent';
+import type { LogEntry, LogLevelFilter } from '../../shared/logs-model';
 import {
   LogsView,
   type LoadedLogs,
@@ -9,6 +15,10 @@ import {
 } from '../../shared/LogsView';
 import type { Row } from '../../shared/sql-result';
 import { useMcpView } from '../../shared/use-mcp-view';
+import {
+  createContextSharer,
+  registerViewTools,
+} from '../../shared/view-agent';
 
 /**
  * What `show_logs` sends the view in its result's `_meta` (`ShowLogsViewData`
@@ -33,11 +43,20 @@ const MINUTES = [60, 360, 1440];
  * context, and Send asks it to investigate them.
  */
 export function ShowLogs() {
-  const { toolCall, app, input, inputText, hostCapabilities } =
+  // The open view, for the tools the agent calls; current as of each render.
+  const view = useRef<OpenLogs | undefined>(undefined);
+  const { toolCall, app, input, inputText, hostCapabilities, hostContext } =
     useMcpView<ShowLogsViewData>('supabase-show-logs', {
       // A panel, like the surfaces' logs panel (`viewResourceMeta`).
       displayModes: ['fullscreen'],
+      onAppCreated: (app) =>
+        registerViewTools(
+          app,
+          logsTools(() => view.current),
+          { label: LOGS_LABEL }
+        ),
     });
+  const [selected, setSelected] = useState<LogEntry[]>([]);
 
   // The settings the tool was called with, until the user changes them.
   const [changed, setChanged] = useState<LogSettings>();
@@ -54,18 +73,29 @@ export function ShowLogs() {
       : 60) as LogSettings['minutes'],
   };
 
-  const delivered: LoadedLogs =
-    toolCall.status === 'loading'
-      ? { status: 'loading' }
-      : toolCall.status === 'ready'
-        ? { status: 'success', rows: toolCall.data.rows }
-        : {
-            status: 'error',
-            message:
-              toolCall.status === 'cancelled'
-                ? 'Loading logs was cancelled.'
-                : toolCall.message,
-          };
+  // One object per tool result: the list keys its selection on it.
+  const delivered = useMemo<LoadedLogs>(
+    () =>
+      toolCall.status === 'loading'
+        ? { status: 'loading' }
+        : toolCall.status === 'ready'
+          ? {
+              status: 'success',
+              rows: toolCall.data.rows,
+              window: {
+                start: toolCall.data.iso_timestamp_start,
+                end: toolCall.data.iso_timestamp_end,
+              },
+            }
+          : {
+              status: 'error',
+              message:
+                toolCall.status === 'cancelled'
+                  ? 'Loading logs was cancelled.'
+                  : toolCall.message,
+            },
+    [toolCall]
+  );
   const logs = reload ?? delivered;
 
   const canCallTools = !!app && !!hostCapabilities.serverTools;
@@ -73,9 +103,10 @@ export function ShowLogs() {
   // if sent, so the view passes it on only when the call had one.
   const projectId = inputText('project_id');
 
-  async function load(next: LogSettings) {
-    if (!app) return;
+  async function load(next: LogSettings): Promise<LoadedLogs> {
+    if (!app) return logs;
     setReload({ status: 'loading' });
+    let loaded: LoadedLogs;
     try {
       const data = await callViewTool<ShowLogsViewData>(app, 'show_logs', {
         ...(projectId && { project_id: projectId }),
@@ -83,46 +114,72 @@ export function ShowLogs() {
         level: next.level,
         minutes: next.minutes,
       });
-      setReload({ status: 'success', rows: data.rows });
+      loaded = {
+        status: 'success',
+        rows: data.rows,
+        window: {
+          start: data.iso_timestamp_start,
+          end: data.iso_timestamp_end,
+        },
+      };
     } catch (error) {
-      setReload({
+      loaded = {
         status: 'error',
         message: error instanceof Error ? error.message : String(error),
-      });
+      };
     }
+    setReload(loaded);
+    return loaded;
   }
 
-  const shareSelection = useCallback(
-    (text: string | undefined) => {
-      if (!app || !app.getHostCapabilities()?.updateModelContext) return;
-      void app
-        .updateModelContext({
-          content: text ? [{ type: 'text', text }] : [],
-        })
-        .catch(() => {});
-    },
+  /** Applies settings as the user would: search filters, anything else reads again. */
+  function changeSettings(next: LogSettings): Promise<LoadedLogs> {
+    setChanged(next);
+    const needsRead =
+      next.level !== settings.level ||
+      next.source !== settings.source ||
+      next.minutes !== settings.minutes;
+    return needsRead && canCallTools ? load(next) : Promise.resolve(logs);
+  }
+
+  // The tool call's id where the host gives one, so each view in a
+  // conversation answers only changes meant for it.
+  const fallbackId = useMemo(() => crypto.randomUUID(), []);
+  const toolCallId = hostContext?.toolInfo?.id;
+  view.current = {
+    id: toolCallId === undefined ? fallbackId : String(toolCallId),
+    settings,
+    logs,
+    selected,
+    configure: changeSettings,
+  };
+
+  const shareContext = useMemo(
+    () => (app ? createContextSharer(app) : undefined),
     [app]
   );
+  const contextKey = JSON.stringify([settings, logs.status, selected.length]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: shares when what's shown changes
+  useEffect(() => {
+    if (view.current) shareContext?.(logsContext(view.current));
+  }, [shareContext, contextKey, logs, selected]);
 
   return (
     <LogsView
       settings={settings}
       logs={logs}
       agentName={app?.getHostVersion()?.name ?? 'chat'}
-      onSettingsChange={(next) => {
-        setChanged(next);
-        // Search filters what's loaded; anything else reads again.
-        if (
-          canCallTools &&
-          (next.level !== settings.level ||
-            next.source !== settings.source ||
-            next.minutes !== settings.minutes)
-        ) {
-          void load(next);
-        }
-      }}
+      onSettingsChange={(next) => void changeSettings(next)}
       onRefresh={canCallTools ? () => void load(settings) : undefined}
-      onShareSelection={shareSelection}
+      onSelectionChange={(next) =>
+        // Keep the same array while the same events stay selected.
+        setSelected((current) =>
+          current.length === next.length &&
+          current.every((entry, index) => entry.id === next[index]?.id)
+            ? current
+            : next
+        )
+      }
       onSend={
         app && hostCapabilities.message
           ? async (text) => {

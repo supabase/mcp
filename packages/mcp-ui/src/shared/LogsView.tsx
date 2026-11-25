@@ -42,7 +42,12 @@ export type LogSettings = {
 /** The events the host read for the settings, or where that read is. */
 export type LoadedLogs =
   | { status: 'loading' }
-  | { status: 'success'; rows: Row[] }
+  | {
+      status: 'success';
+      rows: Row[];
+      /** The window the events were read from, when known. */
+      window?: { start: string; end: string };
+    }
   | { status: 'error'; message: string };
 
 const LEVEL_OPTIONS = [
@@ -222,7 +227,7 @@ export function LogsView({
   logs,
   onRefresh,
   onSend,
-  onShareSelection,
+  onSelectionChange,
   agentName,
 }: {
   settings: LogSettings;
@@ -231,8 +236,8 @@ export function LogsView({
   onRefresh?: () => void;
   /** Sends the selection to the agent to investigate. Omit when the host can't. */
   onSend?: (text: string) => Promise<void>;
-  /** Shares the selection with the agent as context, or clears it. */
-  onShareSelection?: (text: string | undefined) => void;
+  /** Called with the selected events whenever the selection changes. */
+  onSelectionChange?: (selected: LogEntry[]) => void;
   /** Names the agent in actions, e.g. "Send to Claude". */
   agentName: string;
 }) {
@@ -284,8 +289,8 @@ export function LogsView({
   }>();
 
   useEffect(() => {
-    onShareSelection?.(sharedText);
-  }, [onShareSelection, sharedText]);
+    onSelectionChange?.(chosen);
+  }, [onSelectionChange, chosen]);
 
   function select(
     id: string,
