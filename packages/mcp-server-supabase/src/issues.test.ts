@@ -43,18 +43,19 @@ test('critical filtering keeps sampled affected function and its remediation', (
           id: 'second',
           resource: { name: 'lookup(id uuid)' },
           severity: 'critical',
-          docs_url: 'https://example.com/second',
         },
         {
           id: 'first',
           resource: { type: 'function', schema: 'public', name: 'lookup()' },
           severity: 'info',
           detail: 'Fix `public.lookup`.',
-          docs_url: 'https://example.com/first',
         },
       ],
     },
   ]);
+  // Findings reach their docs link through the issue, not one copy each.
+  expect(result.issues[0]?.docs_url).toBe('https://example.com/first');
+  expect(result.issues[0]?.affected[0]).not.toHaveProperty('docs_url');
   expect(result.checks).toEqual([{ type: 'security', status: 'complete' }]);
 });
 
