@@ -512,6 +512,139 @@ route('GET', '/v1/profile', () => ({
   },
 }));
 
+// Advisor lints, as the database linter reports them: a few warning and
+// error lints over several objects, and info lints the issues view leaves out.
+function lint(
+  category: 'SECURITY' | 'PERFORMANCE' | 'HEALTH',
+  name: string,
+  title: string,
+  level: 'ERROR' | 'WARN' | 'INFO',
+  object: string
+) {
+  return {
+    name,
+    title,
+    level,
+    facing: 'EXTERNAL',
+    categories: [category],
+    description: `${title}.`,
+    detail: `${title}: \`public.${object}\``,
+    remediation: `https://supabase.com/docs/guides/database/database-linter?lint=${name}`,
+    metadata: { schema: 'public', name: object, type: 'table' },
+    cache_key: `${name}_public_${object}`,
+  };
+}
+
+const ADVISOR_LINTS = {
+  security: [
+    lint(
+      'SECURITY',
+      'rls_disabled_in_public',
+      'RLS Disabled in Public',
+      'ERROR',
+      'orders'
+    ),
+    lint(
+      'SECURITY',
+      'rls_disabled_in_public',
+      'RLS Disabled in Public',
+      'ERROR',
+      'audit_events'
+    ),
+    lint(
+      'SECURITY',
+      'function_search_path_mutable',
+      'Function Search Path Mutable',
+      'WARN',
+      'touch_updated_at'
+    ),
+    lint(
+      'SECURITY',
+      'function_search_path_mutable',
+      'Function Search Path Mutable',
+      'WARN',
+      'handle_new_user'
+    ),
+    lint(
+      'SECURITY',
+      'function_search_path_mutable',
+      'Function Search Path Mutable',
+      'WARN',
+      'order_total'
+    ),
+    lint(
+      'SECURITY',
+      'auth_leaked_password_protection',
+      'Leaked Password Protection Disabled',
+      'WARN',
+      'auth'
+    ),
+  ],
+  performance: [
+    lint(
+      'PERFORMANCE',
+      'auth_rls_initplan',
+      'Auth RLS Initialization Plan',
+      'WARN',
+      'customers'
+    ),
+    lint(
+      'PERFORMANCE',
+      'auth_rls_initplan',
+      'Auth RLS Initialization Plan',
+      'WARN',
+      'orders'
+    ),
+    lint(
+      'PERFORMANCE',
+      'multiple_permissive_policies',
+      'Multiple Permissive Policies',
+      'WARN',
+      'customers'
+    ),
+    lint(
+      'PERFORMANCE',
+      'unindexed_foreign_keys',
+      'Unindexed foreign keys',
+      'INFO',
+      'orders'
+    ),
+    lint('PERFORMANCE', 'unused_index', 'Unused Index', 'INFO', 'customers'),
+  ],
+};
+
+route('GET', '/v1/projects/{ref}/advisors/{type}', ({ params }) => {
+  if (!projects.has(params.ref!))
+    return notFound(`Project not found: ${params.ref}`);
+  const lints = ADVISOR_LINTS[params.type as keyof typeof ADVISOR_LINTS];
+  if (!lints) return notFound(`Unknown advisor: ${params.type}`);
+  return { body: { lints } };
+});
+
+// The health advisor runs log-based checks, as the v2 API does.
+route('POST', '/v2/projects/{ref}/advisors/run', ({ params }) => {
+  if (!projects.has(params.ref!))
+    return notFound(`Project not found: ${params.ref}`);
+  return {
+    body: {
+      data: {
+        type: 'project_advisors',
+        attributes: {
+          lints: [
+            lint(
+              'HEALTH',
+              'log_auth_error_rate_high',
+              'Auth error rate is high',
+              'WARN',
+              'auth'
+            ),
+          ],
+        },
+      },
+    },
+  };
+});
+
 // What `--secret-url-template` points at, so clicking it doesn't 404.
 route('GET', '/mcp/secrets', ({ url }) => ({
   html: `<!doctype html><title>Mock secret collection</title><p>Mock dashboard: collect secret <code>${escapeHtml(

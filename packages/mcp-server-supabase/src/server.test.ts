@@ -11,6 +11,7 @@ import {
 } from '../test/mocks.js';
 import { createServerHarness } from '../test/server-harness.js';
 import { isToolCallerError } from '@supabase/mcp-utils';
+import { VIEW_TOOLS } from './apps/index.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { createMcpHandler } from '@modelcontextprotocol/server';
@@ -127,12 +128,14 @@ describe('tools', () => {
     // query_logs).
     const registryToolNames = Object.keys(supabaseMcpToolSchemas);
     const serverToolNames = tools.map((t) => t.name);
-    // Registered only when secretCollection is configured; get_cost/confirm_cost hidden from form-capable clients
+    // Registered only when secretCollection is configured; get_cost/confirm_cost hidden from form-capable clients;
+    // view tools listed only for clients that render MCP Apps
     const conditionallyHiddenToolNames = new Set([
       'get_logs',
       'create_edge_function_secret',
       'get_cost',
       'confirm_cost',
+      ...VIEW_TOOLS,
     ]);
 
     const extraToolsInRegistry = registryToolNames.filter(
