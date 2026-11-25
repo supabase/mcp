@@ -256,7 +256,13 @@ const newNotebookChartConfigSchema = notebookChartConfigSchema
   })
   .strict();
 
-const newNotebookSqlSchema = z.string().trim().min(1);
+// Trimming runs before the length check, so a whitespace-only string fails
+// here even though it satisfies the advertised `minLength: 1`. Say so instead
+// of zod's default "expected string to have >=1 characters".
+const newNotebookSqlSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'SQL must not be empty or only whitespace.' });
 
 const newNotebookCellSchema = z.discriminatedUnion('type', [
   notebookMarkdownCellSchema.omit({ id: true }).strict(),
@@ -299,7 +305,10 @@ const newNotebookCellSchema = z.discriminatedUnion('type', [
 ]);
 
 export const createNotebookOptionsSchema = z.object({
-  name: z.string().trim().min(1),
+  name: z
+    .string()
+    .trim()
+    .min(1, { message: 'Notebook name must not be empty or only whitespace.' }),
   description: z.string().optional(),
   content: z.object({
     cells: z.array(newNotebookCellSchema),
