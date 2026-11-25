@@ -122,6 +122,32 @@
       transparent
     );
 
+    /*
+     * SQL highlighting, Studio's --code-block-1 to -5 (keywords, strings,
+     * literals, type names, operators). Hosts have no syntax colours, so
+     * these are Studio's light and dark values.
+     */
+    --sb-color-code-block-1: light-dark(
+      hsl(170.6deg 43.2% 51%),
+      hsl(170.8deg 43.1% 61.4%)
+    );
+    --sb-color-code-block-2: light-dark(
+      hsl(33.1deg 80% 52.9%),
+      hsl(33.2deg 90.3% 75.7%)
+    );
+    --sb-color-code-block-3: light-dark(
+      hsl(83.8deg 61.6% 48%),
+      hsl(83.8deg 61.7% 63.1%)
+    );
+    --sb-color-code-block-4: light-dark(
+      hsl(276.3deg 60% 52.9%),
+      hsl(276.1deg 67.7% 74.5%)
+    );
+    --sb-color-code-block-5: light-dark(
+      hsl(14deg 80.4% 58%),
+      hsl(13.8deg 89.7% 69.6%)
+    );
+
     /* No font files are loaded: these resolve to the host's or the system's. */
     --font-sans: Inter, "Helvetica Neue", Helvetica, ui-sans-serif, system-ui,
       sans-serif;

@@ -12,10 +12,12 @@ import { resource, type Resource } from '@supabase/mcp-utils';
 import createBranchHtml from '@supabase/mcp-ui/create-branch.html';
 import createProjectHtml from '@supabase/mcp-ui/create-project.html';
 import showIssuesHtml from '@supabase/mcp-ui/show-issues.html';
+import showQueryHtml from '@supabase/mcp-ui/show-query.html';
 
 export const CREATE_PROJECT_UI_URI = 'ui://supabase/create-project';
 export const CREATE_BRANCH_UI_URI = 'ui://supabase/create-branch';
 export const SHOW_ISSUES_UI_URI = 'ui://supabase/show-issues';
+export const SHOW_QUERY_UI_URI = 'ui://supabase/show-query';
 
 const BASE_VIEW_UI: McpUiResourceMeta = {
   // Views are fully inlined and make no network requests.
@@ -118,6 +120,12 @@ export function getAppResources(): Resource[] {
       "A project's security, performance and health advisor issues, for the show_issues tool.",
       showIssuesHtml,
       'panel'
+    ),
+    appResource(
+      SHOW_QUERY_UI_URI,
+      'Query view',
+      'A SQL query and its results, editable and runnable, for the show_query tool.',
+      showQueryHtml
     ),
   ];
 }

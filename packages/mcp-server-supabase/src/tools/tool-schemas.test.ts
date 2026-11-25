@@ -57,6 +57,7 @@ describe('createToolSchemas', () => {
         'list_migrations',
         'list_tables',
         'search_docs',
+        'show_query',
       ]);
     });
 
@@ -231,6 +232,7 @@ describe('createToolSchemas', () => {
         'list_migrations',
         'list_tables',
         'search_docs',
+        'show_query',
       ]);
     });
 

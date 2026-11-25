@@ -353,6 +353,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
           tools,
           getDatabaseTools({
             database,
+            debugging: enabledFeatures.has('debugging') ? debugging : undefined,
             projectId,
             readOnly,
             confirmation:

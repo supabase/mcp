@@ -16,6 +16,7 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
+import { PGlite } from '@electric-sql/pglite';
 import type { components } from '../src/management-api/types.js';
 
 type Schemas = components['schemas'];
@@ -220,6 +221,7 @@ function makeProject(init: Partial<Project> & { ref: string }): Project {
 function resetState() {
   projects.clear();
   branches.clear();
+  databases.clear();
   projects.set(SEED_REF, {
     seeded: true,
     polls: 0,
@@ -495,11 +497,143 @@ route('GET', '/v1/projects/{ref}/api-keys/legacy', () => ({
   body: { enabled: true } satisfies Schemas['LegacyApiKeysResponse_Output'],
 }));
 
-route('POST', '/v1/projects/{ref}/database/query', ({ params }) => {
+// Each project's database: an in-memory Postgres with a little sample data,
+// so SQL views have rows to show. Created on first use, kept until restart.
+const SAMPLE_DATA = `
+  create role supabase_read_only_role;
+  grant pg_read_all_data to supabase_read_only_role;
+  create type plan as enum ('free', 'pro', 'team');
+  create table customers (
+    id bigint generated always as identity primary key,
+    name text not null,
+    email text not null unique,
+    plan plan not null default 'free',
+    settings jsonb not null default '{}',
+    created_at timestamptz not null default now()
+  );
+  create table orders (
+    id bigint generated always as identity primary key,
+    customer_id bigint not null references customers (id),
+    total numeric(10, 2) not null,
+    paid boolean not null default false,
+    note text,
+    created_at timestamptz not null default now()
+  );
+  insert into customers (name, email, plan, settings, created_at)
+  select
+    'Customer ' || n,
+    'customer' || n || '@example.com',
+    (array['free', 'pro', 'team'])[1 + n % 3]::plan,
+    jsonb_build_object('newsletter', n % 2 = 0),
+    now() - n * interval '1 day'
+  from generate_series(1, 40) as n;
+  insert into orders (customer_id, total, paid, note, created_at)
+  select
+    1 + n % 40,
+    round((10 + n * 7.5)::numeric, 2),
+    n % 4 <> 0,
+    case when n % 5 = 0 then 'Gift wrap' end,
+    now() - n * interval '3 hours'
+  from generate_series(1, 120) as n;
+`;
+const databases = new Map<string, Promise<PGlite>>();
+
+function databaseFor(ref: string) {
+  let db = databases.get(ref);
+  if (!db) {
+    db = (async () => {
+      const pg = new PGlite();
+      await pg.exec(SAMPLE_DATA);
+      return pg;
+    })();
+    databases.set(ref, db);
+  }
+  return db;
+}
+
+route('POST', '/v1/projects/{ref}/database/query', async ({ params, body }) => {
   if (!projects.has(params.ref!))
     return notFound(`Project not found: ${params.ref}`);
-  return { status: 201, body: [{ '?column?': 1 }] };
+  const { query, parameters, read_only } = body as {
+    query: string;
+    parameters?: unknown[];
+    read_only?: boolean;
+  };
+  const db = await databaseFor(params.ref!);
+  try {
+    const rows = await db.transaction(async (tx) => {
+      await tx.exec(
+        `set role ${read_only ? 'supabase_read_only_role' : 'postgres'};`
+      );
+      const results = parameters?.length
+        ? [await tx.query(query, parameters)]
+        : await tx.exec(query);
+      await tx.exec('reset role;');
+      // The API returns the last statement's rows.
+      return results.at(-1)?.rows ?? [];
+    });
+    return { status: 201, body: rows };
+  } catch (error) {
+    return {
+      status: 400,
+      body: { message: error instanceof Error ? error.message : String(error) },
+    };
+  }
 });
+
+// Sample log events for the logs endpoint, whatever the SQL: spread over the
+// requested window, newest first, shaped like the source the SQL names.
+const LOG_PATHS = ['/rest/v1/customers', '/rest/v1/orders', '/auth/v1/token'];
+const LOG_STATUSES = [200, 200, 200, 201, 204, 304, 400, 401, 404, 500];
+
+route(
+  'GET',
+  '/v1/projects/{ref}/analytics/endpoints/logs',
+  ({ params, url }) => {
+    if (!projects.has(params.ref!))
+      return notFound(`Project not found: ${params.ref}`);
+    const sql = url.searchParams.get('sql') ?? '';
+    const source = /source\s*=\s*'(\w+)'/.exec(sql)?.[1] ?? 'edge_logs';
+    const end =
+      Date.parse(url.searchParams.get('iso_timestamp_end') ?? '') || Date.now();
+    const start =
+      Date.parse(url.searchParams.get('iso_timestamp_start') ?? '') ||
+      end - 24 * 60 * 60 * 1000;
+    const count = 60;
+    const result = Array.from({ length: count }, (_, n) => {
+      // Microseconds, as the logs endpoint returns them.
+      const timestamp = Math.round(end - ((end - start) * n) / count) * 1000;
+      const id = crypto.randomUUID();
+      if (source === 'postgres_logs') {
+        const severity =
+          n % 9 === 0 ? 'ERROR' : n % 5 === 0 ? 'WARNING' : 'LOG';
+        return {
+          id,
+          timestamp,
+          event_message:
+            severity === 'ERROR'
+              ? 'relation "custmers" does not exist'
+              : severity === 'WARNING'
+                ? 'there is no transaction in progress'
+                : 'connection authorized: user=authenticator database=postgres',
+          error_severity: severity,
+        };
+      }
+      const status = LOG_STATUSES[n % LOG_STATUSES.length]!;
+      const method = n % 3 === 0 ? 'POST' : 'GET';
+      const path = LOG_PATHS[n % LOG_PATHS.length]!;
+      return {
+        id,
+        timestamp,
+        event_message: `${method} | ${status} | ${path}`,
+        method,
+        path,
+        status_code: status,
+      };
+    });
+    return { body: { result } };
+  }
+);
 
 route('GET', '/v1/projects/{ref}/secrets', () => ({ body: [] }));
 
