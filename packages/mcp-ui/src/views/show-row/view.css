@@ -1,0 +1,12 @@
+@layer view {
+  /*
+   * In the host's panel (fullscreen), the row editor fills the frame the
+   * way the surfaces' row panel does: no frame of its own, and the fields
+   * scroll between the header and the footer.
+   */
+  :where([data-display-mode="fullscreen"] .row-editor) {
+    block-size: calc(100dvh - var(--sb-inset-top) - var(--sb-inset-bottom));
+    border: none;
+    border-radius: 0;
+  }
+}

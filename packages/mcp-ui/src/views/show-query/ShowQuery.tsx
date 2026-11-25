@@ -38,9 +38,11 @@ function logWindowLabel(start?: string, end?: string) {
  * the server's usual permissions and confirmations apply to them.
  */
 export function ShowQuery() {
-  const { toolCall, callTool, inputText } = useMcpView<ShowQueryViewData>(
-    'supabase-show-query'
-  );
+  const { toolCall, callTool, inputText, expand } =
+    useMcpView<ShowQueryViewData>('supabase-show-query', {
+      // Inline, and the user can move it to a panel (`viewResourceMeta`).
+      displayModes: ['inline', 'fullscreen'],
+    });
 
   const source = inputText('source') === 'logs' ? 'logs' : 'database';
   const sql = inputText('sql');
@@ -117,6 +119,7 @@ export function ShowQuery() {
       onRun={onRun}
       source={source}
       footerDetail={footerDetail}
+      onExpand={expand}
     />
   );
 }

@@ -58,6 +58,7 @@ describe('createToolSchemas', () => {
         'list_tables',
         'search_docs',
         'show_query',
+        'show_row',
       ]);
     });
 
@@ -233,6 +234,7 @@ describe('createToolSchemas', () => {
         'list_tables',
         'search_docs',
         'show_query',
+        'show_row',
       ]);
     });
 
