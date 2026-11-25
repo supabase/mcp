@@ -35,6 +35,13 @@ const getPublishableKeysOutputSchema = z.object({
 
 const generateTypescriptTypesInputSchema = z.object({
   project_id: z.string(),
+  schemas: z
+    .array(z.string().min(1))
+    .min(1)
+    .optional()
+    .describe(
+      'Database schemas to generate types for, e.g. ["public", "private"]. Defaults to ["public"] when omitted.'
+    ),
 });
 
 const generateTypescriptTypesOutputSchema = generateTypescriptTypesResultSchema;
@@ -103,8 +110,8 @@ export function getDevelopmentTools({
     generate_typescript_types: injectableTool({
       ...developmentToolDefs.generate_typescript_types,
       inject: { project_id },
-      execute: async ({ project_id }) => {
-        return development.generateTypescriptTypes(project_id);
+      execute: async ({ project_id, schemas }) => {
+        return development.generateTypescriptTypes(project_id, { schemas });
       },
     }),
   };
