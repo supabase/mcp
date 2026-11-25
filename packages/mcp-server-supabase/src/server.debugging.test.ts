@@ -726,8 +726,8 @@ test('explicit issue filters only run the requested check and retain lower sever
   expect(result.issues).toHaveLength(1);
 });
 
-// Fixture response is 43,493 chars; budget adds ~10% so growth fails here.
-// Real ceiling: Claude Code rejects tool responses over 25,000 tokens (#124).
+// Fixture response is 43,493 chars; the budget fails growth of over ~10%.
+// In #124, Claude Code rejected a tool response over 25,000 tokens.
 const LARGE_PROJECT_ISSUES_BUDGET = 48_000;
 
 test('issues stay within the response budget for a large project', async () => {

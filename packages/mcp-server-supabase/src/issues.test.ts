@@ -16,7 +16,7 @@ const lint = {
   metadata: { schema: 'public', name: 'lookup', arguments: '' },
 };
 
-test('critical filtering keeps sampled affected function and its remediation', () => {
+test('critical filtering keeps sampled affected function and the docs link on the issue', () => {
   const result = normalizeIssues(
     {
       lints: [
