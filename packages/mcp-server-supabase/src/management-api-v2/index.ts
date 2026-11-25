@@ -62,8 +62,11 @@ export function assertSuccessV2<
 ): asserts response is SuccessResponseType<T, Options, Media> {
   if ('error' in response) {
     if (response.response.status === 401) {
-      throw new Error(
-        'Unauthorized. Please provide a valid access token to the MCP server via the --access-token flag or SUPABASE_ACCESS_TOKEN.'
+      throw Object.assign(
+        new Error(
+          'Unauthorized. Please provide a valid access token to the MCP server via the --access-token flag or SUPABASE_ACCESS_TOKEN.'
+        ),
+        { status: 401 }
       );
     }
 
@@ -73,11 +76,16 @@ export function assertSuccessV2<
       const { message } = errorContent.error;
       const { status } = response.response;
       // A 4xx is the caller's request; a 429 can come from our own call volume, like pagination.
-      throw status < 500 && status !== 429
-        ? new ToolCallerError(message)
-        : new Error(message);
+      throw Object.assign(
+        status < 500 && status !== 429
+          ? new ToolCallerError(message)
+          : new Error(message),
+        { status }
+      );
     }
 
-    throw new Error(fallbackMessage);
+    throw Object.assign(new Error(fallbackMessage), {
+      status: response.response.status,
+    });
   }
 }
