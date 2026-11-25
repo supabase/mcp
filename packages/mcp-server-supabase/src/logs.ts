@@ -113,3 +113,53 @@ export function resolveLogWindow(
     iso_timestamp_end: new Date(endMs).toISOString(),
   };
 }
+
+/** Sources in the unified `logs` table that `show_logs` can filter to. */
+export const LOG_EVENT_SOURCES = [
+  'edge_logs',
+  'postgres_logs',
+  'auth_logs',
+  'storage_logs',
+  'realtime_logs',
+  'function_edge_logs',
+  'function_logs',
+  'postgrest_logs',
+  'pgbouncer_logs',
+] as const;
+
+export const LOG_EVENT_LEVELS = ['error', 'warning', 'info'] as const;
+
+/** Most events `show_logs` reads. */
+export const LOG_EVENT_LIMIT = 100;
+
+// Follows Studio's unified logs. Gateway, auth and storage rows report
+// severity_text INFO whatever their response, so the HTTP status decides
+// first and severity applies only to rows without one. Expressions are
+// inlined because the logs endpoint can't filter on derived aliases.
+const httpStatusSql =
+  "CASE WHEN source = 'auth_logs' THEN log_attributes['status'] WHEN source = 'storage_logs' THEN log_attributes['res.statusCode'] ELSE log_attributes['response.status_code'] END";
+const logLevelSql = `CASE WHEN toInt32OrZero(${httpStatusSql}) >= 500 THEN 'error' WHEN toInt32OrZero(${httpStatusSql}) BETWEEN 400 AND 499 THEN 'warning' WHEN toInt32OrZero(${httpStatusSql}) BETWEEN 200 AND 299 THEN 'info' WHEN upper(severity_text) IN ('ERROR', 'FATAL', 'PANIC', 'CRITICAL', 'ALERT', 'EMERGENCY') THEN 'error' WHEN upper(severity_text) IN ('WARNING', 'WARN') THEN 'warning' ELSE 'info' END`;
+const logColumnsSql = `id, timestamp, source, severity_text, (${logLevelSql}) AS level, (CASE WHEN source = 'postgres_logs' THEN log_attributes['parsed.sql_state_code'] ELSE ${httpStatusSql} END) AS status, if(source = 'storage_logs', log_attributes['req.method'], log_attributes['request.method']) AS method, if(source = 'storage_logs', log_attributes['req.url'], log_attributes['request.path']) AS path, event_message`;
+
+/**
+ * The latest events across the unified `logs` table (ClickHouse), with the
+ * level, status, method and path Studio's unified logs show. `source` and
+ * `level` come from fixed lists, so they're safe to inline.
+ */
+export function logEventsSql({
+  source = 'all',
+  level = 'all',
+}: {
+  source?: 'all' | 'edge_functions' | (typeof LOG_EVENT_SOURCES)[number];
+  level?: 'all' | (typeof LOG_EVENT_LEVELS)[number];
+}) {
+  const where = [
+    source === 'all'
+      ? undefined
+      : source === 'edge_functions'
+        ? "source IN ('function_edge_logs', 'function_logs')"
+        : `source = '${source}'`,
+    level === 'all' ? undefined : `(${logLevelSql}) = '${level}'`,
+  ].filter(Boolean);
+  return `SELECT ${logColumnsSql} FROM logs${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY timestamp DESC LIMIT ${LOG_EVENT_LIMIT}`;
+}

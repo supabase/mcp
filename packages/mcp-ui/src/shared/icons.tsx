@@ -142,6 +142,33 @@ export function ChevronDownIcon(props: IconProps) {
   );
 }
 
+export function SearchIcon(props: IconProps) {
+  return (
+    <LucideIcon {...props}>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </LucideIcon>
+  );
+}
+
+export function XIcon(props: IconProps) {
+  return (
+    <LucideIcon {...props}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </LucideIcon>
+  );
+}
+
+export function SendIcon(props: IconProps) {
+  return (
+    <LucideIcon {...props}>
+      <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
+      <path d="m21.854 2.147-10.94 10.939" />
+    </LucideIcon>
+  );
+}
+
 export function KeyRoundIcon(props: IconProps) {
   return (
     <LucideIcon {...props}>

@@ -1,0 +1,306 @@
+@layer components {
+  /*
+   * Recent logs (see LogsView), after the surfaces' LogsView: a toolbar of
+   * search and filters, then the event list with the selection's details
+   * inset beside it on wide views and below it on narrow ones. Inline in a
+   * conversation it takes the query editor's frame, and the body is capped
+   * so a hundred events don't stretch the view.
+   */
+  :where(.logs-view) {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    overflow: hidden;
+    border: var(--border-width-regular) solid var(--sb-color-border);
+    border-radius: var(--border-radius-md);
+    background: var(--sb-color-card);
+    color: var(--sb-color-foreground);
+    container-type: inline-size;
+
+    /* LogsToolbar: wraps when narrow. */
+    :where([data-slot="toolbar"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-2);
+      padding: var(--sb-space-2) var(--sb-space-3);
+      border-block-end: var(--border-width-regular) solid var(--sb-color-border);
+    }
+
+    /* InputGroup at 26px: the icon, the input, then Clear. */
+    :where([data-slot="toolbar"] [data-slot="search"]) {
+      display: flex;
+      flex: 1 1 10rem;
+      align-items: center;
+      gap: var(--sb-space-2);
+      block-size: 26px;
+      padding-inline: var(--sb-space-2);
+      border: var(--border-width-regular) solid var(--sb-color-input);
+      border-radius: var(--border-radius-md);
+
+      &:where(:focus-within) {
+        outline: 2px solid var(--sb-color-ring);
+        outline-offset: 2px;
+      }
+    }
+
+    :where([data-slot="search"] [data-slot="search-icon"]) {
+      color: var(--sb-color-tertiary-foreground);
+    }
+
+    :where([data-slot="search"] input) {
+      flex: 1;
+      min-inline-size: 0;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: var(--sb-color-foreground);
+      font: inherit;
+      font-size: var(--font-text-xs-size);
+
+      &:where(:focus-visible) {
+        outline: none;
+      }
+
+      &::placeholder {
+        color: var(--sb-color-tertiary-foreground);
+      }
+    }
+
+    :where([data-slot="search"] [data-slot="search-clear"]) {
+      justify-content: center;
+      inline-size: 20px;
+      block-size: 20px;
+      padding: 0;
+      border-color: transparent;
+      color: var(--sb-color-tertiary-foreground);
+
+      &:where(:hover:not(:disabled)) {
+        color: var(--sb-color-foreground);
+      }
+    }
+
+    /* Toolbar actions: tiny text icon buttons, tertiary until hovered. */
+    :where([data-slot="action"]) {
+      flex: none;
+      justify-content: center;
+      inline-size: 28px;
+      block-size: 26px;
+      padding: 0;
+      border-color: transparent;
+      color: var(--sb-color-tertiary-foreground);
+
+      &:where(:hover:not(:disabled)) {
+        color: var(--sb-color-foreground);
+      }
+    }
+
+    :where([data-slot="alerts"]) {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sb-space-2);
+      padding: var(--sb-space-2) var(--sb-space-3) 0;
+    }
+
+    :where([data-slot="body"]) {
+      display: flex;
+      flex-direction: column;
+      min-block-size: 0;
+      max-block-size: 480px;
+
+      @container (min-width: 48rem) {
+        flex-direction: row;
+      }
+    }
+
+    /* LogList. */
+    :where([data-slot="body"] [data-slot="list"]) {
+      flex: 1;
+      min-block-size: 120px;
+      min-inline-size: 0;
+      padding: var(--sb-space-1);
+      overflow: auto;
+    }
+
+    :where([data-slot="list"] [data-slot="list-message"]) {
+      padding: 32px var(--sb-space-4);
+      color: var(--sb-color-muted-foreground);
+      font-size: var(--font-text-sm-size);
+      text-align: center;
+    }
+
+    /* One event: a 28px row of level dot, time, source, method, status and
+       message, monospace, highlighted when selected. */
+    :where([data-slot="list"] [data-slot="log"]) {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      inline-size: 100%;
+      min-inline-size: 580px;
+      block-size: 28px;
+      padding: 0 var(--sb-space-2);
+      border: none;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: var(--font-text-xs-size);
+      text-align: start;
+      user-select: none;
+
+      &:where(:hover:not(:disabled)) {
+        background: var(--sb-color-muted);
+      }
+
+      &:where([aria-selected="true"]) {
+        background: color-mix(
+          in oklab,
+          var(--sb-color-foreground) 10%,
+          transparent
+        );
+      }
+    }
+
+    :where([data-slot="log"] [data-slot="log-dot"]) {
+      flex: none;
+      inline-size: 6px;
+      block-size: 6px;
+      border-radius: var(--border-radius-full);
+      background: var(--sb-color-tertiary-foreground);
+    }
+
+    :where([data-level="ERROR"] [data-slot="log-dot"]) {
+      background: var(--sb-color-destructive);
+    }
+
+    :where([data-level="WARN"] [data-slot="log-dot"]) {
+      background: var(--sb-color-warning);
+    }
+
+    :where([data-slot="log"] [data-slot="log-time"]) {
+      flex: none;
+      inline-size: 64px;
+      color: var(--sb-color-muted-foreground);
+      font-variant-numeric: tabular-nums;
+    }
+
+    :where([data-slot="log"] [data-slot="log-source"]) {
+      flex: none;
+      inline-size: 96px;
+      overflow: hidden;
+      color: var(--sb-color-muted-foreground);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    :where([data-slot="log"] [data-slot="log-method"]) {
+      flex: none;
+      color: var(--sb-color-tertiary-foreground);
+    }
+
+    :where([data-slot="log"] [data-slot="log-status"]) {
+      flex: none;
+      color: var(--sb-color-muted-foreground);
+      font-variant-numeric: tabular-nums;
+    }
+
+    :where([data-level="ERROR"] [data-slot="log-status"]) {
+      color: var(--sb-color-destructive);
+    }
+
+    :where([data-level="WARN"] [data-slot="log-status"]) {
+      color: var(--sb-color-warning);
+    }
+
+    :where([data-slot="log"] [data-slot="log-message"]) {
+      flex: 1;
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* LogDetailPanel: a section docked under the list, or beside it on wide
+       views, edge to edge with only a hairline between them, so the list
+       keeps the rest of the height and stays scrollable. Docked under the
+       list it has a fixed height, so moving between events never shifts
+       the list; its body scrolls instead. */
+    :where([data-slot="body"] [data-slot="detail"]) {
+      display: flex;
+      flex: none;
+      flex-direction: column;
+      min-block-size: 0;
+      block-size: 240px;
+      overflow: hidden;
+      border-block-start: var(--border-width-regular) solid
+        var(--sb-color-border);
+
+      @container (min-width: 48rem) {
+        inline-size: 288px;
+        min-inline-size: 240px;
+        block-size: auto;
+        border-block-start: none;
+        border-inline-start: var(--border-width-regular) solid
+          var(--sb-color-border);
+      }
+    }
+
+    :where([data-slot="detail"] [data-slot="detail-header"]) {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: var(--sb-space-1);
+      block-size: 40px;
+      padding-inline: var(--sb-space-3);
+      border-block-end: var(--border-width-regular) solid var(--sb-color-border);
+    }
+
+    :where([data-slot="detail-header"] [data-slot="detail-title"]) {
+      flex: 1;
+      min-inline-size: 0;
+      margin: 0;
+      overflow: hidden;
+      font-size: var(--font-text-sm-size);
+      font-weight: var(--font-weight-normal);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    :where([data-slot="detail"] [data-slot="detail-body"]) {
+      flex: 1;
+      min-block-size: 0;
+      padding: var(--sb-space-4) var(--sb-space-3);
+      overflow: auto;
+      font-size: var(--font-text-xs-size);
+      line-height: 1.625;
+    }
+
+    :where([data-slot="detail-body"] [data-slot="detail-fields"]) {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 0;
+    }
+
+    :where([data-slot="detail-fields"] [data-slot="detail-field"]) {
+      display: grid;
+      grid-template-columns: 55px minmax(0, 1fr);
+      gap: var(--sb-space-3);
+    }
+
+    :where([data-slot="detail-field"] dt) {
+      color: var(--sb-color-muted-foreground);
+    }
+
+    :where([data-slot="detail-field"] dd) {
+      margin: 0;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    :where([data-slot="detail-body"] [data-slot="detail-json"]) {
+      margin: 0;
+      font-family: var(--font-mono);
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+  }
+}

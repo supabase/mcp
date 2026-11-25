@@ -581,6 +581,114 @@ route('POST', '/v1/projects/{ref}/database/query', async ({ params, body }) => {
   }
 });
 
+// Sample events for show_logs' unified query (logEventsSql in src/logs.ts).
+// The filters sit after `FROM logs`; the columns before it name sources too.
+const UNIFIED_SAMPLES = [
+  {
+    source: 'edge_logs',
+    method: 'GET',
+    path: '/rest/v1/customers',
+    status: '200',
+  },
+  {
+    source: 'postgres_logs',
+    severity_text: 'ERROR',
+    status: '42P01',
+    message: 'relation "custmers" does not exist',
+  },
+  {
+    source: 'auth_logs',
+    method: 'POST',
+    path: '/token',
+    status: '400',
+    message: 'Invalid login credentials',
+  },
+  {
+    source: 'edge_logs',
+    method: 'POST',
+    path: '/rest/v1/orders',
+    status: '201',
+  },
+  {
+    source: 'function_edge_logs',
+    method: 'POST',
+    path: '/functions/v1/send-email',
+    status: '500',
+  },
+  {
+    source: 'function_logs',
+    severity_text: 'WARNING',
+    message: 'Retrying SMTP connection',
+  },
+  {
+    source: 'storage_logs',
+    method: 'GET',
+    path: '/object/public/avatars/1.png',
+    status: '404',
+  },
+  {
+    source: 'postgres_logs',
+    severity_text: 'LOG',
+    status: '00000',
+    message: 'connection authorized: user=authenticator',
+  },
+  {
+    source: 'realtime_logs',
+    severity_text: 'INFO',
+    message: 'Joined channel realtime:public:orders',
+  },
+] as const;
+
+function levelOf(sample: (typeof UNIFIED_SAMPLES)[number]) {
+  const status = Number('status' in sample ? sample.status : 0);
+  if (status >= 500) return 'error';
+  if (status >= 400 && status < 500) return 'warning';
+  if (status >= 200 && status < 300) return 'info';
+  const severity = 'severity_text' in sample ? sample.severity_text : 'INFO';
+  if (severity === 'ERROR') return 'error';
+  if (severity === 'WARNING') return 'warning';
+  return 'info';
+}
+
+function unifiedLogEvents(sql: string, start: number, end: number) {
+  const filters = sql.split(/ FROM logs/i)[1] ?? '';
+  const level = /\) = '(\w+)'/.exec(filters)?.[1];
+  const sources = filters.includes(
+    "source IN ('function_edge_logs', 'function_logs')"
+  )
+    ? ['function_edge_logs', 'function_logs']
+    : // The source filter comes first; the level's CASE names sources too.
+      /^ WHERE source = '(\w+)'/
+        .exec(filters)
+        ?.slice(1);
+  const count = 60;
+  return Array.from({ length: count }, (_, n) => {
+    const sample = UNIFIED_SAMPLES[n % UNIFIED_SAMPLES.length]!;
+    const method = 'method' in sample ? sample.method : '';
+    const path = 'path' in sample ? sample.path : '';
+    const status = 'status' in sample ? sample.status : '';
+    return {
+      id: crypto.randomUUID(),
+      // Microseconds, as the logs endpoint returns them.
+      timestamp: Math.round(end - ((end - start) * n) / count) * 1000,
+      source: sample.source,
+      severity_text: 'severity_text' in sample ? sample.severity_text : 'INFO',
+      level: levelOf(sample),
+      status,
+      method,
+      path,
+      event_message:
+        'message' in sample
+          ? sample.message
+          : `${method} | ${status} | ${path}`,
+    };
+  }).filter(
+    (event) =>
+      (!level || event.level === level) &&
+      (!sources || sources.includes(event.source))
+  );
+}
+
 // Sample log events for the logs endpoint, whatever the SQL: spread over the
 // requested window, newest first, shaped like the source the SQL names.
 const LOG_PATHS = ['/rest/v1/customers', '/rest/v1/orders', '/auth/v1/token'];
@@ -593,12 +701,16 @@ route(
     if (!projects.has(params.ref!))
       return notFound(`Project not found: ${params.ref}`);
     const sql = url.searchParams.get('sql') ?? '';
-    const source = /source\s*=\s*'(\w+)'/.exec(sql)?.[1] ?? 'edge_logs';
     const end =
       Date.parse(url.searchParams.get('iso_timestamp_end') ?? '') || Date.now();
     const start =
       Date.parse(url.searchParams.get('iso_timestamp_start') ?? '') ||
       end - 24 * 60 * 60 * 1000;
+    // show_logs' unified query: events across sources, honouring its filters.
+    if (/ AS level\b/.test(sql)) {
+      return { body: { result: unifiedLogEvents(sql, start, end) } };
+    }
+    const source = /source\s*=\s*'(\w+)'/.exec(sql)?.[1] ?? 'edge_logs';
     const count = 60;
     const result = Array.from({ length: count }, (_, n) => {
       // Microseconds, as the logs endpoint returns them.

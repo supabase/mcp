@@ -127,11 +127,10 @@
       gap: var(--sb-space-2);
     }
 
-    /* Studio's small Input, Select and Textarea, as mcp-ui draws fields:
-       a hairline in the input colour on the host's surface. */
+    /* Studio's small Input and Textarea, as mcp-ui draws fields: a
+       hairline in the input colour on the host's surface. */
     :where(
-        [data-slot="field-control"]
-          :is([data-slot="input"], [data-slot="json"], select)
+        [data-slot="field-control"] :is([data-slot="input"], [data-slot="json"])
       ) {
       inline-size: 100%;
       min-inline-size: 0;
@@ -149,7 +148,7 @@
       }
     }
 
-    :where([data-slot="field-control"] :is([data-slot="input"], select)) {
+    :where([data-slot="field-control"] [data-slot="input"]) {
       block-size: var(--sb-control-size);
     }
 
@@ -168,32 +167,9 @@
       min-inline-size: 0;
     }
 
-    :where(
-        [data-slot="field-control"]
-          > [data-slot="select"]
-          + [data-slot="select"]
-      ) {
+    :where([data-slot="field-control"] > [data-slot="mode"]) {
       flex: none;
       inline-size: 112px;
-    }
-
-    :where([data-slot="select"]) {
-      position: relative;
-      display: flex;
-    }
-
-    :where([data-slot="select"] select) {
-      padding-inline-end: calc(var(--sb-space-3) + 20px);
-      appearance: none;
-    }
-
-    :where([data-slot="select"] [data-slot="select-icon"]) {
-      position: absolute;
-      inset-block-start: 50%;
-      inset-inline-end: var(--sb-space-2);
-      color: var(--sb-color-tertiary-foreground);
-      transform: translateY(-50%);
-      pointer-events: none;
     }
 
     :where([data-slot="error"]) {

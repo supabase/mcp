@@ -75,5 +75,7 @@ on first use with sample `customers` and `orders` tables, so `execute_sql`,
 `{"id": 3}`); `read_only` queries run as a read-only role.
 The logs endpoint returns 60 sample events spread over the requested window,
 shaped like the source the SQL names (`postgres_logs` gets severities, anything
-else HTTP requests), whatever the rest of the SQL says. Unknown routes log `!! UNHANDLED ROUTE`
+else HTTP requests), whatever the rest of the SQL says. `show_logs`' unified
+query gets a mix of sources and levels instead, filtered by its source and
+level. Unknown routes log `!! UNHANDLED ROUTE`
 and return 404.

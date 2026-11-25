@@ -55,4 +55,5 @@ export const VIEW_TOOLS: ReadonlySet<string> = new Set([
   'show_issues',
   'show_query',
   'show_row',
+  'show_logs',
 ]);
