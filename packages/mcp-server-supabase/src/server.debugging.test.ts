@@ -726,12 +726,8 @@ test('explicit issue filters only run the requested check and retain lower sever
   expect(result.issues).toHaveLength(1);
 });
 
-// Size budget for the default get_issues response on a large project.
-// #124: Claude Code rejects an MCP tool response over 25,000 tokens. The
-// fixture below has the shape of the Mockamaster capture in #546 (547
-// findings in 11 issues) and serializes to about 43,500 characters. The
-// budget leaves about 10% headroom, so a new field on every finding or a
-// higher MAX_AFFECTED_PER_ISSUE fails here and becomes a deliberate change.
+// Fixture response is 43,493 chars; budget adds ~10% so growth fails here.
+// Real ceiling: Claude Code rejects tool responses over 25,000 tokens (#124).
 const LARGE_PROJECT_ISSUES_BUDGET = 48_000;
 
 test('issues stay within the response budget for a large project', async () => {
