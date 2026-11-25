@@ -19,9 +19,11 @@ export function isQueryCell(cell: NotebookCell): cell is QueryCell {
 }
 
 /**
- * Appends `limit <n>` to a single `select` statement that doesn't already
- * limit its rows. Anything it can't reason about safely (multiple statements,
- * comments, non-selects, or any LIMIT/FETCH token) is returned unchanged.
+ * Appends `limit <n>` to a single `select` (or read-only `with` query) that
+ * doesn't already limit its rows. Anything it can't reason about safely
+ * (multiple statements, comments, writes, or any LIMIT/FETCH token) is
+ * returned unchanged. Like Studio's auto-limit, `row_limit` is only a default:
+ * an explicit LIMIT wins, and rows are never trimmed after the fetch.
  */
 export function applyRowLimit(sql: string, limit: number): string {
   const { spans, unterminated } = lexSql(sql);
@@ -29,7 +31,7 @@ export function applyRowLimit(sql: string, limit: number): string {
 
   const cleanedSql = sql.trim().replaceAll('\n', ' ').replaceAll(/\s+/g, ' ');
 
-  // Only semicolons in code separate statements. Ones inside string
+  // Only code counts as syntax. Semicolons and keywords inside string
   // literals, quoted identifiers, or dollar-quoted bodies do not.
   const code = spans
     .map((span) =>
@@ -38,11 +40,19 @@ export function applyRowLimit(sql: string, limit: number): string {
     .join('');
   const hasMultipleStatements = code.trim().replace(/;+$/, '').includes(';');
 
+  // A CTE can end in a write (`with x as (...) insert ...`), where a trailing
+  // limit is invalid, so as in Studio, `with` only counts as a select when no
+  // write keyword appears in its code.
+  const isSelectLike =
+    /^select\b/i.test(cleanedSql) ||
+    (/^with\b/i.test(cleanedSql) &&
+      !/\b(?:insert|update|delete|merge|into)\b/i.test(code));
+
   const shouldLimit =
     limit > 0 &&
     !/--|\/\*/.test(cleanedSql) &&
     !hasMultipleStatements &&
-    /^select\b/i.test(cleanedSql) &&
+    isSelectLike &&
     // Stay conservative around subqueries and quoted text too: without a
     // parser, leaving an existing limit alone is safer than appending one.
     !/\b(?:limit|fetch)\b/i.test(cleanedSql);

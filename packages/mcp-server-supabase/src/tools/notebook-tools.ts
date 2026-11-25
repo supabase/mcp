@@ -348,16 +348,6 @@ async function runQueryCell(
         read_only: readOnly,
         max_result_bytes: maxResultBytes,
       });
-      // applyRowLimit only rewrites SQL it can reason about, so CTEs,
-      // commented SQL, and other shapes come back unlimited. Cap the rows here
-      // too, so row_limit always bounds what the cell returns.
-      if (
-        Array.isArray(rows) &&
-        cell.row_limit > 0 &&
-        rows.length > cell.row_limit
-      ) {
-        rows = rows.slice(0, cell.row_limit);
-      }
     } else {
       if (!debugging?.queryLogs) {
         throw new Error(

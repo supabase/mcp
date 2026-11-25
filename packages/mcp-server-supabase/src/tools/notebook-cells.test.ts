@@ -20,6 +20,33 @@ describe('applyRowLimit', () => {
     ],
     ['select "a;b" from t', 'select "a;b" from t limit 10;'],
     ["select E'it\\'s; ok' as s", "select E'it\\'s; ok' as s limit 10;"],
+    // A read-only CTE is a select, as in Studio.
+    [
+      'with u as (select 1) select * from u',
+      'with u as (select 1) select * from u limit 10;',
+    ],
+    [
+      'WITH RECURSIVE t(n) AS (select 1 union all select n + 1 from t) select n from t;',
+      'WITH RECURSIVE t(n) AS (select 1 union all select n + 1 from t) select n from t limit 10;',
+    ],
+    // Write keywords only count in code, not in literals, quoted identifiers
+    // or longer words.
+    [
+      "with u as (select 'insert into t' as s) select * from u",
+      "with u as (select 'insert into t' as s) select * from u limit 10;",
+    ],
+    [
+      'with u as (select 1 as "update") select * from u',
+      'with u as (select 1 as "update") select * from u limit 10;',
+    ],
+    [
+      'with u as (select $$delete$$ as s) select * from u',
+      'with u as (select $$delete$$ as s) select * from u limit 10;',
+    ],
+    [
+      'with u as (select updated_at, deleted from t) select * from u',
+      'with u as (select updated_at, deleted from t) select * from u limit 10;',
+    ],
   ])('limits %j', (sql, expected) => {
     expect(applyRowLimit(sql, 10)).toBe(expected);
   });
@@ -42,7 +69,35 @@ describe('applyRowLimit', () => {
     ['a trailing statement', 'select 1; select 2'],
     ['comments', 'select * from users -- all of them'],
     ['a non-select statement', 'insert into users default values'],
-    ['a with query', 'with u as (select 1) select * from u'],
+    [
+      'a with query that inserts',
+      'with u as (select 1) insert into t select * from u',
+    ],
+    ['a with query that updates', 'with u as (select 1) update t set a = 1'],
+    [
+      'a with query with a data-modifying CTE',
+      'with d as (delete from t returning *) select * from d',
+    ],
+    [
+      'a with query that merges',
+      'with u as (select 1 as id) merge into t using u on t.id = u.id when matched then do nothing',
+    ],
+    [
+      'a with query that selects into a table',
+      'with u as (select 1) select * into t2 from u',
+    ],
+    [
+      'a with query that locks rows',
+      'with u as (select 1) select * from t for update',
+    ],
+    [
+      'a with query with a limit',
+      'with u as (select 1) select * from u limit 5',
+    ],
+    [
+      'a with query with comments',
+      'with u as (select 1) select * from u -- all',
+    ],
     ['an unterminated string', "select 'a;b"],
     ['a statement after a string literal', "select 'a'; select 2"],
   ])('leaves %s unchanged', (_, sql) => {

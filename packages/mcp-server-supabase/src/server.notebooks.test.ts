@@ -672,7 +672,7 @@ describe('run_notebook', () => {
     ]);
   });
 
-  test('caps returned rows at row_limit when the SQL is sent unlimited', async () => {
+  test('applies row_limit as an auto-limit, like Studio', async () => {
     const platform = createSupabaseApiPlatform({
       accessToken: ACCESS_TOKEN,
       apiUrl: API_URL,
@@ -680,10 +680,17 @@ describe('run_notebook', () => {
     const executeSql = vi.spyOn(platform.database!, 'executeSql');
     const { callTool } = await setup({ platform, features: RUN_FEATURES });
     const cteSql =
-      'with s as (select g from generate_series(1, 50) g) select * from s';
-    const commentedSql = 'select g from generate_series(1, 50) g -- all rows';
+      'with s as (select g from generate_series(1, 10) g) select * from s';
+    const explicitLimitSql = 'select g from generate_series(1, 10) g limit 6';
+    const commentedSql = 'select g from generate_series(1, 4) g -- all rows';
     const { project, notebook } = await createNotebookFixture([
-      { id: 'cte', type: 'database', sql: cteSql, row_limit: 5 },
+      { id: 'cte', type: 'database', sql: cteSql, row_limit: 3 },
+      {
+        id: 'explicit-limit',
+        type: 'database',
+        sql: explicitLimitSql,
+        row_limit: 3,
+      },
       { id: 'commented', type: 'database', sql: commentedSql, row_limit: 3 },
     ]);
 
@@ -692,31 +699,32 @@ describe('run_notebook', () => {
       arguments: runArgs(project, notebook),
     });
 
+    // The read-only CTE is limited in SQL. An explicit LIMIT wins over
+    // row_limit, and SQL left as written is not trimmed after the fetch.
+    expect(executeSql.mock.calls.map(([, options]) => options.query)).toEqual([
+      `${cteSql} limit 3;`,
+      explicitLimitSql,
+      commentedSql,
+    ]);
     expect(parseCellResults(result.cells)).toEqual([
       {
         cell_id: 'cte',
         type: 'database',
         status: 'success',
-        rows: [1, 2, 3, 4, 5].map((g) => ({ g })),
+        rows: [1, 2, 3].map((g) => ({ g })),
+      },
+      {
+        cell_id: 'explicit-limit',
+        type: 'database',
+        status: 'success',
+        rows: [1, 2, 3, 4, 5, 6].map((g) => ({ g })),
       },
       {
         cell_id: 'commented',
         type: 'database',
         status: 'success',
-        rows: [1, 2, 3].map((g) => ({ g })),
+        rows: [1, 2, 3, 4].map((g) => ({ g })),
       },
-    ]);
-    // applyRowLimit leaves both statements as written, so the cap comes from
-    // trimming the rows, and only the kept rows count against the budget.
-    expect(executeSql.mock.calls.map(([, options]) => options.query)).toEqual([
-      cteSql,
-      commentedSql,
-    ]);
-    expect(
-      executeSql.mock.calls.map(([, options]) => options.max_result_bytes)
-    ).toEqual([
-      1_000_000,
-      1_000_000 - JSON.stringify([1, 2, 3, 4, 5].map((g) => ({ g }))).length,
     ]);
   });
 
