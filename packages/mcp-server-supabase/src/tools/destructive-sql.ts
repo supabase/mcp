@@ -34,8 +34,16 @@ function hasDestructiveStart(sql: string, starts: RegExp): boolean {
   );
 }
 
-const updateWithoutWhereRegex =
-  /(?:^|;)\s*update\s+(?:only\s+)?(?:"(?:[^"]|"")*"|[\w]+)(?:\.(?:"(?:[^"]|"")*"|[\w]+))?(?:\s+(?:as\s+)?(?:"(?:[^"]|"")*"|[\w]+))?\s+set\s+[\w\W]+?(?!\s*where\s)/is;
+// splitStatements blanks quoted identifiers, so an empty one has to match.
+const updateIdentifier = String.raw`(?:"(?:[^"]|"")*"|[\w]+)`;
+const updateTable = String.raw`${updateIdentifier}(?:\.${updateIdentifier})?`;
+// An UPDATE target is t, t *, ONLY t or ONLY (t): relation_expr in Postgres's
+// gram.y. It takes the whitespace after it, which * and ) do not need.
+const updateTarget = String.raw`(?:only\s*\(\s*${updateTable}\s*\)\s*|(?:only\s+)?${updateTable}(?:\s*\*\s*|\s+))`;
+const updateWithoutWhereRegex = new RegExp(
+  String.raw`(?:^|;)\s*update\s+${updateTarget}(?:(?:as\s+)?${updateIdentifier}\s+)?set\s+[\w\W]+?(?!\s*where\s)`,
+  'is'
+);
 
 function removeComments(sql: string, scan: SqlScan): string {
   let parts: string[] | undefined;
@@ -200,7 +208,7 @@ function isUpdateWithoutWhereFromScan(sql: string, scan: SqlScan): boolean {
     return (
       statement.toLowerCase().startsWith('update') &&
       updateWithoutWhereRegex.test(statement) &&
-      !/where\s/i.test(statement)
+      !/(?<![\w$\u0080-\uffff])where(?![\w$\u0080-\uffff])/i.test(statement)
     );
   });
 }

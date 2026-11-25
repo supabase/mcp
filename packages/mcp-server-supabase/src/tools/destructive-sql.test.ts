@@ -76,6 +76,24 @@ describe('isUpdateWithoutWhere', () => {
     ).toBe(true);
   });
 
+  test.each([
+    'UPDATE films SET elsewhere = 1;',
+    'UPDATE films SET nowhere = 1;',
+    'UPDATE films SET elsewhere = 1, title = nowhere;',
+    'UPDATE films SET where$x = 1;',
+    'UPDATE films SET éwhere = 1;',
+  ])('identifier containing where without WHERE matches: %s', (sql) => {
+    expect(isUpdateWithoutWhere(sql)).toBe(true);
+  });
+
+  test.each([
+    'UPDATE films SET elsewhere = 1 WHERE id = 1;',
+    'UPDATE films SET kind = 1 WHERE(id = 1);',
+    'UPDATE films SET kind = 1\nWHERE id = 1;',
+  ])('WHERE clause is detected: %s', (sql) => {
+    expect(isUpdateWithoutWhere(sql)).toBe(false);
+  });
+
   test('quoted identifier containing where without WHERE matches', () => {
     expect(isUpdateWithoutWhere('UPDATE "where table" SET id = 1;')).toBe(true);
   });
@@ -130,6 +148,15 @@ describe('isUpdateWithoutWhere', () => {
     'UPDATE films AS f SET id = 2;',
     'UPDATE films f SET id = 2;',
     'UPDATE ONLY public.films AS f SET id = 2;',
+    'UPDATE films* SET id = 2;',
+    'UPDATE public.films * SET id = 2;',
+    'UPDATE films*SET id = 2;',
+    'UPDATE "films"* AS f SET id = 2;',
+    'UPDATE films * f SET id = 2;',
+    'UPDATE ONLY (films) SET id = 2;',
+    'UPDATE ONLY(public.films)SET id = 2;',
+    'UPDATE ONLY ( "public"."films" ) AS f SET id = 2;',
+    'UPDATE ONLY (films) f SET id = 2;',
   ])('UPDATE without WHERE matches: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(true);
   });
@@ -139,6 +166,8 @@ describe('isUpdateWithoutWhere', () => {
     '/* reset ids */ UPDATE films SET id = 2 WHERE id = 1;',
     'UPDATE ONLY films SET id = 2 WHERE id = 1;',
     'UPDATE films AS f SET id = 2 WHERE f.id = 1;',
+    'UPDATE films* SET id = 2 WHERE id = 1;',
+    'UPDATE ONLY (films) AS f SET id = 2 WHERE f.id = 1;',
   ])('UPDATE with WHERE does not match: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(false);
   });
@@ -159,6 +188,13 @@ describe('isDestructiveSql', () => {
     expect(isDestructiveSql('-- reset ids\nUPDATE films SET id = 2;')).toBe(
       true
     );
+  });
+
+  test.each([
+    'update public.films* set id = 2',
+    'update only (films) set id = 2',
+  ])('UPDATE without WHERE with inheritance syntax matches: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
   });
 
   test.each([

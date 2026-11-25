@@ -306,6 +306,22 @@ export const mockManagementApi = [
   ),
 
   /**
+   * Generate TypeScript types. Echoes `included_schemas` (or its absence) so
+   * tests can assert what the server sent.
+   */
+  http.get(
+    `${API_URL}/v1/projects/:projectId/types/typescript`,
+    ({ request }) => {
+      const includedSchemas = new URL(request.url).searchParams.get(
+        'included_schemas'
+      );
+      return HttpResponse.json({
+        types: `// included_schemas: ${includedSchemas ?? '(not sent)'}\nexport type Database = {}\n`,
+      });
+    }
+  ),
+
+  /**
    * Execute a SQL query on a project's database
    */
   http.post<
