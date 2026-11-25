@@ -4,6 +4,28 @@
  */
 
 export interface paths {
+    "/v2/projects/{ref}/warehouse/replication/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start or restart Warehouse replication
+         * @description Starts a stopped managed pipeline or restarts a starting, started or failed pipeline, preserving the selected tables and saved layouts. A failed pod with an active desired workload needs restart; start alone can leave it unchanged. Restart interrupts replication; in-progress initial copies may restart from scratch. If lost-slot recreation is configured, startup can rebuild destination tables. The response confirms acceptance only. Incomplete setup markers are preserved and require a successful setup retry. Inspect warehouse status for runtime diagnostics and observed table progress; these observations do not identify completion of this request. Inspect state before retrying an uncertain response.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        post: operations["v2-restart-warehouse-replication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/projects/{ref}/warehouse/replication/add": {
         parameters: {
             query?: never;
@@ -233,7 +255,7 @@ export interface paths {
         };
         /**
          * Get consolidated Warehouse status and capabilities
-         * @description Returns provisioning, configured compute, replication, cleanup lifecycle and supported capabilities, including when individual dependencies are unavailable. Enabled Warehouse state is independent of the selected table count. Readiness is inferred from configuration and replication; query connectivity is not checked. Does not inspect the FDW. Observation timestamps are retrieval times, separate from table sync lag, pipeline apply lag and feedback age. Read access remains available without a replication entitlement; mutation endpoints enforce their own entitlements and permissions.
+         * @description Returns provisioning, configured compute, replication, cleanup lifecycle and supported capabilities, including when individual dependencies are unavailable. Enabled Warehouse state is independent of the selected table count. Readiness is inferred from configuration and replication; query connectivity is not checked. Does not inspect the FDW. Observation timestamps are retrieval times, separate from table sync lag, pipeline apply lag and feedback age. Read access remains available without a replication entitlement; mutation endpoints enforce their own entitlements and permissions. Runtime diagnostics classify current failures. Table errors and progress are explicitly current, last-known or unavailable; they do not establish completion of a particular restart or resync. Capabilities describe Management API operations: workload_metrics includes query-stats and capacity; query_explain does not describe SQL EXPLAIN through the Warehouse connection.
          *
          *     This endpoint is currently in its **Alpha** stage.
          */
@@ -1186,6 +1208,73 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        V2WarehouseRestartResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_replication_restart";
+                id: string;
+                attributes: {
+                    pipeline_id: string;
+                    /** @enum {string} */
+                    action: "start" | "restart";
+                    /**
+                     * @description The runtime request was accepted. This does not establish resumed replication or completed initial copies.
+                     * @enum {string}
+                     */
+                    application_status: "accepted";
+                    pipeline_status_before: string;
+                };
+            };
+        };
+        APIErrorObject: {
+            id?: string;
+            /** @enum {string} */
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+            message: string;
+            description?: string;
+            links?: {
+                [key: string]: {
+                    href: string;
+                    rel?: string;
+                    title?: string;
+                    type?: string;
+                    describedby?: string;
+                    meta?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            meta?: {
+                [key: string]: unknown;
+            };
+            issues?: {
+                id?: string;
+                code: string;
+                message: string;
+                description?: string;
+                links?: {
+                    [key: string]: {
+                        href: string;
+                        rel?: string;
+                        title?: string;
+                        type?: string;
+                        describedby?: string;
+                        meta?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                meta?: {
+                    [key: string]: unknown;
+                };
+            }[];
+        };
+        ErrorResponseBody: {
+            error: components["schemas"]["APIErrorObject"];
+        };
         V2WarehouseReplicationRequest: {
             data: {
                 /**
@@ -1255,52 +1344,6 @@ export interface components {
                     includes_future_tables: false;
                 };
             };
-        };
-        APIErrorObject: {
-            id?: string;
-            /** @enum {string} */
-            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
-            message: string;
-            description?: string;
-            links?: {
-                [key: string]: {
-                    href: string;
-                    rel?: string;
-                    title?: string;
-                    type?: string;
-                    describedby?: string;
-                    meta?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            meta?: {
-                [key: string]: unknown;
-            };
-            issues?: {
-                id?: string;
-                code: string;
-                message: string;
-                description?: string;
-                links?: {
-                    [key: string]: {
-                        href: string;
-                        rel?: string;
-                        title?: string;
-                        type?: string;
-                        describedby?: string;
-                        meta?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                meta?: {
-                    [key: string]: unknown;
-                };
-            }[];
-        };
-        ErrorResponseBody: {
-            error: components["schemas"]["APIErrorObject"];
         };
         V2WarehouseResyncRequest: {
             data: {
@@ -1921,6 +1964,12 @@ export interface components {
                     };
                     pipeline: {
                         id: string;
+                        /** @description Safe classification of the current runtime failure. Includes static customer guidance, without exit codes, provider messages or worker logs; does not establish its underlying cause. Unrecognized or malformed diagnostics are omitted. */
+                        diagnostic: {
+                            /** @enum {string} */
+                            code: "out_of_memory" | "process_exited" | "crash_loop" | "image_unavailable" | "configuration_error" | "startup_failed" | "runtime_failed";
+                            message: string;
+                        } | null;
                         /** @enum {string} */
                         status: "stopped" | "starting" | "started" | "stopping" | "unknown" | "failed" | "unavailable";
                         /**
@@ -1939,7 +1988,7 @@ export interface components {
                          * @description Time the API retrieved this information. This timestamp does not indicate when data was measured or last synchronized.
                          */
                         observed_at: string | null;
-                        /** @description Postgres replication feedback. Null means Postgres reported no value; lag times also become null shortly after a caught-up slot sees no new WAL, while flush_lag_bytes, the WAL not yet confirmed flushed, reads 0. Feedback age measures time since the last response and does not establish how current query results are. */
+                        /** @description Slot health can remain visible during runtime recovery. Lag measurements and feedback age are unavailable unless the pipeline is started. */
                         apply_lag: {
                             active: boolean;
                             /** @enum {string|null} */
@@ -1962,12 +2011,41 @@ export interface components {
                         observed_at: string | null;
                         /** @enum {string|null} */
                         unavailable_reason: "assignment_unavailable" | "observation_unavailable" | "identity_mismatch" | "cleanup_in_progress" | "cleanup_failed" | null;
+                        /** @description Observed states of the selected tables, not completion or percentage of a specific mutation. Last-known states may predate a restart or resync. Null when the selection is unavailable. */
+                        progress: {
+                            /** @enum {string} */
+                            observation: "current" | "last_known" | "unavailable";
+                            selected: number;
+                            queued: number;
+                            copying_table: number;
+                            copied_table: number;
+                            following_wal: number;
+                            error: number;
+                            unknown: number;
+                        } | null;
                         items: {
                             id: number;
                             schema: string;
                             name: string;
                             /** @enum {string|null} */
                             replication_state: "queued" | "copying_table" | "copied_table" | "following_wal" | "error" | null;
+                            /** @enum {string} */
+                            state_observation: "current" | "last_known" | "unavailable";
+                            error: {
+                                reason: string;
+                                solution: string | null;
+                                retry_policy: {
+                                    /** @enum {string} */
+                                    policy: "no_retry";
+                                } | {
+                                    /** @enum {string} */
+                                    policy: "manual_retry";
+                                } | {
+                                    /** @enum {string} */
+                                    policy: "timed_retry";
+                                    next_retry: string;
+                                };
+                            } | null;
                             /** @description Postgres replication feedback. Null means Postgres reported no value; lag times also become null shortly after a caught-up slot sees no new WAL, while flush_lag_bytes, the WAL not yet confirmed flushed, reads 0. Feedback age measures time since the last response and does not establish how current query results are. */
                             sync_lag: {
                                 active: boolean;
@@ -1983,13 +2061,16 @@ export interface components {
                     /** @description Complete operations supported by this API, not caller authorization. Each operation still requires its feature, entitlement and project permission checks. */
                     capabilities: {
                         context: boolean;
+                        /** @description Query statistics and capacity inspection are supported by the Management API. Metric availability is reported separately. */
                         workload_metrics: boolean;
+                        /** @description Whether the Management API supports a query-explain operation. SQL EXPLAIN through the Warehouse connection is independent of this flag. */
                         query_explain: boolean;
                         table_layout_read: boolean;
                         table_layout_update: boolean;
                         replication_add: boolean;
                         replication_remove: boolean;
                         table_resync: boolean;
+                        replication_restart: boolean;
                     };
                 };
             };
@@ -2283,7 +2364,7 @@ export interface components {
                 attributes: {
                     /** @description Defaults to false, preserving historical files and replication progress. When the layout changes, true resets the table and copies it again. This requires initial sync to be enabled. Reads are disrupted during the copy. An unchanged layout never resets the table. */
                     reset_table?: boolean;
-                    /** @description Omit to preserve the saved sorting. Null makes sorting unmanaged. The none selector explicitly clears sorting. Otherwise, supply the complete sort selector. */
+                    /** @description Omit to preserve the saved sorting. Null makes sorting unmanaged. The none selector explicitly clears sorting. Otherwise, supply the complete sort selector. Example: `{"kind":"columns","columns":[{"name":"tenant_id","direction":"asc"},{"name":"event_at","direction":"desc","nulls":"last"}]}`. Sort by the primary key with `{"kind":"primary_key"}` or clear sorting with `{"kind":"none"}`. */
                     sort_by: ({
                         /** @enum {string} */
                         kind: "none";
@@ -2305,7 +2386,7 @@ export interface components {
                             nulls?: "first" | "last" | null;
                         }[];
                     }) | (never | null);
-                    /** @description Omit to preserve the saved partitioning. Null makes partitioning unmanaged. An empty list explicitly clears partitioning. Otherwise, supply all ordered partition keys. */
+                    /** @description Omit to preserve the saved partitioning. Null makes partitioning unmanaged. An empty list explicitly clears partitioning. Otherwise, supply all ordered partition keys. Day example: `[{"column":"event_at","transform":{"kind":"day"}}]`. Bucket example: `[{"column":"tenant_id","transform":{"kind":"bucket","count":8}}]`. Use `[]` to clear or `null` to stop managing partitioning. */
                     partition_by?: {
                         /** @description Source column name. */
                         column: string;
@@ -2334,7 +2415,7 @@ export interface components {
                 } | {
                     /** @description Defaults to false, preserving historical files and replication progress. When the layout changes, true resets the table and copies it again. This requires initial sync to be enabled. Reads are disrupted during the copy. An unchanged layout never resets the table. */
                     reset_table?: boolean;
-                    /** @description Omit to preserve the saved sorting. Null makes sorting unmanaged. The none selector explicitly clears sorting. Otherwise, supply the complete sort selector. */
+                    /** @description Omit to preserve the saved sorting. Null makes sorting unmanaged. The none selector explicitly clears sorting. Otherwise, supply the complete sort selector. Example: `{"kind":"columns","columns":[{"name":"tenant_id","direction":"asc"},{"name":"event_at","direction":"desc","nulls":"last"}]}`. Sort by the primary key with `{"kind":"primary_key"}` or clear sorting with `{"kind":"none"}`. */
                     sort_by?: ({
                         /** @enum {string} */
                         kind: "none";
@@ -2356,7 +2437,7 @@ export interface components {
                             nulls?: "first" | "last" | null;
                         }[];
                     }) | (never | null);
-                    /** @description Omit to preserve the saved partitioning. Null makes partitioning unmanaged. An empty list explicitly clears partitioning. Otherwise, supply all ordered partition keys. */
+                    /** @description Omit to preserve the saved partitioning. Null makes partitioning unmanaged. An empty list explicitly clears partitioning. Otherwise, supply all ordered partition keys. Day example: `[{"column":"event_at","transform":{"kind":"day"}}]`. Bucket example: `[{"column":"tenant_id","transform":{"kind":"bucket","count":8}}]`. Use `[]` to clear or `null` to stop managing partitioning. */
                     partition_by: {
                         /** @description Source column name. */
                         column: string;
@@ -4124,6 +4205,91 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "v2-restart-warehouse-replication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WarehouseRestartResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Managed Warehouse pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Warehouse lifecycle or runtime state does not permit restart */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Restart outcome uncertain; inspect runtime and table state before retrying */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
     "v2-add-warehouse-replication": {
         parameters: {
             query?: never;
