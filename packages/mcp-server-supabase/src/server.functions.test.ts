@@ -8,6 +8,7 @@ import {
 } from '../test/mocks.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
+import { PROJECT_COST_MONTHLY } from './pricing.js';
 import { createSupabaseMcpServer } from './server.js';
 import type { SupabaseMcpServerOptions } from './server.js';
 import { isInputRequiredResult } from '@modelcontextprotocol/client';
@@ -1675,9 +1676,15 @@ describe('tools', () => {
 
       const org = await createOrganization({
         name: 'URL-only client organization',
-        plan: 'free',
+        plan: 'pro',
         allowed_release_channels: ['ga'],
       });
+      const existingProject = await createProject({
+        name: 'Existing project',
+        region: 'us-east-1',
+        organization_id: org.id,
+      });
+      existingProject.status = 'ACTIVE_HEALTHY';
       const args = {
         name: 'Legacy-confirmed project',
         region: 'us-east-1',
@@ -1692,7 +1699,11 @@ describe('tools', () => {
 
       const confirmation = await client.callTool({
         name: 'confirm_cost',
-        arguments: { type: 'project', recurrence: 'monthly', amount: 0 },
+        arguments: {
+          type: 'project',
+          recurrence: 'monthly',
+          amount: PROJECT_COST_MONTHLY,
+        },
       });
       expect(confirmation.isError).not.toBe(true);
       const [confirmationContent] = confirmation.content;

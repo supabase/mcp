@@ -536,11 +536,17 @@ describe('tools', () => {
     const { errors, onToolCall } = captureToolErrors();
     const { callTool } = await setup({ onToolCall });
 
-    const freeOrg = await createOrganization({
-      name: 'Free Org',
-      plan: 'free',
+    const paidOrg = await createOrganization({
+      name: 'Paid Org',
+      plan: 'pro',
       allowed_release_channels: ['ga'],
     });
+    const existingProject = await createProject({
+      name: 'Existing Project',
+      region: 'us-east-1',
+      organization_id: paidOrg.id,
+    });
+    existingProject.status = 'ACTIVE_HEALTHY';
 
     await expect(
       callTool({
@@ -548,7 +554,7 @@ describe('tools', () => {
         arguments: {
           name: 'New Project',
           region: 'us-east-1',
-          organization_id: freeOrg.id,
+          organization_id: paidOrg.id,
           confirm_cost_id: 'not-the-cost-hash',
         },
       })
@@ -557,7 +563,7 @@ describe('tools', () => {
       message:
         'Cost confirmation ID does not match the expected cost of creating a project.',
     });
-    expect(mockProjects.size).toBe(0);
+    expect(mockProjects.size).toBe(1);
     expect(errors).toMatchObject([
       { name: 'ToolCallerError', kind: 'confirmation_required' },
     ]);
@@ -785,6 +791,66 @@ describe('tools', () => {
       expect(errors).toMatchObject([
         { name: 'ToolCallerError', kind: 'confirmation_required' },
       ]);
+    });
+
+    test('client without forms creates a $0 project without confirm_cost_id', async () => {
+      const { errors, onToolCall } = captureToolErrors();
+      const { callTool } = await setup({
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
+        onToolCall,
+      });
+
+      const freeOrg = await createOrganization({
+        name: 'Free Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+
+      const result = await callTool({
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: freeOrg.id,
+        },
+      });
+
+      expect(result).toMatchObject({
+        name: 'New Project',
+        organization_id: freeOrg.id,
+      });
+      expect(mockProjects.size).toBe(1);
+      expect(errors).toEqual([]);
+    });
+
+    test('client without forms creates a $0 project despite a stale confirm_cost_id', async () => {
+      const { callTool } = await setup({
+        elicitation: {
+          requestState: ELICITATION_REQUEST_STATE,
+          confirmation: COST_CONFIRMATION,
+        },
+      });
+
+      const freeOrg = await createOrganization({
+        name: 'Free Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
+
+      await callTool({
+        name: 'create_project',
+        arguments: {
+          name: 'New Project',
+          region: 'us-east-1',
+          organization_id: freeOrg.id,
+          confirm_cost_id: 'stale-hash',
+        },
+      });
+
+      expect(mockProjects.size).toBe(1);
     });
 
     test('form-capable client: $0 creates without elicitation', async () => {
