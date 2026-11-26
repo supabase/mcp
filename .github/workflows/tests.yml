@@ -8,8 +8,6 @@ jobs:
   test:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
@@ -24,16 +22,35 @@ jobs:
           pnpm rebuild # To create bin links
       - name: Packed platform consumer check
         run: pnpm run test:packed-platform-consumer
-        env:
-          ANTHROPIC_API_KEY: ''
       - name: Tests
-        run: pnpm run test:coverage
+        run: pnpm run test:coverage --project unit --project integration
       - name: Upload coverage artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage
           path: ./packages/mcp-server-supabase/coverage/lcov.info
           retention-days: 1
+  e2e:
+    # The e2e tests call Anthropic. Fork and Dependabot PRs don't get the key.
+    if: ${{ github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install: true
+          cache: true
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+      - name: Build libs
+        run: |
+          pnpm run build
+          pnpm rebuild # To create bin links
+      - name: E2E tests
+        run: pnpm --filter @supabase/mcp-server-supabase test:e2e
   ui-test:
     timeout-minutes: 10
     runs-on: ubuntu-latest
