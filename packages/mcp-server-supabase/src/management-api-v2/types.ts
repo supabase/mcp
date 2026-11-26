@@ -8040,12 +8040,20 @@ export interface operations {
     "v2-projects-ref-webhooks-endpoints-get": {
         parameters: {
             query?: {
-                /** @description Offset for offset-based pagination.
-                 *
-                 *     Offset should be dividable by `page[limit]` without a reminder (`offset % limit === 0`), otherwise it will cause weird behavior when used on a frontend. */
-                "page[offset]"?: string;
-                /** @description Up to how many records to return. */
-                "page[limit]"?: string;
+                page?: {
+                    /**
+                     * @description Offset for offset-based pagination.
+                     *
+                     *     Offset should be dividable by `page[limit]` without a reminder (`offset % limit === 0`), otherwise it will cause weird behavior when used on a frontend.
+                     * @default 0
+                     */
+                    offset?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     * @default 20
+                     */
+                    limit?: string;
+                };
             };
             header?: never;
             path: {
@@ -10059,12 +10067,26 @@ export interface operations {
     "v2-projects-ref-webhooks-endpoints-id-deliveries-get": {
         parameters: {
             query?: {
-                /** @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param. */
-                "page[before]"?: string;
-                /** @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param. */
-                "page[after]"?: string;
-                /** @description Up to how many records to return. */
-                "page[size]"?: string;
+                page?: {
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param.
+                     */
+                    before?: string;
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param.
+                     */
+                    after?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
+                     */
+                    size?: string;
+                };
             };
             header?: never;
             path: {
@@ -11399,12 +11421,20 @@ export interface operations {
     "v2-organizations-slug-webhooks-endpoints-get": {
         parameters: {
             query?: {
-                /** @description Offset for offset-based pagination.
-                 *
-                 *     Offset should be dividable by `page[limit]` without a reminder (`offset % limit === 0`), otherwise it will cause weird behavior when used on a frontend. */
-                "page[offset]"?: string;
-                /** @description Up to how many records to return. */
-                "page[limit]"?: string;
+                page?: {
+                    /**
+                     * @description Offset for offset-based pagination.
+                     *
+                     *     Offset should be dividable by `page[limit]` without a reminder (`offset % limit === 0`), otherwise it will cause weird behavior when used on a frontend.
+                     * @default 0
+                     */
+                    offset?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     * @default 20
+                     */
+                    limit?: string;
+                };
             };
             header?: never;
             path: {
@@ -13418,12 +13448,26 @@ export interface operations {
     "v2-organizations-slug-webhooks-endpoints-id-deliveries-get": {
         parameters: {
             query?: {
-                /** @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param. */
-                "page[before]"?: string;
-                /** @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param. */
-                "page[after]"?: string;
-                /** @description Up to how many records to return. */
-                "page[size]"?: string;
+                page?: {
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param.
+                     */
+                    before?: string;
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param.
+                     */
+                    after?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
+                     */
+                    size?: string;
+                };
             };
             header?: never;
             path: {
