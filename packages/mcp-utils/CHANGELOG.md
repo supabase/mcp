@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/supabase/mcp/compare/mcp-utils-v0.11.0...mcp-utils-v0.11.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* **mcp-ui:** shared project card for create-project and create-branch ([#578](https://github.com/supabase/mcp/issues/578)) ([efe189f](https://github.com/supabase/mcp/commit/efe189fe02eb8d0d06eb272eab55e729ca5c70e9))
+
 ## [0.11.0](https://github.com/supabase/mcp/compare/mcp-utils-v0.10.0...mcp-utils-v0.11.0) (2026-11-17)
 
 

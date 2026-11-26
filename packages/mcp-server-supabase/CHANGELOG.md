@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.20.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.19.0...mcp-server-supabase-v0.20.0) (2026-11-26)
+
+
+### Features
+
+* **debugging:** add project issues DEBUG-311 ([#546](https://github.com/supabase/mcp/issues/546)) ([01f8021](https://github.com/supabase/mcp/commit/01f8021f4978ba71c978286ce4943a8dcfbdb5ff))
+* **mcp-server-supabase:** add optional schemas parameter to generate_typescript_types ([#592](https://github.com/supabase/mcp/issues/592)) ([7532f53](https://github.com/supabase/mcp/commit/7532f53beab51944e199031006fa2a3f9c1ebd5d))
+
+
+### Bug Fixes
+
+* **debugging:** link docs once per issue in get_issues ([#610](https://github.com/supabase/mcp/issues/610)) ([74801d8](https://github.com/supabase/mcp/commit/74801d8e3ae405f6663fb6ab9f75d6530eb3fc68))
+* **mcp-server-supabase:** detect import maps uploaded with a ./ prefix ([#591](https://github.com/supabase/mcp/issues/591)) ([6b8f4dc](https://github.com/supabase/mcp/commit/6b8f4dc5021ea18fb14cbdd7d7bcacbcaebef155))
+* **mcp-server-supabase:** keep a declined or cancelled SQL confirmation final ([#581](https://github.com/supabase/mcp/issues/581)) ([03afe8e](https://github.com/supabase/mcp/commit/03afe8e7a021b13d1611c8b7dc77e1144fa044da))
+* **mcp-server-supabase:** match Studio's notebook row_limit and clarify skip and blank-input messages ([#593](https://github.com/supabase/mcp/issues/593)) ([ad07f1b](https://github.com/supabase/mcp/commit/ad07f1b72db7b322a5804a0b49b443c53f4a692d))
+* **mcp-server-supabase:** skip cost confirmation for $0 projects on clients without forms ([#608](https://github.com/supabase/mcp/issues/608)) ([50cfc37](https://github.com/supabase/mcp/commit/50cfc37034c724c8bdd22d562cc8fd4f02175882))
+* **mcp-server-supabase:** stop reusing a removed import map on edge function redeploy ([#588](https://github.com/supabase/mcp/issues/588)) ([56093a6](https://github.com/supabase/mcp/commit/56093a69247a6831b23f8653d337a9f0139f2842))
+* **mcp-ui:** shared project card for create-project and create-branch ([#578](https://github.com/supabase/mcp/issues/578)) ([efe189f](https://github.com/supabase/mcp/commit/efe189fe02eb8d0d06eb272eab55e729ca5c70e9))
+* **mcp:** confirm UPDATEs without WHERE that follow a comment and set a dollar-quoted value ([#612](https://github.com/supabase/mcp/issues/612)) ([468907a](https://github.com/supabase/mcp/commit/468907afe97a8b393af46a7954cb58afa74134fb))
+* **mcp:** confirm UPDATEs without WHERE that use inheritance syntax ([#565](https://github.com/supabase/mcp/issues/565)) ([687b3ee](https://github.com/supabase/mcp/commit/687b3eee9636add65c9a3652fbf06b269148dece))
+* **mcp:** confirm UPDATEs without WHERE when a column name ends in where ([#557](https://github.com/supabase/mcp/issues/557)) ([57fa34b](https://github.com/supabase/mcp/commit/57fa34bb0ffd27912c540b79b694f9c64376deb8))
+
 ## [0.19.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.18.0...mcp-server-supabase-v0.19.0) (2026-11-19)
 
 
