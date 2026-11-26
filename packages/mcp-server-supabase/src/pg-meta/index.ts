@@ -64,9 +64,11 @@ export const coalesceRowsToArray = (
     COALESCE(
       (
         SELECT
-          array_agg(row_to_json(${source})${order}) FILTER (WHERE ${filter})
+          array_agg(row_to_json(${source})${order})
         FROM
           ${source}
+        WHERE
+          ${filter}
       ),
       '{}'
     ) AS ${source}
