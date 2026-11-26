@@ -115,6 +115,9 @@ describe('isUpdateWithoutWhere', () => {
     'UPDATE t SET note = $$a; b$$ WHERE id = 1;',
     'UPDATE t SET note = $t$a $$; b$t$ WHERE id = 1;',
     'UPDATE t SET a = $$x; y$$ WHERE id = 1; UPDATE t SET b = $$z; w$$ WHERE id = 2;',
+    '/* reset */ UPDATE films SET bio = $$a; b$$ WHERE id = 1;',
+    '-- reset\nUPDATE films SET bio = $$a; b$$ WHERE id = 1;',
+    'UPDATE films SET bio = $$a; b$$/* c */WHERE id = 1;',
   ])('semicolon inside a quoted span does not split the UPDATE: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(false);
   });
@@ -136,6 +139,7 @@ describe('isUpdateWithoutWhere', () => {
     'CREATE FUNCTION f() RETURNS void AS $$ SELECT 1; UPDATE t SET a = 1; $$ LANGUAGE sql;',
     'UPDATE t SET note = $$a; b',
     'UPDATE t SET note = $$a; b$$; SELECT 1 FROM t WHERE id = 1;',
+    'UPDATE films SET id = 2 /* open',
   ])('UPDATE without WHERE still matches: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(true);
   });
@@ -143,6 +147,11 @@ describe('isUpdateWithoutWhere', () => {
   test.each([
     '-- reset ids\nUPDATE films SET id = 2;',
     '/* reset ids */ UPDATE films SET id = 2;',
+    '/* reset */ UPDATE films SET bio = $$ where 1=1 $$;',
+    '-- reset\nUPDATE films SET bio = $$ where 1=1 $$;',
+    '/* a; b */ UPDATE films SET bio = $$ where 1=1 $$;',
+    'UPDATE/* reset */films SET bio = $$ where 1=1 $$;',
+    'SELECT 1; -- reset\nUPDATE films SET bio = $t$ where 1=1 $t$;',
     'SELECT 1; -- reset ids\nUPDATE films SET id = 2;',
     'UPDATE ONLY films SET id = 2;',
     'UPDATE films AS f SET id = 2;',
@@ -184,11 +193,26 @@ describe('isDestructiveSql', () => {
     ).toBe(true);
   });
 
-  test('UPDATE without WHERE after a leading comment matches', () => {
-    expect(isDestructiveSql('-- reset ids\nUPDATE films SET id = 2;')).toBe(
-      true
-    );
+  test.each([
+    '-- reset ids\nUPDATE films SET id = 2;',
+    '/* reset */ UPDATE films SET bio = $$ where 1=1 $$;',
+    '-- reset\nUPDATE films SET bio = $$ where 1=1 $$;',
+    'UPDATE/* reset */films SET bio = $$ where 1=1 $$;',
+  ])('UPDATE without WHERE with comments matches: %s', (sql) => {
+    expect(isDestructiveSql(sql)).toBe(true);
   });
+
+  test.each([
+    '/* reset */ UPDATE films SET bio = $$a; b$$ WHERE id = 1;',
+    '-- reset\nUPDATE films SET bio = $$a; b$$ WHERE id = 1;',
+    '/* plan */ EXPLAIN (ANALYZE) UPDATE films SET bio = $$a; b$$ WHERE id = 1;',
+    '/* plan */ EXPLAIN ANALYZE SELECT $$ ; UPDATE films SET id = 2 $$;',
+  ])(
+    'comment-prefixed UPDATE with WHERE or read-only EXPLAIN ANALYZE with dollar-quoted semicolon does not match: %s',
+    (sql) => {
+      expect(isDestructiveSql(sql)).toBe(false);
+    }
+  );
 
   test.each([
     'update public.films* set id = 2',
@@ -268,6 +292,8 @@ describe('isDestructiveSql', () => {
     "EXPLAIN SELECT 'DROP TABLE films';",
     "EXPLAIN SELECT E'it\\'s; DROP TABLE films';",
     'EXPLAIN SELECT $t$a; DROP TABLE films$t$;',
+    '/* plan */ EXPLAIN SELECT $$ ; UPDATE films SET id = 2 $$;',
+    '-- plan\nEXPLAIN (ANALYZE FALSE) SELECT $t$a; UPDATE films SET id = 2$t$;',
     'EXPLAIN SELECT 1 -- ; DROP TABLE films\n;',
     'EXPLAIN /* ; TRUNCATE films */ SELECT 1;',
     'EXPLAIN SELECT 1; EXPLAIN (ANALYZE FALSE) DELETE FROM films;',
@@ -348,5 +374,12 @@ describe('isDestructiveSql', () => {
         'EXPLAIN ANALYZE UPDATE films SET title = null WHERE id = 1;'
       )
     ).toBe(false);
+  });
+
+  test('handles many interleaved comments and dollar-quoted values', () => {
+    const withComments = `UPDATE films SET title = 'x'${' x/**/'.repeat(40000)} WHERE id = 1;`;
+    const withDollars = `UPDATE films SET bio = $$x$$${' || $$y$$'.repeat(40000)};`;
+    expect(isDestructiveSql(withComments)).toBe(false);
+    expect(isDestructiveSql(withDollars)).toBe(true);
   });
 });
