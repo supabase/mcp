@@ -27,7 +27,6 @@ export const issueSchema = z.object({
       }),
       detail: z.string(),
       severity: issueSeveritySchema,
-      docs_url: z.string(),
     })
   ),
 });
@@ -132,7 +131,6 @@ export function normalizeIssues(
       resource,
       detail: unescape(lint.detail),
       severity,
-      docs_url,
     };
     const existing = issues.get(lint.name);
     if (existing) {
