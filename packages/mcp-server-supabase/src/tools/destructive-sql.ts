@@ -121,10 +121,10 @@ export function checkDestructiveQuery(sql: string): boolean {
 const valueDollarQuoteStatement =
   /^\s*(?:update\s|explain(?![\w$\u0080-\uffff]))/i;
 
-// Dollar and comment bodies still expose their semicolons to this policy:
-// UPDATE statements inside DO bodies must remain visible. Dollar values in
-// UPDATE and EXPLAIN are masked so a WHERE or semicolon in a value cannot
-// change the statement classification.
+// Unmasked dollar bodies still expose their semicolons to this policy:
+// UPDATE statements inside DO bodies must remain visible. Comments collapse
+// to a space, and dollar values in UPDATE and EXPLAIN are masked so a WHERE
+// or semicolon in a value cannot change the statement classification.
 function splitStatements(sql: string, scan: SqlScan): string[] {
   if (scan.unterminated && scan.unterminated !== 'block-comment') {
     // Keep the historical plain-split fallback for incomplete quoted input.
@@ -164,19 +164,9 @@ function splitStatements(sql: string, scan: SqlScan): string[] {
         append(sql.slice(span.start, span.end));
         break;
       case 'line-comment':
+      case 'block-comment':
         blanked += ' ';
         break;
-      case 'block-comment': {
-        blanked += ' ';
-        for (let i = span.start + 2; i < span.end; i++) {
-          if (sql[i] === ';') {
-            statements.push(blanked);
-            blanked = '';
-            valueStatement = undefined;
-          }
-        }
-        break;
-      }
       case 'string':
       case 'e-string':
         blanked += "''";

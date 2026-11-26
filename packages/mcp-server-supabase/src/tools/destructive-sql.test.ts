@@ -137,9 +137,11 @@ describe('isUpdateWithoutWhere', () => {
     'UPDATE t SET a = 1 -- where needed',
     'UPDATE t SET note = $$x where y$$;',
     'CREATE FUNCTION f() RETURNS void AS $$ SELECT 1; UPDATE t SET a = 1; $$ LANGUAGE sql;',
+    'CREATE FUNCTION /*;*/ update (x int) RETURNS void AS $$ SELECT 1; UPDATE t SET a = 1; $$ LANGUAGE sql;',
     'UPDATE t SET note = $$a; b',
     'UPDATE t SET note = $$a; b$$; SELECT 1 FROM t WHERE id = 1;',
     'UPDATE films SET id = 2 /* open',
+    'UPDATE /* ; */ films SET id = 2 /* open',
   ])('UPDATE without WHERE still matches: %s', (sql) => {
     expect(isUpdateWithoutWhere(sql)).toBe(true);
   });
@@ -151,6 +153,11 @@ describe('isUpdateWithoutWhere', () => {
     '-- reset\nUPDATE films SET bio = $$ where 1=1 $$;',
     '/* a; b */ UPDATE films SET bio = $$ where 1=1 $$;',
     'UPDATE/* reset */films SET bio = $$ where 1=1 $$;',
+    'UPDATE /* ; */ films SET id = 2;',
+    'UPDATE films /* ; */ SET id = 2;',
+    'UPDATE films SET /* ; */ id = 2;',
+    'UPDATE/*;*/films SET bio = $$ where 1=1 $$;',
+    'UPDATE /* outer /* ; */ inner */ films SET id = 2;',
     'SELECT 1; -- reset\nUPDATE films SET bio = $t$ where 1=1 $t$;',
     'SELECT 1; -- reset ids\nUPDATE films SET id = 2;',
     'UPDATE ONLY films SET id = 2;',
@@ -173,6 +180,8 @@ describe('isUpdateWithoutWhere', () => {
   test.each([
     '-- reset ids\nUPDATE films SET id = 2 WHERE id = 1;',
     '/* reset ids */ UPDATE films SET id = 2 WHERE id = 1;',
+    'UPDATE films SET id = 2 /* ; */ WHERE id = 1;',
+    'UPDATE films SET id = 2 /* outer /* ; */ inner */ WHERE id = 1;',
     'UPDATE ONLY films SET id = 2 WHERE id = 1;',
     'UPDATE films AS f SET id = 2 WHERE f.id = 1;',
     'UPDATE films* SET id = 2 WHERE id = 1;',
@@ -198,6 +207,8 @@ describe('isDestructiveSql', () => {
     '/* reset */ UPDATE films SET bio = $$ where 1=1 $$;',
     '-- reset\nUPDATE films SET bio = $$ where 1=1 $$;',
     'UPDATE/* reset */films SET bio = $$ where 1=1 $$;',
+    'UPDATE /* ; */ films SET id = 2;',
+    'UPDATE/*;*/films SET bio = $$ where 1=1 $$;',
   ])('UPDATE without WHERE with comments matches: %s', (sql) => {
     expect(isDestructiveSql(sql)).toBe(true);
   });
@@ -205,10 +216,11 @@ describe('isDestructiveSql', () => {
   test.each([
     '/* reset */ UPDATE films SET bio = $$a; b$$ WHERE id = 1;',
     '-- reset\nUPDATE films SET bio = $$a; b$$ WHERE id = 1;',
+    'UPDATE films SET id = 2 /* ; */ WHERE id = 1;',
     '/* plan */ EXPLAIN (ANALYZE) UPDATE films SET bio = $$a; b$$ WHERE id = 1;',
     '/* plan */ EXPLAIN ANALYZE SELECT $$ ; UPDATE films SET id = 2 $$;',
   ])(
-    'comment-prefixed UPDATE with WHERE or read-only EXPLAIN ANALYZE with dollar-quoted semicolon does not match: %s',
+    'UPDATE with WHERE or read-only EXPLAIN ANALYZE with comment or dollar-quoted semicolons does not match: %s',
     (sql) => {
       expect(isDestructiveSql(sql)).toBe(false);
     }
@@ -296,6 +308,8 @@ describe('isDestructiveSql', () => {
     '-- plan\nEXPLAIN (ANALYZE FALSE) SELECT $t$a; UPDATE films SET id = 2$t$;',
     'EXPLAIN SELECT 1 -- ; DROP TABLE films\n;',
     'EXPLAIN /* ; TRUNCATE films */ SELECT 1;',
+    'EXPLAIN /* ; */ UPDATE films SET id = 2;',
+    'EXPLAIN (ANALYZE FALSE /* ; */) DELETE FROM films;',
     'EXPLAIN SELECT 1; EXPLAIN (ANALYZE FALSE) DELETE FROM films;',
     'EXPLAIN SELECT 1;\n-- trailing comment\n',
   ])('planner-only EXPLAIN does not match: %s', (sql) => {
@@ -311,6 +325,9 @@ describe('isDestructiveSql', () => {
     'EXPLAIN (ANALYZE ON, FORMAT JSON) DELETE FROM films;',
     'EXPLAIN (FORMAT JSON, ANALYZE 1) DELETE FROM films;',
     'EXPLAIN /**/ ANALYZE UPDATE films SET title = null;',
+    'EXPLAIN ANALYZE /* ; */ DELETE FROM films;',
+    'EXPLAIN /* ; */ (ANALYZE) DELETE FROM films;',
+    'EXPLAIN (ANALYZE) /* ; */ UPDATE /* ; */ films SET id = 2;',
     'EXPLAIN SELECT 1; DROP TABLE films;',
     'DROP TABLE films; EXPLAIN SELECT 1;',
     'EXPLAIN SELECT 1; UPDATE films SET title = null;',
