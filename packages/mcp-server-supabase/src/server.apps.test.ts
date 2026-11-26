@@ -225,21 +225,10 @@ describe('OpenAI plugin extensions', () => {
     expect(client.getServerCapabilities()?.extensions).toBeUndefined();
   });
 
-  test('stays off when experimentalApps is omitted', async () => {
-    const { client } = await harness.setupModern({
-      openaiPluginExtensions: true,
-      clientCapabilities: APPS_CLIENT_CAPABILITIES,
-    });
-
-    expect(await linkedViewUris(client)).toEqual([]);
-    expect(client.getServerCapabilities()?.resources).toBeUndefined();
-    expect(client.getServerCapabilities()?.extensions).toBeUndefined();
-  });
-
-  test('keeps base inline MCP Apps active when off', async () => {
+  test('flag on leaves base views unchanged for capable clients', async () => {
     const { client } = await harness.setupModern({
       experimentalApps: true,
-      openaiPluginExtensions: false,
+      openaiPluginExtensions: true,
       clientCapabilities: APPS_CLIENT_CAPABILITIES,
     });
 
@@ -247,15 +236,7 @@ describe('OpenAI plugin extensions', () => {
     expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
   });
 
-  test('keeps base MCP Apps active for capable modern clients when on', async () => {
-    const capable = await harness.setupModern({
-      experimentalApps: true,
-      openaiPluginExtensions: true,
-      clientCapabilities: APPS_CLIENT_CAPABILITIES,
-    });
-    expect(await listedViewUris(capable.client)).toEqual([...VIEW_URIS].sort());
-    expect(await linkedViewUris(capable.client)).toEqual([...VIEW_URIS].sort());
-
+  test('flag on grants nothing without the MCP Apps capability', async () => {
     const incapable = await harness.setupModern({
       experimentalApps: true,
       openaiPluginExtensions: true,

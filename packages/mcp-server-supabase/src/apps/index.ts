@@ -33,15 +33,6 @@ export function appsEnabled(
   return Array.isArray(mimeTypes) && mimeTypes.includes(RESOURCE_MIME_TYPE);
 }
 
-/** Whether this request gets OpenAI plugin extensions (layered on MCP Apps). */
-export function openaiPluginExtensionsEnabled(
-  experimentalApps: boolean,
-  openaiPluginExtensions: boolean,
-  ctx: ServerContext | undefined
-): boolean {
-  return openaiPluginExtensions && appsEnabled(experimentalApps, ctx);
-}
-
 /** Declares MCP Apps support in `capabilities.extensions`. */
 export const APPS_EXTENSIONS = {
   [EXTENSION_ID]: { mimeTypes: [RESOURCE_MIME_TYPE] },
