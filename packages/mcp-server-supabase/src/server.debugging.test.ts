@@ -726,6 +726,75 @@ test('explicit issue filters only run the requested check and retain lower sever
   expect(result.issues).toHaveLength(1);
 });
 
+// Fixture response is 43,493 chars; the budget fails growth of over ~10%.
+// In #124, Claude Code rejected a tool response over 25,000 tokens.
+const LARGE_PROJECT_ISSUES_BUDGET = 48_000;
+
+test('issues stay within the response budget for a large project', async () => {
+  const largeProject = [
+    ['auth_rls_initplan', 'WARN', 'PERFORMANCE', 160],
+    ['unindexed_foreign_keys', 'INFO', 'PERFORMANCE', 160],
+    ['function_search_path_mutable', 'WARN', 'SECURITY', 81],
+    ['multiple_permissive_policies', 'WARN', 'PERFORMANCE', 80],
+    ['rls_enabled_no_policy', 'INFO', 'SECURITY', 30],
+    ['duplicate_index', 'WARN', 'PERFORMANCE', 20],
+    ['no_primary_key', 'INFO', 'PERFORMANCE', 10],
+    ['materialized_view_in_api', 'WARN', 'SECURITY', 3],
+    ['policy_exists_rls_disabled', 'ERROR', 'SECURITY', 1],
+    ['rls_disabled_in_public', 'ERROR', 'SECURITY', 1],
+    ['security_definer_view', 'ERROR', 'SECURITY', 1],
+  ] as const;
+  const lints = (category: 'SECURITY' | 'PERFORMANCE') => ({
+    lints: largeProject
+      .filter((lint) => lint[2] === category)
+      .flatMap(([name, level, , count]) =>
+        Array.from({ length: count }, (_, i) => ({
+          name,
+          title: name.replaceAll('_', ' '),
+          level,
+          categories: [category],
+          description: `Detects ${name.replaceAll('_', ' ')} in the exposed schemas, which can affect the security or performance of the project.`,
+          detail: `Table \\\`public.table_${i}\\\` is affected by ${name}. This can lead to suboptimal query performance or expose data through the Data API.`,
+          remediation: `https://supabase.com/docs/guides/database/database-linter?lint=${name}`,
+          cache_key: `${name}_public_table_${i}`,
+          metadata: { name: `table_${i}`, type: 'table', schema: 'public' },
+        }))
+      ),
+  });
+  const platform: SupabasePlatform = {
+    debugging: {
+      async getLogs() {
+        return [];
+      },
+      async getSecurityAdvisors() {
+        return lints('SECURITY');
+      },
+      async getPerformanceAdvisors() {
+        return lints('PERFORMANCE');
+      },
+      async getHealthAdvisors() {
+        return { lints: [] };
+      },
+    },
+  };
+  const { client } = await setup({ platform, features: ['debugging'] });
+  const result = await client.callTool({
+    name: 'get_issues',
+    arguments: { project_id: 'large' },
+  });
+  const [content] = result.content as { type: 'text'; text: string }[];
+  const { issues } = JSON.parse(content!.text);
+  expect(issues).toHaveLength(11);
+  expect(
+    issues.reduce(
+      (total: number, issue: { affected_count: number }) =>
+        total + issue.affected_count,
+      0
+    )
+  ).toBe(547);
+  expect(content!.text.length).toBeLessThan(LARGE_PROJECT_ISSUES_BUDGET);
+});
+
 test.each(['security', 'performance'] as const)(
   'issues requests unavailable %s results without changing legacy advisors',
   async (type) => {
