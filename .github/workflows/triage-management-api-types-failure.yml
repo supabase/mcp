@@ -1,0 +1,212 @@
+name: Triage Management API Types Failure
+
+on:
+  workflow_run:
+    workflows: ['Tests']
+    types: [completed]
+
+concurrency:
+  group: triage-management-api-types
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  triage:
+    name: Diagnose failing Tests run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch == 'chore/regenerate-management-api-types' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.actor.login == 'supabase-releaser[bot]' &&
+      github.event.sender.login == 'supabase-releaser[bot]'
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Validate pull request and changed files
+        id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_BRANCH: chore/regenerate-management-api-types
+          EXPECTED_AUTHOR: supabase-releaser[bot]
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          pr_json="$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f state=open \
+            -f base=main \
+            -f "head=$GITHUB_REPOSITORY_OWNER:$EXPECTED_BRANCH" \
+            --jq 'if length == 1 then .[0] else empty end')"
+
+          if [ -z "$pr_json" ]; then
+            echo "No single open PR found for $EXPECTED_BRANCH targeting main; skipping."
+            exit 0
+          fi
+
+          pr_number="$(jq -r '.number' <<< "$pr_json")"
+          pr_author="$(jq -r '.user.login' <<< "$pr_json")"
+          pr_draft="$(jq -r '.draft' <<< "$pr_json")"
+          pr_base="$(jq -r '.base.ref' <<< "$pr_json")"
+          pr_head_ref="$(jq -r '.head.ref' <<< "$pr_json")"
+          pr_head_repo="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
+          pr_head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
+
+          if [ "$pr_author" != "$EXPECTED_AUTHOR" ] ||
+             [ "$pr_draft" != "false" ] ||
+             [ "$pr_base" != "main" ] ||
+             [ "$pr_head_ref" != "$EXPECTED_BRANCH" ] ||
+             [ "$pr_head_repo" != "$GITHUB_REPOSITORY" ] ||
+             [ "$pr_head_sha" != "$EXPECTED_SHA" ]; then
+            echo "PR #$pr_number failed metadata or HEAD SHA validation; aborting."
+            exit 1
+          fi
+
+          files_json="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls/$pr_number/files" | jq 'add')"
+          file_count="$(jq 'length' <<< "$files_json")"
+
+          if [ "$file_count" -eq 0 ] || [ "$file_count" -gt 2 ]; then
+            echo "PR #$pr_number has unexpected changed file count: $file_count."
+            exit 1
+          fi
+
+          invalid_files="$(jq -r '
+            .[]
+            | select(
+                (.filename != "packages/mcp-server-supabase/src/management-api/types.ts" and
+                 .filename != "packages/mcp-server-supabase/src/management-api-v2/types.ts")
+                or (.status != "modified")
+                or (.previous_filename != null)
+              )
+            | .filename
+          ' <<< "$files_json")"
+
+          if [ -n "$invalid_files" ]; then
+            echo "PR #$pr_number modifies disallowed files:"
+            echo "$invalid_files"
+            exit 1
+          fi
+
+          {
+            echo "pr_number=$pr_number"
+            echo "head_sha=$pr_head_sha"
+            echo "validated=true"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pull request commit
+        if: steps.validate.outputs.validated == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ steps.validate.outputs.head_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Collect failed CI logs and types diff
+        id: collect
+        if: steps.validate.outputs.validated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.validate.outputs.pr_number }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+
+          triage_dir="$RUNNER_TEMP/triage"
+          mkdir -p "$triage_dir"
+
+          failed_jobs="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" \
+            | jq -r '[.[].jobs[] | select(.conclusion == "failure") | .name] | join(", ")')"
+          echo "failed_jobs=${failed_jobs:-unknown}" >> "$GITHUB_OUTPUT"
+
+          raw_logs="$triage_dir/failed-logs-raw.txt"
+          if ! gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > "$raw_logs" 2>&1; then
+            echo "Failed to fetch --log-failed output; see run $RUN_ID." >> "$raw_logs"
+          fi
+          tail -c 50000 "$raw_logs" > "$triage_dir/failed-logs.txt"
+          rm -f "$raw_logs"
+
+          raw_diff="$triage_dir/types-raw.diff"
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+            -H "Accept: application/vnd.github.diff" > "$raw_diff"
+          head -c 60000 "$raw_diff" > "$triage_dir/types.diff"
+          if [ "$(wc -c < "$raw_diff")" -gt 60000 ]; then
+            printf '\n\n[diff truncated at 60000 bytes; inspect the files directly in the workspace]\n' >> "$triage_dir/types.diff"
+          fi
+          rm -f "$raw_diff"
+
+      - name: Diagnose CI failure with Claude
+        id: diagnose
+        if: steps.validate.outputs.validated == 'true'
+        uses: anthropics/claude-code-action@4411a9e9b0283becf4b924f7bce360fd7756c78c # v1.0.290
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          allowed_bots: 'supabase-releaser[bot]'
+          prompt: |
+            The `Tests` workflow failed on the automated Management API types sync PR (`chore/regenerate-management-api-types`).
+
+            Failed jobs: ${{ steps.collect.outputs.failed_jobs }}
+            Workflow run: ${{ github.event.workflow_run.html_url }}
+
+            1. Read the failed CI logs at `${{ runner.temp }}/triage/failed-logs.txt`.
+            2. Read the generated Management API types diff at `${{ runner.temp }}/triage/types.diff`.
+            3. Use Read, Grep, and Glob to inspect the affected source/test files in the repository and trace each failure back to its root cause.
+
+            Write a concise Markdown troubleshooting report for engineers in the `summary` field covering:
+            - **Root cause**: whether each failure is caused by a breaking/changed OpenAPI type (name the exact type/field change) or looks flaky/unrelated (e.g. LLM e2e flakiness or transient network error).
+            - **Affected locations**: exact `file:line` references and the key error lines from the CI log.
+            - **Recommended fix**: concrete code or test updates needed to get this PR green.
+
+            Only cite file paths, symbols, and errors you directly observed in the logs or repository.
+          claude_args: |
+            --max-turns 15
+            --allowedTools "Read,Grep,Glob"
+            --json-schema '{"type":"object","properties":{"summary":{"type":"string","description":"Concise Markdown troubleshooting report explaining the CI failure root cause, affected files, and recommended fix."}},"required":["summary"]}'
+
+      - name: Post or update PR triage comment
+        if: steps.validate.outputs.validated == 'true' && steps.diagnose.outputs.structured_output != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.validate.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          FAILED_JOBS: ${{ steps.collect.outputs.failed_jobs }}
+          STRUCTURED_OUTPUT: ${{ steps.diagnose.outputs.structured_output }}
+        run: |
+          set -euo pipefail
+
+          summary="$(jq -r '.summary // empty' <<< "$STRUCTURED_OUTPUT")"
+          if [ -z "$summary" ]; then
+            echo "Claude returned an empty summary; skipping comment."
+            exit 1
+          fi
+
+          marker="<!-- management-api-types-triage -->"
+          short_sha="${HEAD_SHA:0:7}"
+          body="$(cat <<EOF
+          $marker
+          ### Automated CI Failure Triage
+
+          - **Failed run:** $RUN_URL
+          - **Failed jobs:** \`$FAILED_JOBS\`
+          - **Commit:** \`$short_sha\`
+
+          $summary
+          EOF
+          )"
+
+          existing_comment_id="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            | jq -r 'add | map(select(.user.login == "github-actions[bot]" and (.body | contains("<!-- management-api-types-triage -->")))) | .[0].id // empty')"
+
+          if [ -n "$existing_comment_id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing_comment_id" \
+              -f body="$body" > /dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -f body="$body" > /dev/null
+          fi
