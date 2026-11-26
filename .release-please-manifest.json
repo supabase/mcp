@@ -1,4 +1,4 @@
 {
   "packages/mcp-utils": "0.11.1",
-  "packages/mcp-server-supabase": "0.20.0"
+  "packages/mcp-server-supabase": "0.21.0"
 }
