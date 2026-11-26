@@ -21,6 +21,7 @@ import {
   APPS_EXTENSIONS,
   appsEnabled,
   DASHBOARD_URL_META_KEY,
+  openaiPluginExtensionsEnabled,
 } from './apps/index.js';
 import { createContentApiClient } from './content-api/index.js';
 import type { SupabasePlatform } from './platform/types.js';
@@ -95,6 +96,13 @@ export type SupabaseMcpServerOptions = {
    * by default.
    */
   experimentalApps?: boolean;
+
+  /**
+   * Enables OpenAI/ChatGPT plugin extensions (display modes, sidebar and
+   * fullscreen surfaces) on top of MCP Apps. Off by default; has no effect
+   * unless `experimentalApps` is also true.
+   */
+  openaiPluginExtensions?: boolean;
 
   /**
    * Features to enable.
@@ -203,6 +211,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     readOnly,
     features,
     experimentalApps = false,
+    openaiPluginExtensions = false,
     contentApiUrl = 'https://supabase.com/docs/api/graphql',
     dashboardUrl: rawDashboardUrl = DEFAULT_DASHBOARD_URL,
     onToolCall,
@@ -270,7 +279,15 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     version,
     instructions,
     resources: experimentalApps
-      ? (ctx) => getResources({ apps: appsEnabled(experimentalApps, ctx) })
+      ? (ctx) =>
+          getResources({
+            apps: appsEnabled(experimentalApps, ctx),
+            openaiPluginExtensions: openaiPluginExtensionsEnabled(
+              experimentalApps,
+              openaiPluginExtensions,
+              ctx
+            ),
+          })
       : undefined,
     extensions: experimentalApps ? APPS_EXTENSIONS : undefined,
     async onInitialize(info) {

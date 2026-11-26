@@ -47,7 +47,13 @@ function appResource(
   });
 }
 
-export function getAppResources(): Resource[] {
+export type AppResourcesOptions = {
+  openaiPluginExtensions?: boolean;
+};
+
+export function getAppResources(
+  _options: AppResourcesOptions = {}
+): Resource[] {
   return [
     appResource(
       CREATE_PROJECT_UI_URI,

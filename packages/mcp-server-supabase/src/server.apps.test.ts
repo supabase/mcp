@@ -211,3 +211,66 @@ describe('MCP Apps', () => {
     expect(isInputRequiredResult(result)).toBe(true);
   });
 });
+
+describe('OpenAI plugin extensions', () => {
+  test('stays off when experimentalApps is false', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: false,
+      openaiPluginExtensions: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+
+    expect(await linkedViewUris(client)).toEqual([]);
+    expect(client.getServerCapabilities()?.resources).toBeUndefined();
+    expect(client.getServerCapabilities()?.extensions).toBeUndefined();
+  });
+
+  test('stays off when experimentalApps is omitted', async () => {
+    const { client } = await harness.setupModern({
+      openaiPluginExtensions: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+
+    expect(await linkedViewUris(client)).toEqual([]);
+    expect(client.getServerCapabilities()?.resources).toBeUndefined();
+    expect(client.getServerCapabilities()?.extensions).toBeUndefined();
+  });
+
+  test('keeps base inline MCP Apps active when off', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      openaiPluginExtensions: false,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+
+    expect(await listedViewUris(client)).toEqual([...VIEW_URIS].sort());
+    expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
+  });
+
+  test('keeps base MCP Apps active for capable modern clients when on', async () => {
+    const capable = await harness.setupModern({
+      experimentalApps: true,
+      openaiPluginExtensions: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+    expect(await listedViewUris(capable.client)).toEqual([...VIEW_URIS].sort());
+    expect(await linkedViewUris(capable.client)).toEqual([...VIEW_URIS].sort());
+
+    const incapable = await harness.setupModern({
+      experimentalApps: true,
+      openaiPluginExtensions: true,
+    });
+    expect(await linkedViewUris(incapable.client)).toEqual([]);
+    expect(await listedViewUris(incapable.client)).toEqual([]);
+    await expectViewsUnreadable(incapable.client);
+
+    const legacy = await harness.setup({
+      experimentalApps: true,
+      openaiPluginExtensions: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+    expect(await linkedViewUris(legacy.client)).toEqual([]);
+    expect(await listedViewUris(legacy.client)).toEqual([]);
+    await expectViewsUnreadable(legacy.client);
+  });
+});

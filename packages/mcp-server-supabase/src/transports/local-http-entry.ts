@@ -36,6 +36,7 @@ const querySchema = z.object({
   project_ref: z.string().optional(),
   read_only: z.stringbool().default(false),
   experimental_apps: z.stringbool().default(false),
+  openai_plugin_extensions: z.stringbool().default(false),
   features: z
     .string()
     .transform((value) => parseList(value))
@@ -167,6 +168,7 @@ export async function startLocalHttpEntry({
             project_ref: projectId,
             read_only: readOnly,
             experimental_apps: experimentalApps,
+            openai_plugin_extensions: openaiPluginExtensions,
             features,
             skip_elicitations: skipElicitations,
           } = query.data;
@@ -190,6 +192,7 @@ export async function startLocalHttpEntry({
                 readOnly,
                 features,
                 experimentalApps,
+                openaiPluginExtensions,
                 contentApiUrl,
                 dashboardUrl,
                 elicitation: {
