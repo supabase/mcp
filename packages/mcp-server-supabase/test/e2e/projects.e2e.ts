@@ -45,7 +45,7 @@ describe('project management e2e tests', () => {
         },
         {
           role: 'user',
-          content: 'What tables do I have?',
+          content: 'What tables do I have in this project?',
         },
       ],
       stopWhen: stepCountIs(3),
@@ -57,6 +57,13 @@ describe('project management e2e tests', () => {
     expect(toolCalls.length).toBeGreaterThanOrEqual(2);
     expect(toolCalls.at(0)?.toolName).toBe('list_projects');
     expect(toolCalls.at(1)?.toolName).toBe('list_tables');
+
+    const listTablesCalls = toolCalls.filter(
+      (call) => call.toolName === 'list_tables'
+    );
+    for (const call of listTablesCalls) {
+      expect(call.input.project_id).toBe(todosProject.id);
+    }
 
     await expect(text).toMatchCriteria(
       'Describes a single table in the "todos-app" project called "todos"'
