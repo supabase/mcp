@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.20.0...mcp-server-supabase-v0.21.0) (2026-11-26)
+
+
+### Features
+
+* **mcp-server-supabase:** add openaiPluginExtensions option ([#630](https://github.com/supabase/mcp/issues/630)) ([cae9122](https://github.com/supabase/mcp/commit/cae91222e5e62e975dfdee4acac338fddae876fc))
+
 ## [0.20.0](https://github.com/supabase/mcp/compare/mcp-server-supabase-v0.19.0...mcp-server-supabase-v0.20.0) (2026-11-26)
 
 
