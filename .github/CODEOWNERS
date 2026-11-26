@@ -1,2 +1,8 @@
 # The AI team owns everything in this repo by default.
 * @supabase/ai
+
+# Generated Management API types updated by sync-management-api-types.yml.
+# Either owner satisfies code-owner review; supabase-oss approves only bot-opened
+# generated-types PRs via auto-approve-management-api-types.yml.
+/packages/mcp-server-supabase/src/management-api/types.ts @supabase/ai @supabase-oss
+/packages/mcp-server-supabase/src/management-api-v2/types.ts @supabase/ai @supabase-oss
