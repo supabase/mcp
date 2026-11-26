@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * Start or restart Warehouse replication
-         * @description Starts a stopped managed pipeline or restarts a starting, started or failed pipeline, preserving the selected tables and saved layouts. A failed pod with an active desired workload needs restart; start alone can leave it unchanged. Restart interrupts replication; in-progress initial copies may restart from scratch. If lost-slot recreation is configured, startup can rebuild destination tables. The response confirms acceptance only. Incomplete setup markers are preserved and require a successful setup retry. Inspect warehouse status for runtime diagnostics and observed table progress; these observations do not identify completion of this request. Inspect state before retrying an uncertain response.
+         * @description Starts a stopped managed pipeline or restarts a starting, started or failed pipeline, preserving the selected tables and saved layouts. Restart interrupts replication; in-progress initial copies may restart from scratch. If lost-slot recreation is configured, startup can rebuild destination tables. The response confirms acceptance only. Incomplete setup markers are preserved and require a successful setup retry. Inspect warehouse status for runtime diagnostics and observed table progress; these observations do not identify completion of this request. Inspect state before retrying an uncertain response.
          *
          *     This endpoint is currently in its **Alpha** stage.
          */
@@ -101,7 +101,25 @@ export interface paths {
         };
         /**
          * Inspect Warehouse capacity diagnostics
-         * @description Returns capacity, admission, assignment-wait, and activation measurements over a bounded time range, using the project’s stored Warehouse placement. Use since or both from and to; the default is the last 30 minutes. Each measurement includes its definition, unit, aggregation, requested and effective ranges, rate_window_seconds, source-sample freshness, availability, coverage, and full series with dimension labels such as reason, kind, and result. Executor invocations in flight are distinct from worker admission grants. Occupied admission includes active plus pending grants. The configured admission limit does not imply an open gate or spare capacity. Missing, stale, and insufficient observations remain unavailable or null; they do not establish healthy or idle capacity. Point timestamps are evaluation times; last_sample_at is the original source-sample time. Rates and latency quantiles describe the effective rate window at each point, not the entire requested range. Each request returns up to eight measurements, and a failure of one measurement does not discard the other results. No raw queries or backend selectors are accepted.
+         * @description Returns capacity, admission, assignment-wait, and activation measurements over a bounded time
+         *     range, using the project’s stored Warehouse placement. Use `since` or both `from` and `to`;
+         *     the default is the last 30 minutes.
+         *
+         *     Each measurement includes its definition, unit, aggregation, requested and effective ranges,
+         *     `rate_window_seconds`, source-sample freshness, availability, coverage, and full series with
+         *     dimension labels such as `reason`, `kind`, and `result`.
+         *
+         *     Executor invocations in flight are distinct from worker admission grants. Occupied admission
+         *     includes active plus pending grants. The configured admission limit does not imply an open
+         *     gate or spare capacity. Missing, stale, and insufficient observations remain unavailable or
+         *     `null`; they do not establish healthy or idle capacity.
+         *
+         *     Point timestamps are evaluation times; `last_sample_at` is the original source-sample time.
+         *     Rates and latency quantiles describe the effective rate window at each point, not the entire
+         *     requested range.
+         *
+         *     Each request returns up to eight measurements, and a failure of one measurement does not
+         *     discard the other results. No raw queries or backend selectors are accepted.
          *
          *     This endpoint is currently in its **Alpha** stage.
          */
@@ -321,7 +339,7 @@ export interface paths {
         };
         /**
          * Get Warehouse Flight SQL connection details
-         * @description Returns the public Arrow Flight SQL endpoint resolved from the project's Warehouse routing, with TLS required on port 443. Status is configured availability and query connectivity is not checked, so DNS readiness does not prove a query will succeed. Login uses a role in the source project database with that role's existing password (postgres uses the project database password), including when the catalog and storage are in another project. The role needs supabase_warehouse_reader membership, which is separate from Management API authorization. No passwords, tokens, catalog credentials or private endpoints are returned, and endpoint, host and port are null unless status is available or pending. Example client: usql -W 'flightsql://postgres@<host>:443?tls=enabled'.
+         * @description Returns the public Arrow Flight SQL endpoint resolved from the project's Warehouse routing, with TLS required on port 443. Status is configured availability and query connectivity is not checked, so DNS readiness does not prove a query will succeed. Login uses a role in the source project database with that role's existing password (postgres uses the project database password), including when the catalog and storage are in another project. The role needs supabase_warehouse_reader membership, which is separate from Management API authorization. No passwords, tokens, catalog credentials or private endpoints are returned, and endpoint, host and port are null unless status is available or pending. Example client: `usql -W 'flightsql://postgres@<host>:443?tls=enabled'`.
          *
          *     This endpoint is currently in its **Alpha** stage.
          */
@@ -470,6 +488,23 @@ export interface paths {
         put?: never;
         /** Download project backup */
         post: operations["v2-download-project-backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/backups/downloadable-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gets backups that might be downloadable, but potentially not restorable. */
+        get: operations["v2-project-get-downloadable-backups"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -765,6 +800,106 @@ export interface paths {
          */
         post: operations["v2-deploy-a-compute-instance"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/environments/{environment}/variables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List variables of an environment
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        get: operations["v2-list-environment-variables"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/environments/{environment}/variables/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Create or replace a variable in an environment
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        put: operations["v2-set-environment-variable"];
+        post?: never;
+        /**
+         * Delete a variable from an environment
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        delete: operations["v2-delete-environment-variable"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/environments/{environment}/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List secrets of an environment
+         * @description Returns the names of the secrets. Secret values are never returned.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        get: operations["v2-list-environment-secrets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/environments/{environment}/secrets/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Create or replace a secret in an environment
+         * @description Encrypts the value with the environment's data encryption key and stores it. The value cannot be read back.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        put: operations["v2-set-environment-secret"];
+        post?: never;
+        /**
+         * Delete a secret from an environment
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        delete: operations["v2-delete-environment-secret"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1276,7 +1411,7 @@ export interface components {
         APIErrorObject: {
             id?: string;
             /** @enum {string} */
-            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "environment_secret_not_found" | "environment_variable_already_exists" | "environment_variable_limit_reached" | "environment_variable_not_found" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "environment_root_project_required" | "environment_secret_not_found" | "environment_variable_already_exists" | "environment_variable_limit_reached" | "environment_variable_not_found" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
             message: string;
             description?: string;
             links?: {
@@ -1397,7 +1532,7 @@ export interface components {
                  */
                 type: "warehouse_replication_resync";
                 attributes: {
-                    /** @description Literal source PostgreSQL schema. Omit table to select its current tables. */
+                    /** @description Literal source PostgreSQL schema of the table. */
                     schema: string;
                     /** @description Literal name of the single source table to reset and recopy. */
                     table: string;
@@ -2119,7 +2254,7 @@ export interface components {
                     };
                     pipeline: {
                         id: string;
-                        /** @description Safe classification of the current runtime failure. Includes static customer guidance, without exit codes, provider messages or worker logs; does not establish its underlying cause. Unrecognized or malformed diagnostics are omitted. */
+                        /** @description Safe classification of the current runtime failure. Includes static customer guidance, without exit codes, provider messages or worker logs; does not establish its underlying cause. Unrecognized or malformed diagnostics are returned as `null`. */
                         diagnostic: {
                             /** @enum {string} */
                             code: "out_of_memory" | "process_exited" | "crash_loop" | "image_unavailable" | "configuration_error" | "startup_failed" | "runtime_failed";
@@ -2982,6 +3117,23 @@ export interface components {
                     file_url: string;
                 };
             };
+        };
+        DownloadableBackupsResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "project_downloadable_backup";
+                id: number;
+                attributes: {
+                    is_physical_backup: boolean;
+                    inserted_at: string;
+                    project_id: number;
+                    /** @enum {string} */
+                    status: "COMPLETED" | "FAILED" | "PENDING" | "REMOVED" | "ARCHIVED" | "CANCELLED";
+                };
+            }[];
         };
         V2CreateBranchRequest: {
             data: {
@@ -3888,6 +4040,104 @@ export interface components {
                 };
             };
         };
+        V2ListEnvironmentVariablesResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_variable";
+                /** @description Name of the variable or secret. */
+                id: string;
+                attributes: {
+                    /** @description Value of the variable. */
+                    value: string;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            }[];
+        };
+        V2SetEnvironmentVariableRequest: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_variable";
+                attributes: {
+                    /** @description Value of the variable. Must be a single line. Escape line breaks yourself, for example as `\n`. */
+                    value: string;
+                };
+            };
+        };
+        V2EnvironmentVariableResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_variable";
+                /** @description Name of the variable or secret. */
+                id: string;
+                attributes: {
+                    /** @description Value of the variable. */
+                    value: string;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        V2ListEnvironmentSecretsResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_secret";
+                /** @description Name of the variable or secret. */
+                id: string;
+                attributes: {
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            }[];
+        };
+        V2SetEnvironmentSecretRequest: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_secret";
+                attributes: {
+                    /** @description Value of the secret. It is encrypted at rest and never returned by the API. Must be a single line. Escape line breaks yourself, for example as `\n`. */
+                    value: string;
+                };
+            };
+        };
+        V2EnvironmentSecretResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_secret";
+                /** @description Name of the variable or secret. */
+                id: string;
+                attributes: {
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
         V2ListRolesResponse_Output: {
             data: {
                 /**
@@ -3945,7 +4195,7 @@ export interface components {
             error?: {
                 id?: string;
                 /** @enum {string} */
-                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "environment_secret_not_found" | "environment_variable_already_exists" | "environment_variable_limit_reached" | "environment_variable_not_found" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "environment_root_project_required" | "environment_secret_not_found" | "environment_variable_already_exists" | "environment_variable_limit_reached" | "environment_variable_not_found" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
                 message: string;
                 description?: string;
                 links?: {
@@ -4744,13 +4994,13 @@ export interface operations {
             query?: {
                 /** @description Look back from server time, for example 30m, 2h, or 1d. Defaults to 30m when from/to are omitted. Maximum 30d. Cannot be combined with from/to. */
                 since?: string;
-                /** @description Range start as an ISO timestamp, within the last 30 days. Requires to; cannot be combined with since. */
+                /** @description Range start as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, within the last 30 days. Requires to; cannot be combined with since. */
                 from?: string;
-                /** @description Range end as an ISO timestamp, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
+                /** @description Range end as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
                 to?: string;
-                /** @description Up to eight distinct measurements. Defaults to query_in_flight, worker_admission_limit, worker_admission_active, worker_admission_pending, worker_admission_occupied, admission_rejection_rate, assignment_wait_p95, activation_duration_p95. Supply a comma-separated list. Allowed measurements: query_in_flight, worker_admission_limit, worker_admission_active, worker_admission_pending, worker_admission_occupied, admission_rejection_rate, assignment_wait_mean, assignment_wait_p95, activation_rate, activation_duration_mean, activation_duration_p95. */
+                /** @description Up to eight distinct measurements. Defaults to `query_in_flight`, `worker_admission_limit`, `worker_admission_active`, `worker_admission_pending`, `worker_admission_occupied`, `admission_rejection_rate`, `assignment_wait_p95`, `activation_duration_p95`. Supply a comma-separated list. Allowed measurements: `query_in_flight`, `worker_admission_limit`, `worker_admission_active`, `worker_admission_pending`, `worker_admission_occupied`, `admission_rejection_rate`, `assignment_wait_mean`, `assignment_wait_p95`, `activation_rate`, `activation_duration_mean`, `activation_duration_p95`. */
                 attributes?: string;
-                /** @description Defaults to 1m. The effective step increases to stay within 1441 points per series. Rate and latency windows are at least 5m. */
+                /** @description Defaults to 1m. The effective step increases to stay within 1,441 points per series. Rate and latency windows are at least 5m. */
                 interval?: "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
             };
             header?: never;
@@ -4840,13 +5090,13 @@ export interface operations {
             query?: {
                 /** @description Look back from server time, for example 30m, 2h, or 1d. Defaults to 30m when from/to are omitted. Maximum 30d. Cannot be combined with from/to. */
                 since?: string;
-                /** @description Range start as an ISO timestamp, within the last 30 days. Requires to; cannot be combined with since. */
+                /** @description Range start as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, within the last 30 days. Requires to; cannot be combined with since. */
                 from?: string;
-                /** @description Range end as an ISO timestamp, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
+                /** @description Range end as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
                 to?: string;
-                /** @description Up to eight distinct measurements. Defaults to ingestion_events_received_rate, ingestion_events_processed_rate, ingestion_bytes_received_rate, ingestion_bytes_processed_rate, replication_wal_lag_bytes, replication_receive_wal_lag_bytes. Supply a comma-separated list. Allowed measurements: ingestion_events_received_rate, ingestion_events_processed_rate, ingestion_bytes_received_rate, ingestion_bytes_processed_rate, replication_wal_lag_bytes, replication_receive_wal_lag_bytes. */
+                /** @description Up to eight distinct measurements. Defaults to `ingestion_events_received_rate`, `ingestion_events_processed_rate`, `ingestion_bytes_received_rate`, `ingestion_bytes_processed_rate`, `replication_wal_lag_bytes`, `replication_receive_wal_lag_bytes`. Supply a comma-separated list. Allowed measurements: `ingestion_events_received_rate`, `ingestion_events_processed_rate`, `ingestion_bytes_received_rate`, `ingestion_bytes_processed_rate`, `replication_wal_lag_bytes`, `replication_receive_wal_lag_bytes`. */
                 attributes?: string;
-                /** @description Defaults to 1m. The effective step increases to stay within 1441 points per series. Rate and latency windows are at least 5m. */
+                /** @description Defaults to 1m. The effective step increases to stay within 1,441 points per series. Rate windows are at least 5m. */
                 interval?: "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
             };
             header?: never;
@@ -4936,13 +5186,13 @@ export interface operations {
             query?: {
                 /** @description Look back from server time, for example 30m, 2h, or 1d. Defaults to 30m when from/to are omitted. Maximum 30d. Cannot be combined with from/to. */
                 since?: string;
-                /** @description Range start as an ISO timestamp, within the last 30 days. Requires to; cannot be combined with since. */
+                /** @description Range start as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, within the last 30 days. Requires to; cannot be combined with since. */
                 from?: string;
-                /** @description Range end as an ISO timestamp, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
+                /** @description Range end as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
                 to?: string;
-                /** @description Up to eight distinct measurements. Defaults to maintenance_pause_active, maintenance_run_rate, inline_flush_rows_rate, table_active_data_file_avg_size_bytes_mean, table_small_file_ratio_mean, table_deleted_row_ratio_mean, catalog_deletion_backlog_bytes, catalog_oldest_deletion_age. Supply a comma-separated list. Allowed measurements: maintenance_request_rate, maintenance_pause_active, maintenance_pause_duration_mean, maintenance_run_rate, maintenance_results_available, maintenance_merge_adjacent_files_created_rate, maintenance_rewrite_data_files_created_rate, maintenance_expired_snapshots_rate, maintenance_cleaned_up_files_rate, inline_flush_rows_rate, inline_flush_rows_mean, inline_flush_duration_mean, table_active_data_files_mean, table_active_data_bytes_mean, table_active_data_file_avg_size_bytes_mean, table_small_file_ratio_mean, table_active_delete_files_mean, table_active_delete_bytes_mean, table_deleted_row_ratio_mean, table_inlined_data_bytes, catalog_active_data_files, catalog_snapshots, catalog_oldest_snapshot_age, catalog_deletion_backlog_files, catalog_deletion_backlog_bytes, catalog_oldest_deletion_age. */
+                /** @description Up to eight distinct measurements. Defaults to `maintenance_pause_active`, `maintenance_run_rate`, `inline_flush_rows_rate`, `table_active_data_file_avg_size_bytes_mean`, `table_small_file_ratio_mean`, `table_deleted_row_ratio_mean`, `catalog_deletion_backlog_bytes`, `catalog_oldest_deletion_age`. Supply a comma-separated list. Allowed measurements: `maintenance_request_rate`, `maintenance_pause_active`, `maintenance_pause_duration_mean`, `maintenance_run_rate`, `maintenance_results_available`, `maintenance_merge_adjacent_files_created_rate`, `maintenance_rewrite_data_files_created_rate`, `maintenance_expired_snapshots_rate`, `maintenance_cleaned_up_files_rate`, `inline_flush_rows_rate`, `inline_flush_rows_mean`, `inline_flush_duration_mean`, `table_active_data_files_mean`, `table_active_data_bytes_mean`, `table_active_data_file_avg_size_bytes_mean`, `table_small_file_ratio_mean`, `table_active_delete_files_mean`, `table_active_delete_bytes_mean`, `table_deleted_row_ratio_mean`, `table_inlined_data_bytes`, `catalog_active_data_files`, `catalog_snapshots`, `catalog_oldest_snapshot_age`, `catalog_deletion_backlog_files`, `catalog_deletion_backlog_bytes`, `catalog_oldest_deletion_age`. */
                 attributes?: string;
-                /** @description Defaults to 1m. The effective step increases to stay within 1441 points per series. Rate and latency windows are at least 5m. */
+                /** @description Defaults to 1m. The effective step increases to stay within 1,441 points per series. Rate and latency windows are at least 5m. */
                 interval?: "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
             };
             header?: never;
@@ -5032,13 +5282,13 @@ export interface operations {
             query?: {
                 /** @description Look back from server time, for example 30m, 2h, or 1d. Defaults to 30m when from/to are omitted. Maximum 30d. Cannot be combined with from/to. */
                 since?: string;
-                /** @description Range start as an ISO timestamp, within the last 30 days. Requires to; cannot be combined with since. */
+                /** @description Range start as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, within the last 30 days. Requires to; cannot be combined with since. */
                 from?: string;
-                /** @description Range end as an ISO timestamp, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
+                /** @description Range end as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
                 to?: string;
-                /** @description Up to eight distinct measurements. Defaults to query_rate, query_duration_p50, query_duration_p95, query_duration_p99, query_error_rate, query_timeout_rate. Supply a comma-separated list. Allowed measurements: query_rate, query_error_rate, query_timeout_rate, query_canceled_rate, query_duration_mean, query_duration_p50, query_duration_p95, query_duration_p99, duckdb_duration_mean, rpc_rate, rpc_duration_mean, rpc_duration_p95. */
+                /** @description Up to eight distinct measurements. Defaults to `query_rate`, `query_duration_p50`, `query_duration_p95`, `query_duration_p99`, `query_error_rate`, `query_timeout_rate`. Supply a comma-separated list. Allowed measurements: `query_rate`, `query_error_rate`, `query_timeout_rate`, `query_canceled_rate`, `query_duration_mean`, `query_duration_p50`, `query_duration_p95`, `query_duration_p99`, `duckdb_duration_mean`, `rpc_rate`, `rpc_duration_mean`, `rpc_duration_p95`. */
                 attributes?: string;
-                /** @description Defaults to 1m. The effective step increases to stay within 1441 points per series. Rate and latency windows are at least 5m. */
+                /** @description Defaults to 1m. The effective step increases to stay within 1,441 points per series. Rate and latency windows are at least 5m. */
                 interval?: "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
             };
             header?: never;
@@ -6327,6 +6577,73 @@ export interface operations {
             };
         };
     };
+    "v2-project-get-downloadable-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadableBackupsResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to get project backups */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
     "v2-create-a-branch": {
         parameters: {
             query?: never;
@@ -6525,9 +6842,18 @@ export interface operations {
         parameters: {
             query?: {
                 page?: {
-                    size?: number;
-                    after?: string;
+                    /** @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param. */
                     before?: string;
+                    /** @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param. */
+                    after?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
+                     */
+                    size?: string;
                 };
                 filter?: {
                     name?: string;
@@ -7477,6 +7803,414 @@ export interface operations {
             };
         };
     };
+    "v2-list-environment-variables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ListEnvironmentVariablesResponse_Output"];
+                };
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-set-environment-variable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+                /** @description Name of the variable or secret. Variables and secrets share one namespace. Must not start with the SUPABASE_ prefix. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2SetEnvironmentVariableRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2EnvironmentVariableResponse_Output"];
+                };
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description The name belongs to a secret of the environment, or the environment holds the maximum number of entries */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-delete-environment-variable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+                /** @description Name of the variable or secret. Variables and secrets share one namespace. Must not start with the SUPABASE_ prefix. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Variable not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-list-environment-secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ListEnvironmentSecretsResponse_Output"];
+                };
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-set-environment-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+                /** @description Name of the variable or secret. Variables and secrets share one namespace. Must not start with the SUPABASE_ prefix. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2SetEnvironmentSecretRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2EnvironmentSecretResponse_Output"];
+                };
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description The name belongs to a variable of the environment, or the environment holds the maximum number of entries */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-delete-environment-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+                /** @description Name of the variable or secret. Variables and secrets share one namespace. Must not start with the SUPABASE_ prefix. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Secret not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
     "v2-list-organization-roles": {
         parameters: {
             query?: never;
@@ -7654,11 +8388,24 @@ export interface operations {
         parameters: {
             query?: {
                 page?: {
-                    size?: number;
-                    /** Format: uuid */
-                    after?: string;
-                    /** Format: uuid */
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param.
+                     */
                     before?: string;
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param.
+                     */
+                    after?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
+                     */
+                    size?: string;
                 };
                 filter?: {
                     username?: string;
@@ -7854,9 +8601,18 @@ export interface operations {
         parameters: {
             query?: {
                 page?: {
-                    size?: number;
-                    after?: string;
+                    /** @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param. */
                     before?: string;
+                    /** @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param. */
+                    after?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
+                     */
+                    size?: string;
                 };
                 /** @description Sort order by creation time: `inserted_at` (oldest first) or `-inserted_at` (newest first). Defaults to `inserted_at`. */
                 sort?: "inserted_at" | "-inserted_at";
@@ -7913,17 +8669,24 @@ export interface operations {
         parameters: {
             query?: {
                 page?: {
-                    size?: number;
                     /**
-                     * @description Project ref
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param.
+                     * @example abcdefghijklmnopqrst
+                     */
+                    before?: string;
+                    /**
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param.
                      * @example abcdefghijklmnopqrst
                      */
                     after?: string;
                     /**
-                     * @description Project ref
-                     * @example abcdefghijklmnopqrst
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
                      */
-                    before?: string;
+                    size?: string;
                 };
                 filter?: {
                     /**
