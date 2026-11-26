@@ -418,15 +418,27 @@ export function getAccountTools({
           }
         }
 
-        // Legacy clients only: form-capable clients returned above. Without
-        // this, a missing ID would hit the opaque hash-mismatch error below.
+        // Legacy clients only: form-capable clients returned above.
+        const cost = await getNextProjectCost(account, organization_id);
+        if (cost.amount === 0) {
+          observation?.record({
+            kind: 'confirmation_decision',
+            feature: 'cost',
+            route: 'bypass',
+            reason: 'zero_cost',
+          });
+          return await observeOperation('cost', observation?.record, () =>
+            account.createProject({ name, region, organization_id })
+          );
+        }
+
+        // Without this, a missing ID would hit the opaque hash-mismatch error below.
         if (!confirm_cost_id) {
           throw new ToolCallerError(missingConfirmCostIdMessage, {
             kind: 'confirmation_required',
           });
         }
 
-        const cost = await getNextProjectCost(account, organization_id);
         // confirmation is the server option enabling inline confirmation; legacy means no form support or no configuration.
         const reason = confirmation ? 'capability_missing' : 'not_configured';
         observation?.record({

@@ -54,8 +54,11 @@ export function assertSuccess<
 ): asserts response is SuccessResponseType<T, Options, Media> {
   if ('error' in response) {
     if (response.response.status === 401) {
-      throw new Error(
-        'Unauthorized. Please provide a valid access token to the MCP server via the --access-token flag or SUPABASE_ACCESS_TOKEN.'
+      throw Object.assign(
+        new Error(
+          'Unauthorized. Please provide a valid access token to the MCP server via the --access-token flag or SUPABASE_ACCESS_TOKEN.'
+        ),
+        { status: 401 }
       );
     }
 
@@ -71,10 +74,14 @@ export function assertSuccess<
         );
       }
 
-      throw new Error(errorContent.message);
+      throw Object.assign(new Error(errorContent.message), {
+        status: response.response.status,
+      });
     }
 
-    throw new Error(fallbackMessage);
+    throw Object.assign(new Error(fallbackMessage), {
+      status: response.response.status,
+    });
   }
 }
 

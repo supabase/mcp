@@ -35,6 +35,7 @@ type SetupOptions = {
   features?: string[];
   experimentalApps?: boolean;
   skills?: SupabaseMcpServerOptions['skills'];
+  openaiPluginExtensions?: boolean;
   elicitation?: SupabaseMcpServerOptions['elicitation'];
   observer?: SupabaseMcpServerOptions['observer'];
   onToolCall?: SupabaseMcpServerOptions['onToolCall'];
@@ -46,6 +47,7 @@ type ModernSetupOptions = {
   features?: string[];
   experimentalApps?: boolean;
   skills?: SupabaseMcpServerOptions['skills'];
+  openaiPluginExtensions?: boolean;
   dashboardUrl?: string;
   observer?: SupabaseMcpServerOptions['observer'];
   onToolCall?: SupabaseMcpServerOptions['onToolCall'];
@@ -154,6 +156,7 @@ export function createServerHarness() {
       features,
       experimentalApps: options.experimentalApps,
       skills: options.skills,
+      openaiPluginExtensions: options.openaiPluginExtensions,
       elicitation,
       clientInfo: options.clientInfo,
       observer: options.observer,
@@ -229,6 +232,7 @@ export function createServerHarness() {
       features,
       experimentalApps: options.experimentalApps,
       skills: options.skills,
+      openaiPluginExtensions: options.openaiPluginExtensions,
       dashboardUrl: options.dashboardUrl,
       observer: options.observer,
       onToolCall: options.onToolCall,

@@ -1,4 +1,13 @@
+import { ToolCallerError } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
+import {
+  filterAndSortIssues,
+  issueSeveritySchema,
+  issuesResultSchema,
+  normalizeIssues,
+  type IssueCategory,
+  type IssuesResult,
+} from '../issues.js';
 import { resolveLogWindow } from '../logs.js';
 import {
   logsServiceSchema,
@@ -224,7 +233,58 @@ export function groupAdvisorsResult(result: unknown): unknown {
   return { ...result, lints: groupAdvisorLints(lints) };
 }
 
+const getIssuesInputSchema = z.object({
+  project_id: z.string(),
+  type: z.enum(['all', 'security', 'performance', 'health']).default('all'),
+  severity: issueSeveritySchema
+    .default('info')
+    .describe(
+      'Minimum issue severity; each issue includes up to 20 findings, highest severity first, and affected_count gives the total'
+    ),
+});
+
+const legacyIssuesInputSchema = getIssuesInputSchema.extend({
+  type: z.enum(['all', 'security', 'performance']).default('all'),
+});
+
+function mustPropagateCheckFailure(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const value = error as {
+    status?: unknown;
+    statusCode?: unknown;
+    code?: unknown;
+    response?: { status?: unknown };
+    cause?: unknown;
+  };
+  return (
+    [value.status, value.statusCode, value.response?.status].some(
+      (status) => status === 401 || status === 403
+    ) ||
+    (typeof value.code === 'number' &&
+      value.code >= -32768 &&
+      value.code <= -32000) ||
+    value.code === 'UNAUTHORIZED' ||
+    value.code === 'FORBIDDEN' ||
+    (value.cause !== error &&
+      value.cause !== undefined &&
+      mustPropagateCheckFailure(value.cause))
+  );
+}
+
 export const debuggingToolDefs = {
+  get_issues: {
+    description:
+      'Gets current project issues grouped by check, with security, performance, and health check coverage. Start here when debugging or after DDL changes. IDs identify checks within this project, not persistent incidents. An unavailable check is not a clean assessment. Include docs_url as a clickable remediation link.',
+    parameters: getIssuesInputSchema,
+    outputSchema: issuesResultSchema,
+    annotations: {
+      title: 'Get project issues',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
   get_logs: {
     description:
       'Gets logs for a Supabase project by service type. When the user asks about a specific time range, always pass iso_timestamp_start and iso_timestamp_end to match it; otherwise each call defaults to the last 24 hours and will return logs from a wider window than intended. The window must be 24 hours or less and iso_timestamp_start must be before iso_timestamp_end; other windows are rejected. If you pass only iso_timestamp_start, the end defaults to now, so for a past time range pass both timestamps. For a longer range, make one call per 24-hour slice. Edge Function logs are split by kind: `edge-function` returns invocation/request logs, while `edge-function-runtime` returns console output from inside the function. Query one service first, then correlate with other services by timestamp or error anchors. Do not poll get_logs in a loop.',
@@ -252,7 +312,7 @@ export const debuggingToolDefs = {
   },
   get_advisors: {
     description:
-      "Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves. It's recommended to run this tool regularly, especially after making DDL changes to the database since it will catch things like missing RLS policies.",
+      'Planned for future deprecation in favor of get_issues; remains available. Gets a list of advisory notices for the Supabase project. Use this to check for security vulnerabilities, performance improvements, or health issues. Include the remediation URL as a clickable link so that the user can reference the issue themselves.',
     parameters: getAdvisorsInputSchema,
     outputSchema: getAdvisorsOutputSchema,
     annotations: {
@@ -271,6 +331,11 @@ export function getDebuggingTools({
 }: DebuggingToolsOptions) {
   const project_id = projectId;
   const { queryLogs } = debugging;
+  const advisorAdapters = {
+    security: debugging.getSecurityAdvisors.bind(debugging),
+    performance: debugging.getPerformanceAdvisors.bind(debugging),
+    health: debugging.getHealthAdvisors?.bind(debugging),
+  };
   const logsDialect = debugging.logsDialect ?? DEFAULT_LOGS_DIALECT;
 
   return {
@@ -315,6 +380,63 @@ export function getDebuggingTools({
         },
       }),
     }),
+    get_issues: injectableTool({
+      ...debuggingToolDefs.get_issues,
+      parameters: advisorAdapters.health
+        ? getIssuesInputSchema
+        : legacyIssuesInputSchema,
+      inject: { project_id },
+      execute: async ({ project_id, type, severity }) => {
+        const categories: IssueCategory[] =
+          type === 'all' ? ['security', 'performance', 'health'] : [type];
+        const results = await Promise.all(
+          categories.map(async (category): Promise<IssuesResult> => {
+            const adapter = advisorAdapters[category];
+            if (!adapter) {
+              return {
+                issues: [],
+                checks: [
+                  {
+                    type: category,
+                    status: 'unavailable',
+                    reason: 'Health issues are not supported by this platform',
+                  },
+                ],
+              };
+            }
+            try {
+              const response = await adapter(project_id, {
+                includeUnavailable: true,
+              });
+              return normalizeIssues(response, category);
+            } catch (error) {
+              if (mustPropagateCheckFailure(error)) throw error;
+              return {
+                issues: [],
+                checks: [
+                  {
+                    type: category,
+                    status: 'unavailable',
+                    reason:
+                      error instanceof Error
+                        ? error.message
+                        : 'Advisor check failed',
+                  },
+                ],
+              };
+            }
+          })
+        );
+        const result: IssuesResult = {
+          issues: filterAndSortIssues(
+            results.flatMap(({ issues }) => issues),
+            severity
+          ),
+          checks: results.flatMap(({ checks }) => checks),
+        };
+        return result;
+      },
+    }),
     get_advisors: injectableTool({
       ...debuggingToolDefs.get_advisors,
       parameters: debugging.getHealthAdvisors
@@ -325,25 +447,12 @@ export function getDebuggingTools({
         project_id,
         type,
       }: z.infer<typeof getAdvisorsInputSchema>) => {
-        let result: unknown;
-        switch (type) {
-          case 'security':
-            result = await debugging.getSecurityAdvisors(project_id);
-            break;
-          case 'performance':
-            result = await debugging.getPerformanceAdvisors(project_id);
-            break;
-          case 'health':
-            if (!debugging.getHealthAdvisors) {
-              throw new Error(
-                'Health advisors are not supported by this platform'
-              );
-            }
-            result = await debugging.getHealthAdvisors(project_id);
-            break;
-          default:
-            throw new Error(`Unknown advisor type: ${type}`);
-        }
+        const adapter = advisorAdapters[type];
+        if (!adapter)
+          throw new ToolCallerError(
+            'Health advisors are not supported by this platform'
+          );
+        const result = await adapter(project_id);
         return { result: groupAdvisorsResult(result) };
       },
     }),

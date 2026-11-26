@@ -256,7 +256,13 @@ const newNotebookChartConfigSchema = notebookChartConfigSchema
   })
   .strict();
 
-const newNotebookSqlSchema = z.string().trim().min(1);
+// Trimming runs before the length check, so a whitespace-only string fails
+// here even though it satisfies the advertised `minLength: 1`. Say so instead
+// of zod's default "expected string to have >=1 characters".
+const newNotebookSqlSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'SQL must not be empty or only whitespace.' });
 
 const newNotebookCellSchema = z.discriminatedUnion('type', [
   notebookMarkdownCellSchema.omit({ id: true }).strict(),
@@ -299,7 +305,10 @@ const newNotebookCellSchema = z.discriminatedUnion('type', [
 ]);
 
 export const createNotebookOptionsSchema = z.object({
-  name: z.string().trim().min(1),
+  name: z
+    .string()
+    .trim()
+    .min(1, { message: 'Notebook name must not be empty or only whitespace.' }),
   description: z.string().optional(),
   content: z.object({
     cells: z.array(newNotebookCellSchema),
@@ -404,9 +413,18 @@ export type DebuggingOperations = {
   logsDialect?: LogsDialect;
   getLogs(projectId: string, options: GetLogsOptions): Promise<unknown>;
   queryLogs?(projectId: string, options: QueryLogsOptions): Promise<unknown>;
-  getSecurityAdvisors(projectId: string): Promise<unknown>;
-  getPerformanceAdvisors(projectId: string): Promise<unknown>;
-  getHealthAdvisors?(projectId: string): Promise<unknown>;
+  getSecurityAdvisors(
+    projectId: string,
+    options?: { includeUnavailable?: boolean }
+  ): Promise<unknown>;
+  getPerformanceAdvisors(
+    projectId: string,
+    options?: { includeUnavailable?: boolean }
+  ): Promise<unknown>;
+  getHealthAdvisors?(
+    projectId: string,
+    options?: { includeUnavailable?: boolean }
+  ): Promise<unknown>;
 };
 
 export const apiKeyTypeSchema = z.enum(['legacy', 'publishable']);
@@ -421,11 +439,17 @@ export type ApiKey = {
   disabled?: boolean;
 };
 
+export type GenerateTypescriptTypesOptions = {
+  /** Schemas to generate types for. Omitted means the API default (`public`). */
+  schemas?: string[];
+};
+
 export type DevelopmentOperations = {
   getProjectUrl(projectId: string): Promise<string>;
   getPublishableKeys(projectId: string): Promise<ApiKey[]>;
   generateTypescriptTypes(
-    projectId: string
+    projectId: string,
+    options?: GenerateTypescriptTypesOptions
   ): Promise<GenerateTypescriptTypesResult>;
 };
 

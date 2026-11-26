@@ -3,6 +3,7 @@ import {
   parseMultipartStream,
 } from '@mjackson/multipart-parser';
 import type { InitData } from '@supabase/mcp-utils';
+import { normalize } from 'node:path/posix';
 import packageJson from '../../package.json' with { type: 'json' };
 import {
   getDefaultImportMapPath,
@@ -371,7 +372,7 @@ export function createSupabaseApiPlatform(
 
       return response.data;
     },
-    async getHealthAdvisors(projectId: string) {
+    async getHealthAdvisors(projectId: string, options) {
       const response = await managementApiV2Client.POST(
         '/v2/projects/{ref}/advisors/run',
         {
@@ -397,9 +398,11 @@ export function createSupabaseApiPlatform(
 
       return {
         ...attributes,
-        lints: attributes.lints.filter(
-          ({ name }) => !hiddenHealthAdvisorResultNames.has(name)
-        ),
+        lints: options?.includeUnavailable
+          ? attributes.lints
+          : attributes.lints.filter(
+              ({ name }) => !hiddenHealthAdvisorResultNames.has(name)
+            ),
       };
     },
   };
@@ -475,7 +478,7 @@ export function createSupabaseApiPlatform(
         id: key.id ?? undefined,
       }));
     },
-    async generateTypescriptTypes(projectId: string) {
+    async generateTypescriptTypes(projectId: string, { schemas } = {}) {
       const response = await managementApiClient.GET(
         '/v1/projects/{ref}/types/typescript',
         {
@@ -483,6 +486,11 @@ export function createSupabaseApiPlatform(
             path: {
               ref: projectId,
             },
+            // Omit the query when no schemas are given so the API applies its
+            // default (`public`), exactly as before this option existed.
+            ...(schemas && {
+              query: { included_schemas: schemas.join(',') },
+            }),
           },
         }
       );
@@ -652,10 +660,14 @@ export function createSupabaseApiPlatform(
         existingEdgeFunction = await functions.getEdgeFunction(projectId, name);
       } catch (error) {}
 
-      // Use existing import map path or file name heuristic if not provided
-      import_map_path ??=
-        existingEdgeFunction?.import_map_path ??
-        getDefaultImportMapPath(inputFiles);
+      // If not provided, keep the existing import map path while its file is
+      // still part of the upload. Otherwise fall back to the file name heuristic.
+      const existingImportMapPath = existingEdgeFunction?.import_map_path;
+      import_map_path ??= inputFiles.some(
+        (file) => normalize(file.name) === existingImportMapPath
+      )
+        ? existingImportMapPath
+        : getDefaultImportMapPath(inputFiles);
 
       const response = await managementApiClient.POST(
         '/v1/projects/{ref}/functions/deploy',

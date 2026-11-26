@@ -672,6 +672,62 @@ describe('run_notebook', () => {
     ]);
   });
 
+  test('applies row_limit as an auto-limit, like Studio', async () => {
+    const platform = createSupabaseApiPlatform({
+      accessToken: ACCESS_TOKEN,
+      apiUrl: API_URL,
+    });
+    const executeSql = vi.spyOn(platform.database!, 'executeSql');
+    const { callTool } = await setup({ platform, features: RUN_FEATURES });
+    const cteSql =
+      'with s as (select g from generate_series(1, 10) g) select * from s';
+    const explicitLimitSql = 'select g from generate_series(1, 10) g limit 6';
+    const commentedSql = 'select g from generate_series(1, 4) g -- all rows';
+    const { project, notebook } = await createNotebookFixture([
+      { id: 'cte', type: 'database', sql: cteSql, row_limit: 3 },
+      {
+        id: 'explicit-limit',
+        type: 'database',
+        sql: explicitLimitSql,
+        row_limit: 3,
+      },
+      { id: 'commented', type: 'database', sql: commentedSql, row_limit: 3 },
+    ]);
+
+    const result = await callTool({
+      name: 'run_notebook',
+      arguments: runArgs(project, notebook),
+    });
+
+    // The read-only CTE is limited in SQL. An explicit LIMIT wins over
+    // row_limit, and SQL left as written is not trimmed after the fetch.
+    expect(executeSql.mock.calls.map(([, options]) => options.query)).toEqual([
+      `${cteSql} limit 3;`,
+      explicitLimitSql,
+      commentedSql,
+    ]);
+    expect(parseCellResults(result.cells)).toEqual([
+      {
+        cell_id: 'cte',
+        type: 'database',
+        status: 'success',
+        rows: [1, 2, 3].map((g) => ({ g })),
+      },
+      {
+        cell_id: 'explicit-limit',
+        type: 'database',
+        status: 'success',
+        rows: [1, 2, 3, 4, 5, 6].map((g) => ({ g })),
+      },
+      {
+        cell_id: 'commented',
+        type: 'database',
+        status: 'success',
+        rows: [1, 2, 3, 4].map((g) => ({ g })),
+      },
+    ]);
+  });
+
   test('a failing cell does not stop later cells', async () => {
     const platform = createSupabaseApiPlatform({
       accessToken: ACCESS_TOKEN,
@@ -885,7 +941,7 @@ describe('run_notebook', () => {
     expect(queryLogs).not.toHaveBeenCalled();
   });
 
-  test('an oversized cell spends the remaining budget and skips later database and log cells', async () => {
+  test('an oversized cell forfeits the remaining budget and skips later database and log cells with that reason', async () => {
     const platform = createSupabaseApiPlatform({
       accessToken: ACCESS_TOKEN,
       apiUrl: API_URL,
@@ -957,19 +1013,19 @@ describe('run_notebook', () => {
         cell_id: 'later-oversized',
         type: 'database',
         status: 'skipped',
-        reason: 'run result budget spent',
+        reason: "an earlier cell's result was too large for this run",
       },
       {
         cell_id: 'later-logs',
         type: 'log',
         status: 'skipped',
-        reason: 'run result budget spent',
+        reason: "an earlier cell's result was too large for this run",
       },
       {
         cell_id: 'later-small',
         type: 'database',
         status: 'skipped',
-        reason: 'run result budget spent',
+        reason: "an earlier cell's result was too large for this run",
       },
     ]);
     const cells = parseCellResults(result.cells);
@@ -1091,13 +1147,13 @@ describe('run_notebook', () => {
                 cell_id: 'query-3',
                 type: 'database',
                 status: 'skipped',
-                reason: 'run result budget spent',
+                reason: "an earlier cell's result was too large for this run",
               },
               {
                 cell_id: 'query-4',
                 type: 'database',
                 status: 'skipped',
-                reason: 'run result budget spent',
+                reason: "an earlier cell's result was too large for this run",
               },
             ]
           : []),
@@ -3147,12 +3203,56 @@ describe('create_notebook', () => {
     async (name) => {
       const { callTool } = await setup({ features: ['notebooks'] });
       const { project } = await createProjectFixture();
-      await expect(
-        callTool({
-          name: 'create_notebook',
-          arguments: { project_id: project.id, name, content: { cells: [] } },
+      const issues = await callTool({
+        name: 'create_notebook',
+        arguments: { project_id: project.id, name, content: { cells: [] } },
+      }).then(
+        () => {
+          throw new Error('expected invalid input');
+        },
+        (error: Error) => JSON.parse(error.message)
+      );
+      expect(issues).toContainEqual(
+        expect.objectContaining({
+          path: ['name'],
+          message: 'Notebook name must not be empty or only whitespace.',
         })
-      ).rejects.toThrow('"name"');
+      );
+      expect(project.notebooks.size).toBe(0);
+    }
+  );
+
+  test.each([
+    { type: 'database', sql: '   ', row_limit: 100 },
+    {
+      type: 'log',
+      sql: '  \n ',
+      time_range: { type: 'relative', unit: 'hour', amount: 1 },
+    },
+  ])(
+    'explains whitespace-only SQL instead of reporting a length: %j',
+    async (cell) => {
+      const { callTool } = await setup({ features: ['notebooks'] });
+      const { project } = await createProjectFixture();
+      const issues = await callTool({
+        name: 'create_notebook',
+        arguments: {
+          project_id: project.id,
+          name: 'Blank SQL',
+          content: { cells: [cell] },
+        },
+      }).then(
+        () => {
+          throw new Error('expected invalid input');
+        },
+        (error: Error) => JSON.parse(error.message)
+      );
+      expect(issues).toContainEqual(
+        expect.objectContaining({
+          path: ['content', 'cells', 0, 'sql'],
+          message: 'SQL must not be empty or only whitespace.',
+        })
+      );
       expect(project.notebooks.size).toBe(0);
     }
   );

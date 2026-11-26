@@ -4,6 +4,28 @@
  */
 
 export interface paths {
+    "/v2/projects/{ref}/warehouse/replication/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start or restart Warehouse replication
+         * @description Starts a stopped managed pipeline or restarts a starting, started or failed pipeline, preserving the selected tables and saved layouts. Restart interrupts replication; in-progress initial copies may restart from scratch. If lost-slot recreation is configured, startup can rebuild destination tables. The response confirms acceptance only. Incomplete setup markers are preserved and require a successful setup retry. Inspect warehouse status for runtime diagnostics and observed table progress; these observations do not identify completion of this request. Inspect state before retrying an uncertain response.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        post: operations["v2-restart-warehouse-replication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/projects/{ref}/warehouse/replication/add": {
         parameters: {
             query?: never;
@@ -79,11 +101,73 @@ export interface paths {
         };
         /**
          * Inspect Warehouse capacity diagnostics
-         * @description Returns capacity, admission, assignment-wait, and activation measurements over a bounded time range, using the project’s stored Warehouse placement. Use since or both from and to; the default is the last 30 minutes. Each measurement includes its definition, unit, aggregation, requested and effective ranges, rate_window_seconds, source-sample freshness, availability, coverage, and full series with dimension labels such as reason, kind, and result. Executor invocations in flight are distinct from worker admission grants. Occupied admission includes active plus pending grants. The configured admission limit does not imply an open gate or spare capacity. Missing, stale, and insufficient observations remain unavailable or null; they do not establish healthy or idle capacity. Point timestamps are evaluation times; last_sample_at is the original source-sample time. Rates and latency quantiles describe the effective rate window at each point, not the entire requested range. Each request returns up to eight measurements, and a failure of one measurement does not discard the other results. No raw queries or backend selectors are accepted.
+         * @description Returns capacity, admission, assignment-wait, and activation measurements over a bounded time
+         *     range, using the project’s stored Warehouse placement. Use `since` or both `from` and `to`;
+         *     the default is the last 30 minutes.
+         *
+         *     Each measurement includes its definition, unit, aggregation, requested and effective ranges,
+         *     `rate_window_seconds`, source-sample freshness, availability, coverage, and full series with
+         *     dimension labels such as `reason`, `kind`, and `result`.
+         *
+         *     Executor invocations in flight are distinct from worker admission grants. Occupied admission
+         *     includes active plus pending grants. The configured admission limit does not imply an open
+         *     gate or spare capacity. Missing, stale, and insufficient observations remain unavailable or
+         *     `null`; they do not establish healthy or idle capacity.
+         *
+         *     Point timestamps are evaluation times; `last_sample_at` is the original source-sample time.
+         *     Rates and latency quantiles describe the effective rate window at each point, not the entire
+         *     requested range.
+         *
+         *     Each request returns up to eight measurements, and a failure of one measurement does not
+         *     discard the other results. No raw queries or backend selectors are accepted.
          *
          *     This endpoint is currently in its **Alpha** stage.
          */
         get: operations["v2-get-warehouse-capacity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/warehouse/ingestion-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect Warehouse ingestion throughput and WAL lag
+         * @description Returns DuckLake ingestion throughput and WAL lag from the authorized pipelines and their independently resolved ETL regions. Select from six measurements: events received/processed per second, bytes received/processed per second, replication WAL lag and receive WAL lag. All six are selected by default. Use since or both from and to; defaults to the last 30 minutes. Rates describe each effective rate window. Pipeline IDs and worker, replication-path or event-type dimensions are retained. WAL lag is bytes; negative sentinels become null. Processed throughput acknowledges destination acceptance, not guaranteed durability. Missing, stale and unavailable values remain null. No raw queries or backend selection are accepted. A failure of one measurement does not discard successful siblings. Maintenance, inline-flush and sampled storage-health measurements are available from storage-stats.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        get: operations["v2-get-warehouse-ingestion-stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/warehouse/storage-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect Warehouse storage and maintenance statistics
+         * @description Returns up to eight DuckLake maintenance, inline-flush or sampled storage-health measurements from the authorized pipelines and their independently resolved ETL regions. Use since or both from and to; defaults to the last 30 minutes. Rates describe each effective rate window. Pipeline IDs and allowed operation, outcome, table or controller-process dimensions are retained. Table summary means are observations across tables and time, not current inventories. Sampled health has unknown observation freshness: last_sample_at is scrape receipt, not a successful recent health sample. Catalog-wide metrics require the collector exclusive-ownership gate; shared catalogs remain unavailable. Maintenance pause outcomes differ from run outcomes, and result availability is per controller process without global latest-run ordering. Missing, stale and unavailable values remain null. No raw queries or backend selection are accepted. A failure of one measurement does not discard successful siblings. Throughput and WAL lag are available from ingestion-stats.
+         *
+         *     This endpoint is currently in its **Alpha** stage.
+         */
+        get: operations["v2-get-warehouse-storage-stats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -233,7 +317,7 @@ export interface paths {
         };
         /**
          * Get consolidated Warehouse status and capabilities
-         * @description Returns provisioning, configured compute, replication, cleanup lifecycle and supported capabilities, including when individual dependencies are unavailable. Enabled Warehouse state is independent of the selected table count. Readiness is inferred from configuration and replication; query connectivity is not checked. Does not inspect the FDW. Observation timestamps are retrieval times, separate from table sync lag, pipeline apply lag and feedback age. Read access remains available without a replication entitlement; mutation endpoints enforce their own entitlements and permissions.
+         * @description Returns provisioning, configured compute, replication, cleanup lifecycle and supported capabilities, including when individual dependencies are unavailable. Enabled Warehouse state is independent of the selected table count. Readiness is inferred from configuration and replication; query connectivity is not checked. Does not inspect the FDW. Observation timestamps are retrieval times, separate from table sync lag, pipeline apply lag and feedback age. Read access remains available without a replication entitlement; mutation endpoints enforce their own entitlements and permissions. Runtime diagnostics classify current failures. Table errors and progress are explicitly current, last-known or unavailable; they do not establish completion of a particular restart or resync. Capabilities describe Management API operations: workload_metrics includes query-stats and capacity; query_explain does not describe SQL EXPLAIN through the Warehouse connection.
          *
          *     This endpoint is currently in its **Alpha** stage.
          */
@@ -255,7 +339,7 @@ export interface paths {
         };
         /**
          * Get Warehouse Flight SQL connection details
-         * @description Returns the public Arrow Flight SQL endpoint resolved from the project's Warehouse routing, with TLS required on port 443. Status is configured availability and query connectivity is not checked, so DNS readiness does not prove a query will succeed. Login uses a role in the source project database with that role's existing password (postgres uses the project database password), including when the catalog and storage are in another project. The role needs supabase_warehouse_reader membership, which is separate from Management API authorization. No passwords, tokens, catalog credentials or private endpoints are returned, and endpoint, host and port are null unless status is available or pending. Example client: usql -W 'flightsql://postgres@<host>:443?tls=enabled'.
+         * @description Returns the public Arrow Flight SQL endpoint resolved from the project's Warehouse routing, with TLS required on port 443. Status is configured availability and query connectivity is not checked, so DNS readiness does not prove a query will succeed. Login uses a role in the source project database with that role's existing password (postgres uses the project database password), including when the catalog and storage are in another project. The role needs supabase_warehouse_reader membership, which is separate from Management API authorization. No passwords, tokens, catalog credentials or private endpoints are returned, and endpoint, host and port are null unless status is available or pending. Example client: `usql -W 'flightsql://postgres@<host>:443?tls=enabled'`.
          *
          *     This endpoint is currently in its **Alpha** stage.
          */
@@ -404,6 +488,23 @@ export interface paths {
         put?: never;
         /** Download project backup */
         post: operations["v2-download-project-backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/backups/downloadable-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gets backups that might be downloadable, but potentially not restorable. */
+        get: operations["v2-project-get-downloadable-backups"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -699,6 +800,106 @@ export interface paths {
          */
         post: operations["v2-deploy-a-compute-instance"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/environments/{environment}/variables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List variables of an environment
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        get: operations["v2-list-environment-variables"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/environments/{environment}/variables/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Create or replace a variable in an environment
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        put: operations["v2-set-environment-variable"];
+        post?: never;
+        /**
+         * Delete a variable from an environment
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        delete: operations["v2-delete-environment-variable"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/environments/{environment}/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List secrets of an environment
+         * @description Returns the names of the secrets. Secret values are never returned.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        get: operations["v2-list-environment-secrets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/environments/{environment}/secrets/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Create or replace a secret in an environment
+         * @description Encrypts the value with the environment's data encryption key and stores it. The value cannot be read back.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        put: operations["v2-set-environment-secret"];
+        post?: never;
+        /**
+         * Delete a secret from an environment
+         * @description This is an **experimental** endpoint. It is subject to change or removal in future versions. Use it with caution, as it may not remain supported or stable.
+         *
+         *     This endpoint is currently in its **Beta** stage.
+         */
+        delete: operations["v2-delete-environment-secret"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1186,6 +1387,73 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        V2WarehouseRestartResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_replication_restart";
+                id: string;
+                attributes: {
+                    pipeline_id: string;
+                    /** @enum {string} */
+                    action: "start" | "restart";
+                    /**
+                     * @description The runtime request was accepted. This does not establish resumed replication or completed initial copies.
+                     * @enum {string}
+                     */
+                    application_status: "accepted";
+                    pipeline_status_before: string;
+                };
+            };
+        };
+        APIErrorObject: {
+            id?: string;
+            /** @enum {string} */
+            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "environment_root_project_required" | "environment_secret_not_found" | "environment_variable_already_exists" | "environment_variable_limit_reached" | "environment_variable_not_found" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+            message: string;
+            description?: string;
+            links?: {
+                [key: string]: {
+                    href: string;
+                    rel?: string;
+                    title?: string;
+                    type?: string;
+                    describedby?: string;
+                    meta?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            meta?: {
+                [key: string]: unknown;
+            };
+            issues?: {
+                id?: string;
+                code: string;
+                message: string;
+                description?: string;
+                links?: {
+                    [key: string]: {
+                        href: string;
+                        rel?: string;
+                        title?: string;
+                        type?: string;
+                        describedby?: string;
+                        meta?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                meta?: {
+                    [key: string]: unknown;
+                };
+            }[];
+        };
+        ErrorResponseBody: {
+            error: components["schemas"]["APIErrorObject"];
+        };
         V2WarehouseReplicationRequest: {
             data: {
                 /**
@@ -1256,52 +1524,6 @@ export interface components {
                 };
             };
         };
-        APIErrorObject: {
-            id?: string;
-            /** @enum {string} */
-            code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
-            message: string;
-            description?: string;
-            links?: {
-                [key: string]: {
-                    href: string;
-                    rel?: string;
-                    title?: string;
-                    type?: string;
-                    describedby?: string;
-                    meta?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            meta?: {
-                [key: string]: unknown;
-            };
-            issues?: {
-                id?: string;
-                code: string;
-                message: string;
-                description?: string;
-                links?: {
-                    [key: string]: {
-                        href: string;
-                        rel?: string;
-                        title?: string;
-                        type?: string;
-                        describedby?: string;
-                        meta?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                meta?: {
-                    [key: string]: unknown;
-                };
-            }[];
-        };
-        ErrorResponseBody: {
-            error: components["schemas"]["APIErrorObject"];
-        };
         V2WarehouseResyncRequest: {
             data: {
                 /**
@@ -1310,7 +1532,7 @@ export interface components {
                  */
                 type: "warehouse_replication_resync";
                 attributes: {
-                    /** @description Literal source PostgreSQL schema. Omit table to select its current tables. */
+                    /** @description Literal source PostgreSQL schema of the table. */
                     schema: string;
                     /** @description Literal name of the single source table to reset and recopy. */
                     table: string;
@@ -1396,23 +1618,10 @@ export interface components {
                  */
                 type: "warehouse_metric";
                 /** @enum {string} */
-                id: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
+                id: "query_in_flight" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "admission_rejection_rate" | "assignment_wait_mean" | "assignment_wait_p95" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95";
                 attributes: {
                     project_ref: string;
-                    /** @enum {string} */
-                    metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
-                    /** @enum {string} */
-                    unit: "per_second" | "seconds" | "queries" | "grants";
-                    /** @enum {string} */
-                    aggregation: "rate" | "sum" | "mean" | "p50" | "p95" | "p99" | "occupied";
                     definition: string;
-                    requested: {
-                        /** @enum {string} */
-                        metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
-                        start: number;
-                        end: number;
-                        step?: number;
-                    };
                     effective: {
                         start: number;
                         end: number;
@@ -1422,7 +1631,7 @@ export interface components {
                     scrape_interval_seconds: number;
                     /** @enum {string} */
                     availability: "ok" | "partial" | "stale" | "no_data" | "insufficient_data" | "not_provisioned" | "disabled" | "unavailable";
-                    /** @description Latest observed source sample timestamp in Unix seconds; not the query evaluation timestamp. */
+                    /** @description Latest scraped sample timestamp in Unix seconds; not the query evaluation timestamp or proof of a successful recent health observation. */
                     last_sample_at: number | null;
                     series: {
                         labels: {
@@ -1438,6 +1647,130 @@ export interface components {
                             expected_points: number;
                         };
                     }[];
+                    /** @enum {string} */
+                    metric: "query_in_flight" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "admission_rejection_rate" | "assignment_wait_mean" | "assignment_wait_p95" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95";
+                    /** @enum {string} */
+                    unit: "queries" | "grants" | "per_second" | "seconds";
+                    /** @enum {string} */
+                    aggregation: "sum" | "occupied" | "rate" | "mean" | "p95";
+                    requested: {
+                        /** @enum {string} */
+                        metric: "query_in_flight" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "admission_rejection_rate" | "assignment_wait_mean" | "assignment_wait_p95" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95";
+                        start: number;
+                        end: number;
+                        step?: number;
+                    };
+                };
+            }[];
+        };
+        V2WarehouseIngestionStatsResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_metric";
+                /** @enum {string} */
+                id: "ingestion_events_received_rate" | "ingestion_events_processed_rate" | "ingestion_bytes_received_rate" | "ingestion_bytes_processed_rate" | "replication_wal_lag_bytes" | "replication_receive_wal_lag_bytes";
+                attributes: {
+                    project_ref: string;
+                    definition: string;
+                    effective: {
+                        start: number;
+                        end: number;
+                        step: number;
+                        rate_window_seconds: number;
+                    };
+                    scrape_interval_seconds: number;
+                    /** @enum {string} */
+                    availability: "ok" | "partial" | "stale" | "no_data" | "insufficient_data" | "not_provisioned" | "disabled" | "unavailable";
+                    /** @description Latest scraped sample timestamp in Unix seconds; not the query evaluation timestamp or proof of a successful recent health observation. */
+                    last_sample_at: number | null;
+                    series: {
+                        labels: {
+                            [key: string]: string;
+                        };
+                        points: {
+                            timestamp: number;
+                            value: number | null;
+                        }[];
+                        /** @description Grid point coverage, not proof that every worker was scraped. */
+                        coverage: {
+                            returned_points: number;
+                            expected_points: number;
+                        };
+                    }[];
+                    /** @enum {string} */
+                    metric: "ingestion_events_received_rate" | "ingestion_events_processed_rate" | "ingestion_bytes_received_rate" | "ingestion_bytes_processed_rate" | "replication_wal_lag_bytes" | "replication_receive_wal_lag_bytes";
+                    /** @enum {string} */
+                    unit: "per_second" | "bytes_per_second" | "bytes";
+                    /** @enum {string} */
+                    aggregation: "rate" | "max";
+                    requested: {
+                        /** @enum {string} */
+                        metric: "ingestion_events_received_rate" | "ingestion_events_processed_rate" | "ingestion_bytes_received_rate" | "ingestion_bytes_processed_rate" | "replication_wal_lag_bytes" | "replication_receive_wal_lag_bytes";
+                        start: number;
+                        end: number;
+                        step?: number;
+                    };
+                };
+            }[];
+        };
+        V2WarehouseStorageStatsResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "warehouse_metric";
+                /** @enum {string} */
+                id: "maintenance_request_rate" | "maintenance_pause_active" | "maintenance_pause_duration_mean" | "maintenance_run_rate" | "maintenance_results_available" | "maintenance_merge_adjacent_files_created_rate" | "maintenance_rewrite_data_files_created_rate" | "maintenance_expired_snapshots_rate" | "maintenance_cleaned_up_files_rate" | "inline_flush_rows_rate" | "inline_flush_rows_mean" | "inline_flush_duration_mean" | "table_active_data_files_mean" | "table_active_data_bytes_mean" | "table_active_data_file_avg_size_bytes_mean" | "table_small_file_ratio_mean" | "table_active_delete_files_mean" | "table_active_delete_bytes_mean" | "table_deleted_row_ratio_mean" | "table_inlined_data_bytes" | "catalog_active_data_files" | "catalog_snapshots" | "catalog_oldest_snapshot_age" | "catalog_deletion_backlog_files" | "catalog_deletion_backlog_bytes" | "catalog_oldest_deletion_age";
+                attributes: {
+                    project_ref: string;
+                    definition: string;
+                    effective: {
+                        start: number;
+                        end: number;
+                        step: number;
+                        rate_window_seconds: number;
+                    };
+                    scrape_interval_seconds: number;
+                    /** @enum {string} */
+                    availability: "ok" | "partial" | "stale" | "no_data" | "insufficient_data" | "not_provisioned" | "disabled" | "unavailable";
+                    /** @description Latest scraped sample timestamp in Unix seconds; not the query evaluation timestamp or proof of a successful recent health observation. */
+                    last_sample_at: number | null;
+                    series: {
+                        labels: {
+                            [key: string]: string;
+                        };
+                        points: {
+                            timestamp: number;
+                            value: number | null;
+                        }[];
+                        /** @description Grid point coverage, not proof that every worker was scraped. */
+                        coverage: {
+                            returned_points: number;
+                            expected_points: number;
+                        };
+                    }[];
+                    /** @enum {string} */
+                    metric: "maintenance_request_rate" | "maintenance_pause_active" | "maintenance_pause_duration_mean" | "maintenance_run_rate" | "maintenance_results_available" | "maintenance_merge_adjacent_files_created_rate" | "maintenance_rewrite_data_files_created_rate" | "maintenance_expired_snapshots_rate" | "maintenance_cleaned_up_files_rate" | "inline_flush_rows_rate" | "inline_flush_rows_mean" | "inline_flush_duration_mean" | "table_active_data_files_mean" | "table_active_data_bytes_mean" | "table_active_data_file_avg_size_bytes_mean" | "table_small_file_ratio_mean" | "table_active_delete_files_mean" | "table_active_delete_bytes_mean" | "table_deleted_row_ratio_mean" | "table_inlined_data_bytes" | "catalog_active_data_files" | "catalog_snapshots" | "catalog_oldest_snapshot_age" | "catalog_deletion_backlog_files" | "catalog_deletion_backlog_bytes" | "catalog_oldest_deletion_age";
+                    /** @enum {string} */
+                    unit: "per_second" | "boolean" | "seconds" | "rows" | "files" | "bytes" | "ratio" | "snapshots";
+                    /** @enum {string} */
+                    aggregation: "rate" | "max" | "mean";
+                    requested: {
+                        /** @enum {string} */
+                        metric: "maintenance_request_rate" | "maintenance_pause_active" | "maintenance_pause_duration_mean" | "maintenance_run_rate" | "maintenance_results_available" | "maintenance_merge_adjacent_files_created_rate" | "maintenance_rewrite_data_files_created_rate" | "maintenance_expired_snapshots_rate" | "maintenance_cleaned_up_files_rate" | "inline_flush_rows_rate" | "inline_flush_rows_mean" | "inline_flush_duration_mean" | "table_active_data_files_mean" | "table_active_data_bytes_mean" | "table_active_data_file_avg_size_bytes_mean" | "table_small_file_ratio_mean" | "table_active_delete_files_mean" | "table_active_delete_bytes_mean" | "table_deleted_row_ratio_mean" | "table_inlined_data_bytes" | "catalog_active_data_files" | "catalog_snapshots" | "catalog_oldest_snapshot_age" | "catalog_deletion_backlog_files" | "catalog_deletion_backlog_bytes" | "catalog_oldest_deletion_age";
+                        start: number;
+                        end: number;
+                        step?: number;
+                    };
+                    /**
+                     * @description Present for sampled ETL health: successful source-observation freshness is unknown. last_sample_at reports scrape receipt only, not a successful catalog or table sample.
+                     * @enum {string}
+                     */
+                    observation_freshness?: "unknown";
                 };
             }[];
         };
@@ -1449,23 +1782,10 @@ export interface components {
                  */
                 type: "warehouse_metric";
                 /** @enum {string} */
-                id: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
+                id: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
                 attributes: {
                     project_ref: string;
-                    /** @enum {string} */
-                    metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
-                    /** @enum {string} */
-                    unit: "per_second" | "seconds" | "queries" | "grants";
-                    /** @enum {string} */
-                    aggregation: "rate" | "sum" | "mean" | "p50" | "p95" | "p99" | "occupied";
                     definition: string;
-                    requested: {
-                        /** @enum {string} */
-                        metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "assignment_wait_mean" | "assignment_wait_p95" | "query_in_flight" | "admission_rejection_rate" | "worker_admission_limit" | "worker_admission_active" | "worker_admission_pending" | "worker_admission_occupied" | "activation_rate" | "activation_duration_mean" | "activation_duration_p95" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
-                        start: number;
-                        end: number;
-                        step?: number;
-                    };
                     effective: {
                         start: number;
                         end: number;
@@ -1475,7 +1795,7 @@ export interface components {
                     scrape_interval_seconds: number;
                     /** @enum {string} */
                     availability: "ok" | "partial" | "stale" | "no_data" | "insufficient_data" | "not_provisioned" | "disabled" | "unavailable";
-                    /** @description Latest observed source sample timestamp in Unix seconds; not the query evaluation timestamp. */
+                    /** @description Latest scraped sample timestamp in Unix seconds; not the query evaluation timestamp or proof of a successful recent health observation. */
                     last_sample_at: number | null;
                     series: {
                         labels: {
@@ -1491,6 +1811,19 @@ export interface components {
                             expected_points: number;
                         };
                     }[];
+                    /** @enum {string} */
+                    metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
+                    /** @enum {string} */
+                    unit: "per_second" | "seconds";
+                    /** @enum {string} */
+                    aggregation: "rate" | "mean" | "p50" | "p95" | "p99";
+                    requested: {
+                        /** @enum {string} */
+                        metric: "query_rate" | "query_error_rate" | "query_timeout_rate" | "query_canceled_rate" | "query_duration_mean" | "query_duration_p50" | "query_duration_p95" | "query_duration_p99" | "duckdb_duration_mean" | "rpc_rate" | "rpc_duration_mean" | "rpc_duration_p95";
+                        start: number;
+                        end: number;
+                        step?: number;
+                    };
                 };
             }[];
         };
@@ -1921,6 +2254,12 @@ export interface components {
                     };
                     pipeline: {
                         id: string;
+                        /** @description Safe classification of the current runtime failure. Includes static customer guidance, without exit codes, provider messages or worker logs; does not establish its underlying cause. Unrecognized or malformed diagnostics are returned as `null`. */
+                        diagnostic: {
+                            /** @enum {string} */
+                            code: "out_of_memory" | "process_exited" | "crash_loop" | "image_unavailable" | "configuration_error" | "startup_failed" | "runtime_failed";
+                            message: string;
+                        } | null;
                         /** @enum {string} */
                         status: "stopped" | "starting" | "started" | "stopping" | "unknown" | "failed" | "unavailable";
                         /**
@@ -1939,7 +2278,7 @@ export interface components {
                          * @description Time the API retrieved this information. This timestamp does not indicate when data was measured or last synchronized.
                          */
                         observed_at: string | null;
-                        /** @description Postgres replication feedback. Null means Postgres reported no value; lag times also become null shortly after a caught-up slot sees no new WAL, while flush_lag_bytes, the WAL not yet confirmed flushed, reads 0. Feedback age measures time since the last response and does not establish how current query results are. */
+                        /** @description Slot health can remain visible during runtime recovery. Lag measurements and feedback age are unavailable unless the pipeline is started. */
                         apply_lag: {
                             active: boolean;
                             /** @enum {string|null} */
@@ -1962,12 +2301,41 @@ export interface components {
                         observed_at: string | null;
                         /** @enum {string|null} */
                         unavailable_reason: "assignment_unavailable" | "observation_unavailable" | "identity_mismatch" | "cleanup_in_progress" | "cleanup_failed" | null;
+                        /** @description Observed states of the selected tables, not completion or percentage of a specific mutation. Last-known states may predate a restart or resync. Null when the selection is unavailable. */
+                        progress: {
+                            /** @enum {string} */
+                            observation: "current" | "last_known" | "unavailable";
+                            selected: number;
+                            queued: number;
+                            copying_table: number;
+                            copied_table: number;
+                            following_wal: number;
+                            error: number;
+                            unknown: number;
+                        } | null;
                         items: {
                             id: number;
                             schema: string;
                             name: string;
                             /** @enum {string|null} */
                             replication_state: "queued" | "copying_table" | "copied_table" | "following_wal" | "error" | null;
+                            /** @enum {string} */
+                            state_observation: "current" | "last_known" | "unavailable";
+                            error: {
+                                reason: string;
+                                solution: string | null;
+                                retry_policy: {
+                                    /** @enum {string} */
+                                    policy: "no_retry";
+                                } | {
+                                    /** @enum {string} */
+                                    policy: "manual_retry";
+                                } | {
+                                    /** @enum {string} */
+                                    policy: "timed_retry";
+                                    next_retry: string;
+                                };
+                            } | null;
                             /** @description Postgres replication feedback. Null means Postgres reported no value; lag times also become null shortly after a caught-up slot sees no new WAL, while flush_lag_bytes, the WAL not yet confirmed flushed, reads 0. Feedback age measures time since the last response and does not establish how current query results are. */
                             sync_lag: {
                                 active: boolean;
@@ -1983,13 +2351,16 @@ export interface components {
                     /** @description Complete operations supported by this API, not caller authorization. Each operation still requires its feature, entitlement and project permission checks. */
                     capabilities: {
                         context: boolean;
+                        /** @description Query statistics and capacity inspection are supported by the Management API. Metric availability is reported separately. */
                         workload_metrics: boolean;
+                        /** @description Whether the Management API supports a query-explain operation. SQL EXPLAIN through the Warehouse connection is independent of this flag. */
                         query_explain: boolean;
                         table_layout_read: boolean;
                         table_layout_update: boolean;
                         replication_add: boolean;
                         replication_remove: boolean;
                         table_resync: boolean;
+                        replication_restart: boolean;
                     };
                 };
             };
@@ -2283,7 +2654,7 @@ export interface components {
                 attributes: {
                     /** @description Defaults to false, preserving historical files and replication progress. When the layout changes, true resets the table and copies it again. This requires initial sync to be enabled. Reads are disrupted during the copy. An unchanged layout never resets the table. */
                     reset_table?: boolean;
-                    /** @description Omit to preserve the saved sorting. Null makes sorting unmanaged. The none selector explicitly clears sorting. Otherwise, supply the complete sort selector. */
+                    /** @description Omit to preserve the saved sorting. Null makes sorting unmanaged. The none selector explicitly clears sorting. Otherwise, supply the complete sort selector. Example: `{"kind":"columns","columns":[{"name":"tenant_id","direction":"asc"},{"name":"event_at","direction":"desc","nulls":"last"}]}`. Sort by the primary key with `{"kind":"primary_key"}` or clear sorting with `{"kind":"none"}`. */
                     sort_by: ({
                         /** @enum {string} */
                         kind: "none";
@@ -2305,7 +2676,7 @@ export interface components {
                             nulls?: "first" | "last" | null;
                         }[];
                     }) | (never | null);
-                    /** @description Omit to preserve the saved partitioning. Null makes partitioning unmanaged. An empty list explicitly clears partitioning. Otherwise, supply all ordered partition keys. */
+                    /** @description Omit to preserve the saved partitioning. Null makes partitioning unmanaged. An empty list explicitly clears partitioning. Otherwise, supply all ordered partition keys. Day example: `[{"column":"event_at","transform":{"kind":"day"}}]`. Bucket example: `[{"column":"tenant_id","transform":{"kind":"bucket","count":8}}]`. Use `[]` to clear or `null` to stop managing partitioning. */
                     partition_by?: {
                         /** @description Source column name. */
                         column: string;
@@ -2334,7 +2705,7 @@ export interface components {
                 } | {
                     /** @description Defaults to false, preserving historical files and replication progress. When the layout changes, true resets the table and copies it again. This requires initial sync to be enabled. Reads are disrupted during the copy. An unchanged layout never resets the table. */
                     reset_table?: boolean;
-                    /** @description Omit to preserve the saved sorting. Null makes sorting unmanaged. The none selector explicitly clears sorting. Otherwise, supply the complete sort selector. */
+                    /** @description Omit to preserve the saved sorting. Null makes sorting unmanaged. The none selector explicitly clears sorting. Otherwise, supply the complete sort selector. Example: `{"kind":"columns","columns":[{"name":"tenant_id","direction":"asc"},{"name":"event_at","direction":"desc","nulls":"last"}]}`. Sort by the primary key with `{"kind":"primary_key"}` or clear sorting with `{"kind":"none"}`. */
                     sort_by?: ({
                         /** @enum {string} */
                         kind: "none";
@@ -2356,7 +2727,7 @@ export interface components {
                             nulls?: "first" | "last" | null;
                         }[];
                     }) | (never | null);
-                    /** @description Omit to preserve the saved partitioning. Null makes partitioning unmanaged. An empty list explicitly clears partitioning. Otherwise, supply all ordered partition keys. */
+                    /** @description Omit to preserve the saved partitioning. Null makes partitioning unmanaged. An empty list explicitly clears partitioning. Otherwise, supply all ordered partition keys. Day example: `[{"column":"event_at","transform":{"kind":"day"}}]`. Bucket example: `[{"column":"tenant_id","transform":{"kind":"bucket","count":8}}]`. Use `[]` to clear or `null` to stop managing partitioning. */
                     partition_by: {
                         /** @description Source column name. */
                         column: string;
@@ -2746,6 +3117,23 @@ export interface components {
                     file_url: string;
                 };
             };
+        };
+        DownloadableBackupsResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "project_downloadable_backup";
+                id: number;
+                attributes: {
+                    is_physical_backup: boolean;
+                    inserted_at: string;
+                    project_id: number;
+                    /** @enum {string} */
+                    status: "COMPLETED" | "FAILED" | "PENDING" | "REMOVED" | "ARCHIVED" | "CANCELLED";
+                };
+            }[];
         };
         V2CreateBranchRequest: {
             data: {
@@ -3652,6 +4040,104 @@ export interface components {
                 };
             };
         };
+        V2ListEnvironmentVariablesResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_variable";
+                /** @description Name of the variable or secret. */
+                id: string;
+                attributes: {
+                    /** @description Value of the variable. */
+                    value: string;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            }[];
+        };
+        V2SetEnvironmentVariableRequest: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_variable";
+                attributes: {
+                    /** @description Value of the variable. Must be a single line. Escape line breaks yourself, for example as `\n`. */
+                    value: string;
+                };
+            };
+        };
+        V2EnvironmentVariableResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_variable";
+                /** @description Name of the variable or secret. */
+                id: string;
+                attributes: {
+                    /** @description Value of the variable. */
+                    value: string;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        V2ListEnvironmentSecretsResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_secret";
+                /** @description Name of the variable or secret. */
+                id: string;
+                attributes: {
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            }[];
+        };
+        V2SetEnvironmentSecretRequest: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_secret";
+                attributes: {
+                    /** @description Value of the secret. It is encrypted at rest and never returned by the API. Must be a single line. Escape line breaks yourself, for example as `\n`. */
+                    value: string;
+                };
+            };
+        };
+        V2EnvironmentSecretResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "environment_secret";
+                /** @description Name of the variable or secret. */
+                id: string;
+                attributes: {
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
         V2ListRolesResponse_Output: {
             data: {
                 /**
@@ -3709,7 +4195,7 @@ export interface components {
             error?: {
                 id?: string;
                 /** @enum {string} */
-                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
+                code: "bad_request" | "forbidden" | "internal_server_error" | "not_found" | "payment_required" | "rate_limit_exceeded" | "request_timeout" | "request_too_large" | "unauthorized" | "validation_failed" | "warehouse_selection_empty" | "warehouse_selection_conflict" | "warehouse_selection_changed" | "warehouse_lifecycle_conflict" | "warehouse_setup_invalid" | "warehouse_not_found" | "warehouse_metrics_unavailable" | "warehouse_setup_unavailable" | "agentic_credential_not_found" | "backup_unsupported" | "branch_admin_required" | "compute_build_context_too_large" | "compute_build_in_progress" | "compute_deploy_rate_limit_exceeded" | "compute_instance_limit_exceeded" | "compute_instance_not_found" | "compute_not_enabled" | "compute_request_rejected" | "compute_unavailable" | "environment_root_project_required" | "environment_secret_not_found" | "environment_variable_already_exists" | "environment_variable_limit_reached" | "environment_variable_not_found" | "notebook_cell_duplicate" | "notebook_cell_unknown" | "notebook_disabled" | "notebook_not_found" | "notebook_sort_invalid" | "organization_invitation_email_delivery_failed" | "organization_invitations_partially_failed" | "organization_inviter_email_missing" | "organization_role_name_invalid" | "organization_role_not_entitled" | "pagination_cursor_invalid" | "project_branch_resync_unsupported" | "project_not_found" | "project_privatelink_disabled" | "project_transfer_disabled" | "delivery_not_found" | "endpoint_disabled" | "endpoint_event_type_not_subscribed" | "endpoint_not_found" | "endpoint_url_unresolvable" | "webhooks_access_disabled";
                 message: string;
                 description?: string;
                 links?: {
@@ -4124,6 +4610,91 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "v2-restart-warehouse-replication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WarehouseRestartResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Managed Warehouse pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Warehouse lifecycle or runtime state does not permit restart */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Restart outcome uncertain; inspect runtime and table state before retrying */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
     "v2-add-warehouse-replication": {
         parameters: {
             query?: never;
@@ -4423,13 +4994,13 @@ export interface operations {
             query?: {
                 /** @description Look back from server time, for example 30m, 2h, or 1d. Defaults to 30m when from/to are omitted. Maximum 30d. Cannot be combined with from/to. */
                 since?: string;
-                /** @description Range start as an ISO timestamp, within the last 30 days. Requires to; cannot be combined with since. */
+                /** @description Range start as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, within the last 30 days. Requires to; cannot be combined with since. */
                 from?: string;
-                /** @description Range end as an ISO timestamp, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
+                /** @description Range end as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
                 to?: string;
-                /** @description Up to eight distinct measurements. Defaults to query_in_flight, worker_admission_limit, worker_admission_active, worker_admission_pending, worker_admission_occupied, admission_rejection_rate, assignment_wait_p95, activation_duration_p95. Supply a comma-separated list. Allowed measurements: query_in_flight, worker_admission_limit, worker_admission_active, worker_admission_pending, worker_admission_occupied, admission_rejection_rate, assignment_wait_mean, assignment_wait_p95, activation_rate, activation_duration_mean, activation_duration_p95. */
+                /** @description Up to eight distinct measurements. Defaults to `query_in_flight`, `worker_admission_limit`, `worker_admission_active`, `worker_admission_pending`, `worker_admission_occupied`, `admission_rejection_rate`, `assignment_wait_p95`, `activation_duration_p95`. Supply a comma-separated list. Allowed measurements: `query_in_flight`, `worker_admission_limit`, `worker_admission_active`, `worker_admission_pending`, `worker_admission_occupied`, `admission_rejection_rate`, `assignment_wait_mean`, `assignment_wait_p95`, `activation_rate`, `activation_duration_mean`, `activation_duration_p95`. */
                 attributes?: string;
-                /** @description Defaults to 1m. The effective step increases to stay within 1441 points per series. Rate and latency windows are at least 5m. */
+                /** @description Defaults to 1m. The effective step increases to stay within 1,441 points per series. Rate and latency windows are at least 5m. */
                 interval?: "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
             };
             header?: never;
@@ -4514,18 +5085,210 @@ export interface operations {
             };
         };
     };
+    "v2-get-warehouse-ingestion-stats": {
+        parameters: {
+            query?: {
+                /** @description Look back from server time, for example 30m, 2h, or 1d. Defaults to 30m when from/to are omitted. Maximum 30d. Cannot be combined with from/to. */
+                since?: string;
+                /** @description Range start as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, within the last 30 days. Requires to; cannot be combined with since. */
+                from?: string;
+                /** @description Range end as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
+                to?: string;
+                /** @description Up to eight distinct measurements. Defaults to `ingestion_events_received_rate`, `ingestion_events_processed_rate`, `ingestion_bytes_received_rate`, `ingestion_bytes_processed_rate`, `replication_wal_lag_bytes`, `replication_receive_wal_lag_bytes`. Supply a comma-separated list. Allowed measurements: `ingestion_events_received_rate`, `ingestion_events_processed_rate`, `ingestion_bytes_received_rate`, `ingestion_bytes_processed_rate`, `replication_wal_lag_bytes`, `replication_receive_wal_lag_bytes`. */
+                attributes?: string;
+                /** @description Defaults to 1m. The effective step increases to stay within 1,441 points per series. Rate windows are at least 5m. */
+                interval?: "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
+            };
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WarehouseIngestionStatsResponse_Output"];
+                };
+            };
+            /** @description validation_failed: Invalid measurement selection, range, interval, or query parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description warehouse_metrics_unavailable: Metrics query capacity is temporarily unavailable; retry after a short delay. warehouse_setup_unavailable: Warehouse feature or project metadata unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-get-warehouse-storage-stats": {
+        parameters: {
+            query?: {
+                /** @description Look back from server time, for example 30m, 2h, or 1d. Defaults to 30m when from/to are omitted. Maximum 30d. Cannot be combined with from/to. */
+                since?: string;
+                /** @description Range start as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, within the last 30 days. Requires to; cannot be combined with since. */
+                from?: string;
+                /** @description Range end as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
+                to?: string;
+                /** @description Up to eight distinct measurements. Defaults to `maintenance_pause_active`, `maintenance_run_rate`, `inline_flush_rows_rate`, `table_active_data_file_avg_size_bytes_mean`, `table_small_file_ratio_mean`, `table_deleted_row_ratio_mean`, `catalog_deletion_backlog_bytes`, `catalog_oldest_deletion_age`. Supply a comma-separated list. Allowed measurements: `maintenance_request_rate`, `maintenance_pause_active`, `maintenance_pause_duration_mean`, `maintenance_run_rate`, `maintenance_results_available`, `maintenance_merge_adjacent_files_created_rate`, `maintenance_rewrite_data_files_created_rate`, `maintenance_expired_snapshots_rate`, `maintenance_cleaned_up_files_rate`, `inline_flush_rows_rate`, `inline_flush_rows_mean`, `inline_flush_duration_mean`, `table_active_data_files_mean`, `table_active_data_bytes_mean`, `table_active_data_file_avg_size_bytes_mean`, `table_small_file_ratio_mean`, `table_active_delete_files_mean`, `table_active_delete_bytes_mean`, `table_deleted_row_ratio_mean`, `table_inlined_data_bytes`, `catalog_active_data_files`, `catalog_snapshots`, `catalog_oldest_snapshot_age`, `catalog_deletion_backlog_files`, `catalog_deletion_backlog_bytes`, `catalog_oldest_deletion_age`. */
+                attributes?: string;
+                /** @description Defaults to 1m. The effective step increases to stay within 1,441 points per series. Rate and latency windows are at least 5m. */
+                interval?: "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
+            };
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WarehouseStorageStatsResponse_Output"];
+                };
+            };
+            /** @description validation_failed: Invalid measurement selection, range, interval, or query parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description This feature requires the Pro, Team, or Enterprise organization plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description warehouse_metrics_unavailable: Metrics query capacity is temporarily unavailable; retry after a short delay. warehouse_setup_unavailable: Warehouse feature or project metadata unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
     "v2-get-warehouse-query-stats": {
         parameters: {
             query?: {
                 /** @description Look back from server time, for example 30m, 2h, or 1d. Defaults to 30m when from/to are omitted. Maximum 30d. Cannot be combined with from/to. */
                 since?: string;
-                /** @description Range start as an ISO timestamp, within the last 30 days. Requires to; cannot be combined with since. */
+                /** @description Range start as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, within the last 30 days. Requires to; cannot be combined with since. */
                 from?: string;
-                /** @description Range end as an ISO timestamp, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
+                /** @description Range end as an ISO 8601 timestamp with seconds and a time zone, for example `2026-11-18T09:30:00Z`, no later than server time. Requires from; cannot be combined with since. The service tolerates up to 60 seconds of request delay or clock skew. */
                 to?: string;
-                /** @description Up to eight distinct measurements. Defaults to query_rate, query_duration_p50, query_duration_p95, query_duration_p99, query_error_rate, query_timeout_rate. Supply a comma-separated list. Allowed measurements: query_rate, query_error_rate, query_timeout_rate, query_canceled_rate, query_duration_mean, query_duration_p50, query_duration_p95, query_duration_p99, duckdb_duration_mean, rpc_rate, rpc_duration_mean, rpc_duration_p95. */
+                /** @description Up to eight distinct measurements. Defaults to `query_rate`, `query_duration_p50`, `query_duration_p95`, `query_duration_p99`, `query_error_rate`, `query_timeout_rate`. Supply a comma-separated list. Allowed measurements: `query_rate`, `query_error_rate`, `query_timeout_rate`, `query_canceled_rate`, `query_duration_mean`, `query_duration_p50`, `query_duration_p95`, `query_duration_p99`, `duckdb_duration_mean`, `rpc_rate`, `rpc_duration_mean`, `rpc_duration_p95`. */
                 attributes?: string;
-                /** @description Defaults to 1m. The effective step increases to stay within 1441 points per series. Rate and latency windows are at least 5m. */
+                /** @description Defaults to 1m. The effective step increases to stay within 1,441 points per series. Rate and latency windows are at least 5m. */
                 interval?: "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
             };
             header?: never;
@@ -5814,6 +6577,73 @@ export interface operations {
             };
         };
     };
+    "v2-project-get-downloadable-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadableBackupsResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to get project backups */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
     "v2-create-a-branch": {
         parameters: {
             query?: never;
@@ -6012,9 +6842,18 @@ export interface operations {
         parameters: {
             query?: {
                 page?: {
-                    size?: number;
-                    after?: string;
+                    /** @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param. */
                     before?: string;
+                    /** @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param. */
+                    after?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
+                     */
+                    size?: string;
                 };
                 filter?: {
                     name?: string;
@@ -6964,6 +7803,414 @@ export interface operations {
             };
         };
     };
+    "v2-list-environment-variables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ListEnvironmentVariablesResponse_Output"];
+                };
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-set-environment-variable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+                /** @description Name of the variable or secret. Variables and secrets share one namespace. Must not start with the SUPABASE_ prefix. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2SetEnvironmentVariableRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2EnvironmentVariableResponse_Output"];
+                };
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description The name belongs to a secret of the environment, or the environment holds the maximum number of entries */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-delete-environment-variable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+                /** @description Name of the variable or secret. Variables and secrets share one namespace. Must not start with the SUPABASE_ prefix. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Variable not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-list-environment-secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ListEnvironmentSecretsResponse_Output"];
+                };
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-set-environment-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+                /** @description Name of the variable or secret. Variables and secrets share one namespace. Must not start with the SUPABASE_ prefix. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2SetEnvironmentSecretRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2EnvironmentSecretResponse_Output"];
+                };
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description The name belongs to a variable of the environment, or the environment holds the maximum number of entries */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-delete-environment-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+                /** @description Environment of the project. The default branch uses `production`, every other branch `development`. */
+                environment: "production" | "development";
+                /** @description Name of the variable or secret. Variables and secrets share one namespace. Must not start with the SUPABASE_ prefix. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not the root project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Secret not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
     "v2-list-organization-roles": {
         parameters: {
             query?: never;
@@ -7141,11 +8388,24 @@ export interface operations {
         parameters: {
             query?: {
                 page?: {
-                    size?: number;
-                    /** Format: uuid */
-                    after?: string;
-                    /** Format: uuid */
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param.
+                     */
                     before?: string;
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param.
+                     */
+                    after?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
+                     */
+                    size?: string;
                 };
                 filter?: {
                     username?: string;
@@ -7341,9 +8601,18 @@ export interface operations {
         parameters: {
             query?: {
                 page?: {
-                    size?: number;
-                    after?: string;
+                    /** @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param. */
                     before?: string;
+                    /** @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param. */
+                    after?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
+                     */
+                    size?: string;
                 };
                 /** @description Sort order by creation time: `inserted_at` (oldest first) or `-inserted_at` (newest first). Defaults to `inserted_at`. */
                 sort?: "inserted_at" | "-inserted_at";
@@ -7400,17 +8669,24 @@ export interface operations {
         parameters: {
             query?: {
                 page?: {
-                    size?: number;
                     /**
-                     * @description Project ref
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param.
+                     * @example abcdefghijklmnopqrst
+                     */
+                    before?: string;
+                    /**
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param.
                      * @example abcdefghijklmnopqrst
                      */
                     after?: string;
                     /**
-                     * @description Project ref
-                     * @example abcdefghijklmnopqrst
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
                      */
-                    before?: string;
+                    size?: string;
                 };
                 filter?: {
                     /**
@@ -7527,12 +8803,20 @@ export interface operations {
     "v2-projects-ref-webhooks-endpoints-get": {
         parameters: {
             query?: {
-                /** @description Offset for offset-based pagination.
-                 *
-                 *     Offset should be dividable by `page[limit]` without a reminder (`offset % limit === 0`), otherwise it will cause weird behavior when used on a frontend. */
-                "page[offset]"?: string;
-                /** @description Up to how many records to return. */
-                "page[limit]"?: string;
+                page?: {
+                    /**
+                     * @description Offset for offset-based pagination.
+                     *
+                     *     Offset should be dividable by `page[limit]` without a reminder (`offset % limit === 0`), otherwise it will cause weird behavior when used on a frontend.
+                     * @default 0
+                     */
+                    offset?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     * @default 20
+                     */
+                    limit?: string;
+                };
             };
             header?: never;
             path: {
@@ -9546,12 +10830,26 @@ export interface operations {
     "v2-projects-ref-webhooks-endpoints-id-deliveries-get": {
         parameters: {
             query?: {
-                /** @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param. */
-                "page[before]"?: string;
-                /** @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param. */
-                "page[after]"?: string;
-                /** @description Up to how many records to return. */
-                "page[size]"?: string;
+                page?: {
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param.
+                     */
+                    before?: string;
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param.
+                     */
+                    after?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
+                     */
+                    size?: string;
+                };
             };
             header?: never;
             path: {
@@ -10886,12 +12184,20 @@ export interface operations {
     "v2-organizations-slug-webhooks-endpoints-get": {
         parameters: {
             query?: {
-                /** @description Offset for offset-based pagination.
-                 *
-                 *     Offset should be dividable by `page[limit]` without a reminder (`offset % limit === 0`), otherwise it will cause weird behavior when used on a frontend. */
-                "page[offset]"?: string;
-                /** @description Up to how many records to return. */
-                "page[limit]"?: string;
+                page?: {
+                    /**
+                     * @description Offset for offset-based pagination.
+                     *
+                     *     Offset should be dividable by `page[limit]` without a reminder (`offset % limit === 0`), otherwise it will cause weird behavior when used on a frontend.
+                     * @default 0
+                     */
+                    offset?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     * @default 20
+                     */
+                    limit?: string;
+                };
             };
             header?: never;
             path: {
@@ -12905,12 +14211,26 @@ export interface operations {
     "v2-organizations-slug-webhooks-endpoints-id-deliveries-get": {
         parameters: {
             query?: {
-                /** @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param. */
-                "page[before]"?: string;
-                /** @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param. */
-                "page[after]"?: string;
-                /** @description Up to how many records to return. */
-                "page[size]"?: string;
+                page?: {
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records before (exclusive) the entry specified by this query param.
+                     */
+                    before?: string;
+                    /**
+                     * Format: uuid
+                     * @description Cursor in cursor-based pagination to return up to `page[size]` records after (exclusive) the entry specified by this query param.
+                     */
+                    after?: string;
+                    /**
+                     * @description Up to how many records to return.
+                     *
+                     *     Minimum: 1. Maximum: 100.
+                     * @default 20
+                     * @example 10
+                     */
+                    size?: string;
+                };
             };
             header?: never;
             path: {

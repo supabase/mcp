@@ -34,8 +34,16 @@ function hasDestructiveStart(sql: string, starts: RegExp): boolean {
   );
 }
 
-const updateWithoutWhereRegex =
-  /(?:^|;)\s*update\s+(?:only\s+)?(?:"(?:[^"]|"")*"|[\w]+)(?:\.(?:"(?:[^"]|"")*"|[\w]+))?(?:\s+(?:as\s+)?(?:"(?:[^"]|"")*"|[\w]+))?\s+set\s+[\w\W]+?(?!\s*where\s)/is;
+// splitStatements blanks quoted identifiers, so an empty one has to match.
+const updateIdentifier = String.raw`(?:"(?:[^"]|"")*"|[\w]+)`;
+const updateTable = String.raw`${updateIdentifier}(?:\.${updateIdentifier})?`;
+// An UPDATE target is t, t *, ONLY t or ONLY (t): relation_expr in Postgres's
+// gram.y. It takes the whitespace after it, which * and ) do not need.
+const updateTarget = String.raw`(?:only\s*\(\s*${updateTable}\s*\)\s*|(?:only\s+)?${updateTable}(?:\s*\*\s*|\s+))`;
+const updateWithoutWhereRegex = new RegExp(
+  String.raw`(?:^|;)\s*update\s+${updateTarget}(?:(?:as\s+)?${updateIdentifier}\s+)?set\s+[\w\W]+?(?!\s*where\s)`,
+  'is'
+);
 
 function removeComments(sql: string, scan: SqlScan): string {
   let parts: string[] | undefined;
@@ -135,12 +143,15 @@ function splitStatements(sql: string, scan: SqlScan): string[] {
   }
   const statements: string[] = [];
   let blanked = '';
+  // Safe to cache per statement: prefix settles before any dollar-quote span.
+  let valueStatement: boolean | undefined;
   const append = (text: string) => {
     let offset = 0;
     for (let separator = text.indexOf(';'); separator >= 0; ) {
       blanked += text.slice(offset, separator);
       statements.push(blanked);
       blanked = '';
+      valueStatement = undefined;
       offset = separator + 1;
       separator = text.indexOf(';', offset);
     }
@@ -153,17 +164,17 @@ function splitStatements(sql: string, scan: SqlScan): string[] {
         append(sql.slice(span.start, span.end));
         break;
       case 'line-comment':
-        blanked += '--';
+        blanked += ' ';
         break;
       case 'block-comment': {
-        blanked += '/*';
+        blanked += ' ';
         for (let i = span.start + 2; i < span.end; i++) {
           if (sql[i] === ';') {
             statements.push(blanked);
             blanked = '';
+            valueStatement = undefined;
           }
         }
-        if (scan.unterminated !== 'block-comment') blanked += '*/';
         break;
       }
       case 'string':
@@ -176,7 +187,7 @@ function splitStatements(sql: string, scan: SqlScan): string[] {
       case 'dollar-body': {
         const tagEnd = sql.indexOf('$', span.start + 1) + 1;
         const tag = sql.slice(span.start, tagEnd);
-        if (valueDollarQuoteStatement.test(blanked)) {
+        if ((valueStatement ??= valueDollarQuoteStatement.test(blanked))) {
           blanked += tag + tag;
         } else {
           append(sql.slice(span.start, span.end));
@@ -189,7 +200,7 @@ function splitStatements(sql: string, scan: SqlScan): string[] {
   return statements;
 }
 
-// splitStatements keeps comment markers in place of comment bodies.
+// Unmasked dollar bodies and the unterminated fallback can keep comment markers.
 function stripCommentMarkers(statement: string): string {
   return statement.replace(/--|\/\*|\*\//g, ' ').trim();
 }
@@ -200,7 +211,7 @@ function isUpdateWithoutWhereFromScan(sql: string, scan: SqlScan): boolean {
     return (
       statement.toLowerCase().startsWith('update') &&
       updateWithoutWhereRegex.test(statement) &&
-      !/where\s/i.test(statement)
+      !/(?<![\w$\u0080-\uffff])where(?![\w$\u0080-\uffff])/i.test(statement)
     );
   });
 }
