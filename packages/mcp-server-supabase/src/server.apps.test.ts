@@ -211,3 +211,47 @@ describe('MCP Apps', () => {
     expect(isInputRequiredResult(result)).toBe(true);
   });
 });
+
+describe('OpenAI plugin extensions', () => {
+  test('stays off when experimentalApps is false', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: false,
+      openaiPluginExtensions: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+
+    expect(await linkedViewUris(client)).toEqual([]);
+    expect(client.getServerCapabilities()?.resources).toBeUndefined();
+    expect(client.getServerCapabilities()?.extensions).toBeUndefined();
+  });
+
+  test('flag on leaves base views unchanged for capable clients', async () => {
+    const { client } = await harness.setupModern({
+      experimentalApps: true,
+      openaiPluginExtensions: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+
+    expect(await listedViewUris(client)).toEqual([...VIEW_URIS].sort());
+    expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
+  });
+
+  test('flag on grants nothing without the MCP Apps capability', async () => {
+    const incapable = await harness.setupModern({
+      experimentalApps: true,
+      openaiPluginExtensions: true,
+    });
+    expect(await linkedViewUris(incapable.client)).toEqual([]);
+    expect(await listedViewUris(incapable.client)).toEqual([]);
+    await expectViewsUnreadable(incapable.client);
+
+    const legacy = await harness.setup({
+      experimentalApps: true,
+      openaiPluginExtensions: true,
+      clientCapabilities: APPS_CLIENT_CAPABILITIES,
+    });
+    expect(await linkedViewUris(legacy.client)).toEqual([]);
+    expect(await listedViewUris(legacy.client)).toEqual([]);
+    await expectViewsUnreadable(legacy.client);
+  });
+});

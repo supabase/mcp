@@ -97,6 +97,13 @@ export type SupabaseMcpServerOptions = {
   experimentalApps?: boolean;
 
   /**
+   * Enables OpenAI/ChatGPT plugin extensions (display modes, sidebar and
+   * fullscreen surfaces) on top of MCP Apps. Off by default; has no effect
+   * unless `experimentalApps` is also true.
+   */
+  openaiPluginExtensions?: boolean;
+
+  /**
    * Features to enable.
    * Options: 'account', 'branching', 'database', 'debugging', 'development', 'docs', 'feedback', 'functions', 'notebooks', 'storage'
    */
