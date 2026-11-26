@@ -4,9 +4,17 @@ on:
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
+  workflow_run:
+    workflows: ['Check Management API Types']
+    types: [completed]
+
+concurrency:
+  group: sync-management-api-types
+  cancel-in-progress: false
 
 jobs:
   sync:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     permissions:
       contents: write

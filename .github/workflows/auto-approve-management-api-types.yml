@@ -1,0 +1,141 @@
+name: Auto-approve Management API Types PR
+
+on:
+  workflow_run:
+    workflows: ['Tests']
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  approve-and-merge:
+    name: Approve and enable auto-merge
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'chore/regenerate-management-api-types' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.actor.login == 'supabase-releaser[bot]' &&
+      github.event.sender.login == 'supabase-releaser[bot]'
+    # Holds AUTO_APPROVE_PR_PAT; restrict this environment to main.
+    environment: auto-approve
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          client-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          permission-pull-requests: write
+          permission-contents: write
+
+      - name: Validate pull request and changed files
+        id: validate
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          EXPECTED_BRANCH: chore/regenerate-management-api-types
+          EXPECTED_AUTHOR: supabase-releaser[bot]
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          pr_json="$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f state=open \
+            -f base=main \
+            -f "head=$GITHUB_REPOSITORY_OWNER:$EXPECTED_BRANCH" \
+            --jq 'if length == 1 then .[0] else empty end')"
+
+          if [ -z "$pr_json" ]; then
+            echo "No single open PR found for $EXPECTED_BRANCH targeting main; skipping."
+            exit 0
+          fi
+
+          pr_number="$(jq -r '.number' <<< "$pr_json")"
+          pr_author="$(jq -r '.user.login' <<< "$pr_json")"
+          pr_draft="$(jq -r '.draft' <<< "$pr_json")"
+          pr_base="$(jq -r '.base.ref' <<< "$pr_json")"
+          pr_head_ref="$(jq -r '.head.ref' <<< "$pr_json")"
+          pr_head_repo="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
+          pr_head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
+
+          if [ "$pr_author" != "$EXPECTED_AUTHOR" ] ||
+             [ "$pr_draft" != "false" ] ||
+             [ "$pr_base" != "main" ] ||
+             [ "$pr_head_ref" != "$EXPECTED_BRANCH" ] ||
+             [ "$pr_head_repo" != "$GITHUB_REPOSITORY" ] ||
+             [ "$pr_head_sha" != "$EXPECTED_SHA" ]; then
+            echo "PR #$pr_number failed metadata or HEAD SHA validation; aborting."
+            exit 1
+          fi
+
+          files_json="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls/$pr_number/files" | jq 'add')"
+          file_count="$(jq 'length' <<< "$files_json")"
+
+          if [ "$file_count" -eq 0 ] || [ "$file_count" -gt 2 ]; then
+            echo "PR #$pr_number has unexpected changed file count: $file_count."
+            exit 1
+          fi
+
+          invalid_files="$(jq -r '
+            .[]
+            | select(
+                (.filename != "packages/mcp-server-supabase/src/management-api/types.ts" and
+                 .filename != "packages/mcp-server-supabase/src/management-api-v2/types.ts")
+                or (.status != "modified")
+                or (.previous_filename != null)
+              )
+            | .filename
+          ' <<< "$files_json")"
+
+          if [ -n "$invalid_files" ]; then
+            echo "PR #$pr_number modifies disallowed files:"
+            echo "$invalid_files"
+            exit 1
+          fi
+
+          {
+            echo "pr_number=$pr_number"
+            echo "head_sha=$pr_head_sha"
+            echo "validated=true"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Approve pull request
+        if: steps.validate.outputs.validated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_APPROVE_PR_PAT }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.validate.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          decision="$(GH_TOKEN="$APP_TOKEN" gh pr view --repo "$GITHUB_REPOSITORY" "$PR_NUMBER" --json reviewDecision --jq .reviewDecision)"
+          if [ "$decision" != "APPROVED" ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+              -f commit_id="$HEAD_SHA" \
+              -f event="APPROVE"
+          fi
+
+      - name: Enable auto-merge
+        if: steps.validate.outputs.validated == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.validate.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          allow_auto_merge="$(gh api "repos/$GITHUB_REPOSITORY" --jq '.allow_auto_merge')"
+          if [ "$allow_auto_merge" != "true" ]; then
+            echo "Repository allow_auto_merge is disabled; PR #$PR_NUMBER approved without auto-merge."
+            exit 0
+          fi
+
+          pr_state="$(gh pr view --repo "$GITHUB_REPOSITORY" "$PR_NUMBER" --json mergeStateStatus,autoMergeRequest)"
+          merge_state="$(jq -r '.mergeStateStatus' <<< "$pr_state")"
+          has_auto_merge="$(jq -r '.autoMergeRequest != null' <<< "$pr_state")"
+
+          if [ "$merge_state" = "CLEAN" ]; then
+            gh pr merge --squash --match-head-commit "$HEAD_SHA" --repo "$GITHUB_REPOSITORY" "$PR_NUMBER"
+          elif [ "$has_auto_merge" != "true" ]; then
+            gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" --repo "$GITHUB_REPOSITORY" "$PR_NUMBER"
+          fi
