@@ -32,10 +32,15 @@ export const issueSchema = z.object({
 });
 export const issuesResultSchema = z.object({
   issues: z.array(issueSchema),
+  /**
+   * One entry per category read. `complete` means the read finished,
+   * `unavailable` that it was attempted and failed, and `unsupported` that the
+   * platform does not offer the category, so nothing was attempted.
+   */
   checks: z.array(
     z.object({
       type: issueCategorySchema,
-      status: z.enum(['complete', 'unavailable']),
+      status: z.enum(['complete', 'unavailable', 'unsupported']),
       reason: z.string().optional(),
     })
   ),

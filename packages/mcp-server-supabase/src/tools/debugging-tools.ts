@@ -274,7 +274,7 @@ function mustPropagateCheckFailure(error: unknown): boolean {
 export const debuggingToolDefs = {
   get_issues: {
     description:
-      'Gets current project issues grouped by check, with security, performance, and health check coverage. Start here when debugging or after DDL changes. IDs identify checks within this project, not persistent incidents. An unavailable check is not a clean assessment. Include docs_url as a clickable remediation link.',
+      'Gets current project issues grouped by check, with security, performance, and health check coverage. Start here when debugging or after DDL changes. IDs identify checks within this project, not persistent incidents. An unavailable check is not a clean assessment, and an unsupported check means the platform does not offer that category. Include docs_url as a clickable remediation link.',
     parameters: getIssuesInputSchema,
     outputSchema: issuesResultSchema,
     annotations: {
@@ -398,7 +398,7 @@ export function getDebuggingTools({
                 checks: [
                   {
                     type: category,
-                    status: 'unavailable',
+                    status: 'unsupported',
                     reason: 'Health issues are not supported by this platform',
                   },
                 ],

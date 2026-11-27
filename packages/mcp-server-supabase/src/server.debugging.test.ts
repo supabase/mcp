@@ -641,7 +641,7 @@ test('issues distinguishes unsupported health from completed checks on legacy pl
       { type: 'performance', status: 'complete' },
       {
         type: 'health',
-        status: 'unavailable',
+        status: 'unsupported',
         reason: 'Health issues are not supported by this platform',
       },
     ],
