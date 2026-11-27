@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import type { DebuggingOperations } from './platform/types.js';
 
 export const MAX_AFFECTED_PER_ISSUE = 20;
 
@@ -193,4 +194,102 @@ export function filterAndSortIssues(
         severityRank[b.severity] - severityRank[a.severity] ||
         a.id.localeCompare(b.id)
     );
+}
+
+/** Which categories to read: one, or all of them. */
+export const issueTypeSchema = z.enum(['all', ...issueCategorySchema.options]);
+export type IssueType = z.infer<typeof issueTypeSchema>;
+
+function mustPropagateCheckFailure(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const value = error as {
+    status?: unknown;
+    statusCode?: unknown;
+    code?: unknown;
+    response?: { status?: unknown };
+    cause?: unknown;
+  };
+  return (
+    [value.status, value.statusCode, value.response?.status].some(
+      (status) => status === 401 || status === 403
+    ) ||
+    (typeof value.code === 'number' &&
+      value.code >= -32768 &&
+      value.code <= -32000) ||
+    value.code === 'UNAUTHORIZED' ||
+    value.code === 'FORBIDDEN' ||
+    (value.cause !== error &&
+      value.cause !== undefined &&
+      mustPropagateCheckFailure(value.cause))
+  );
+}
+
+/**
+ * The advisor reads this platform supports, bound to `debugging`. `health` is
+ * missing where the platform does not implement it, so this is the one place
+ * that says which categories are supported.
+ */
+export function getAdvisorAdapters(debugging: DebuggingOperations) {
+  return {
+    security: debugging.getSecurityAdvisors.bind(debugging),
+    performance: debugging.getPerformanceAdvisors.bind(debugging),
+    health: debugging.getHealthAdvisors?.bind(debugging),
+  };
+}
+
+/**
+ * Reads the project's issues for `type`, one advisor check per category in
+ * parallel. A category that cannot be read becomes an `unavailable` entry in
+ * `checks` instead of failing the whole read, and one the platform lacks an
+ * adapter for becomes an `unsupported` entry; authorization and protocol
+ * errors still throw. Issues are returned unsorted and unfiltered.
+ */
+export async function readIssues(
+  debugging: DebuggingOperations,
+  projectId: string,
+  type: IssueType
+): Promise<IssuesResult> {
+  const advisorAdapters = getAdvisorAdapters(debugging);
+  const categories: IssueCategory[] =
+    type === 'all' ? ['security', 'performance', 'health'] : [type];
+  const results = await Promise.all(
+    categories.map(async (category): Promise<IssuesResult> => {
+      const adapter = advisorAdapters[category];
+      if (!adapter) {
+        return {
+          issues: [],
+          checks: [
+            {
+              type: category,
+              status: 'unsupported',
+              reason: 'Health issues are not supported by this platform',
+            },
+          ],
+        };
+      }
+      try {
+        const response = await adapter(projectId, {
+          includeUnavailable: true,
+        });
+        return normalizeIssues(response, category);
+      } catch (error) {
+        if (mustPropagateCheckFailure(error)) throw error;
+        return {
+          issues: [],
+          checks: [
+            {
+              type: category,
+              status: 'unavailable',
+              reason:
+                error instanceof Error ? error.message : 'Advisor check failed',
+            },
+          ],
+        };
+      }
+    })
+  );
+  return {
+    issues: results.flatMap(({ issues }) => issues),
+    checks: results.flatMap(({ checks }) => checks),
+  };
 }

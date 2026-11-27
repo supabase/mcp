@@ -1,9 +1,11 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import {
   MAX_AFFECTED_PER_ISSUE,
   filterAndSortIssues,
   normalizeIssues,
+  readIssues,
 } from './issues.js';
+import type { DebuggingOperations } from './platform/types.js';
 
 const lint = {
   name: 'function_search_path_mutable',
@@ -161,4 +163,52 @@ test('issues accept self-hosted lint arrays without changing their findings', ()
   expect(normalizeIssues([lint], 'security')).toEqual(
     normalizeIssues({ lints: [lint] }, 'security')
   );
+});
+
+describe('readIssues', () => {
+  const debugging = (
+    overrides: Partial<DebuggingOperations> = {}
+  ): DebuggingOperations => ({
+    async getLogs() {
+      return [];
+    },
+    async getSecurityAdvisors() {
+      return { lints: [] };
+    },
+    async getPerformanceAdvisors() {
+      return { lints: [] };
+    },
+    ...overrides,
+  });
+
+  test('a category without an adapter is unsupported, not attempted or failed', async () => {
+    const result = await readIssues(debugging(), 'project', 'all');
+    expect(result).toEqual({
+      issues: [],
+      checks: [
+        { type: 'security', status: 'complete' },
+        { type: 'performance', status: 'complete' },
+        {
+          type: 'health',
+          status: 'unsupported',
+          reason: 'Health issues are not supported by this platform',
+        },
+      ],
+    });
+  });
+
+  test('a failed health read is unavailable, not unsupported', async () => {
+    const result = await readIssues(
+      debugging({
+        async getHealthAdvisors() {
+          throw new Error('Health is down');
+        },
+      }),
+      'project',
+      'health'
+    );
+    expect(result.checks).toEqual([
+      { type: 'health', status: 'unavailable', reason: 'Health is down' },
+    ]);
+  });
 });
