@@ -5,11 +5,16 @@ import type {
   McpUiHostContext,
 } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { callTool as callServerTool, type CallTool } from './call-tool';
 import { type SendMessage, sendMessage } from './send-message';
 import { parseToolResult, readToolError } from './tool-result';
 import { useHostStyles } from './use-host-styles';
+import {
+  registerViewTool,
+  type ViewTool,
+  type ViewToolHandle,
+} from './view-tools';
 
 export type ToolCallState<T> =
   | { status: 'loading' }
@@ -27,7 +32,25 @@ export type UpdateModelContext = (
   params: Parameters<App['updateModelContext']>[0]
 ) => Promise<void>;
 
+/** A view tool (see `view-tools.ts`) as the view has it in one render. */
+export type McpViewTool = ViewTool & {
+  /**
+   * Hides the tool from the host for good: once a render says so, it is never
+   * enabled again.
+   */
+  disabled?: boolean;
+};
+
 export type McpViewOptions<T> = {
+  /**
+   * The tools the model can call. Registered once, before the view connects
+   * so the handshake declares them: which tools there are, and their names
+   * and descriptions, are read then. Read again after every render, so a call
+   * runs the `handler` of the latest render and the latest `disabled`
+   * applies. A function, so it can use values the view computes after
+   * `useMcpView` returns.
+   */
+  tools?: () => readonly McpViewTool[];
   /**
    * Reads the view's data from the successful tool result. Defaults to the
    * JSON text (`parseToolResult`). It may throw: the message becomes the
@@ -79,8 +102,8 @@ export type McpView<T> = {
  * reads it: the JSON text by default), the app, the tool input, the host context and
  * capabilities, and helpers built on them (`callTool`, `inputText`,
  * `openLink`, `sendMessage`, `updateModelContext`). A helper is undefined when
- * the host can't do what it does. Also applies the host's styles (see
- * `useHostStyles`).
+ * the host can't do what it does. Also registers the view's `tools` and
+ * applies the host's styles (see `useHostStyles`).
  */
 export function useMcpView<T>(
   name: string,
@@ -95,6 +118,24 @@ export function useMcpView<T>(
   const [dashboardUrl, setDashboardUrl] = useState(
     'https://supabase.com/dashboard'
   );
+
+  // `tools` as of the latest render: calls run its handlers, and a tool it
+  // disables stays disabled.
+  const latestTools = useRef(options.tools);
+  // All of them, so disabling reaches each: `<StrictMode>` creates the app
+  // twice in development.
+  const registrations = useRef<{ name: string; handle: ViewToolHandle }[]>([]);
+  const disabledTools = useRef(new Set<string>());
+  useEffect(() => {
+    latestTools.current = options.tools;
+    for (const tool of options.tools?.() ?? []) {
+      if (!tool.disabled || disabledTools.current.has(tool.name)) continue;
+      disabledTools.current.add(tool.name);
+      for (const { name, handle } of registrations.current) {
+        if (name === tool.name) handle.disable();
+      }
+    }
+  });
 
   const { app, error } = useApp({
     appInfo: { name, version: '0.0.0' },
@@ -128,6 +169,19 @@ export function useMcpView<T>(
       };
       app.onhostcontextchanged = (changed) =>
         setHostContext((current) => ({ ...current, ...changed }));
+      for (const tool of latestTools.current?.() ?? []) {
+        const handle = registerViewTool(app, {
+          name: tool.name,
+          description: tool.description,
+          handler: () =>
+            (
+              latestTools.current?.().find(({ name }) => name === tool.name) ??
+              tool
+            ).handler(),
+        });
+        registrations.current.push({ name: tool.name, handle });
+        if (disabledTools.current.has(tool.name)) handle.disable();
+      }
     },
   });
 
