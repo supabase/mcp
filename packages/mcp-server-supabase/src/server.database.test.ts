@@ -1,6 +1,7 @@
 import { ACCESS_TOKEN, API_URL, createProjectFixture } from '../test/mocks.js';
 import { expectTerminalResult } from '../test/confirmation-results.js';
 import { callModernTool, createServerHarness } from '../test/server-harness.js';
+import { listTablesSql } from './pg-meta/index.js';
 import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabaseMcpServerOptions } from './server.js';
 import * as destructiveSql from './tools/destructive-sql.js';
@@ -351,6 +352,35 @@ describe('tools', () => {
       ['b', 'b > 0'],
       ['c', 'c > 0'],
     ]);
+  });
+
+  test('list tables aggregates only the columns of each listed table', async () => {
+    const { project } = await createProjectFixture({
+      organization: { name: 'My Org', allowed_release_channels: ['ga'] },
+      project: { name: 'Project 1', region: 'us-east-1' },
+    });
+
+    await project.db.exec('create table people (id integer, name text);');
+
+    type PlanNode = {
+      Output?: string[];
+      'Actual Rows': number;
+      Plans?: PlanNode[];
+    };
+    const { query, parameters } = listTablesSql(['public']);
+    const { rows } = await project.db.query<{
+      'QUERY PLAN': [{ Plan: PlanNode }];
+    }>(`explain (analyze, verbose, format json) ${query}`, parameters);
+    const nodes = (node: PlanNode): PlanNode[] => [
+      node,
+      ...(node.Plans ?? []).flatMap(nodes),
+    ];
+    const columnsAggregate = nodes(rows[0]!['QUERY PLAN'][0].Plan).find(
+      (node) => node.Output?.[0]?.startsWith('array_agg(row_to_json(')
+    );
+
+    // Filtering inside the aggregate fed it every column in the database.
+    expect(columnsAggregate?.Plans?.[0]?.['Actual Rows']).toBe(2);
   });
 
   test('composite FK is grouped as one constraint with positionally ordered columns', async () => {
