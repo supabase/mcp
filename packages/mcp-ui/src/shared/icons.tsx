@@ -89,6 +89,22 @@ export function ChevronIcon(props: IconProps) {
   );
 }
 
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m10 4-4 4 4 4" />
+    </Icon>
+  );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m6 4 4 4-4 4" />
+    </Icon>
+  );
+}
+
 export function ExternalLinkIcon(props: IconProps) {
   return (
     <Icon {...props}>

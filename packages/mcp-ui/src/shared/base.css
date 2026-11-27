@@ -149,6 +149,15 @@
        square, and copy values are this tall, so they all line up. */
     --sb-control-size: 32px;
 
+    /* A skeleton placeholder's colour and pulse; see the reduced motion rule
+       below, which turns the animation off. */
+    --sb-skeleton-background: color-mix(
+      in oklab,
+      var(--sb-color-foreground) 10%,
+      transparent
+    );
+    --sb-skeleton-animation: pulse 1.6s ease-in-out infinite;
+
     /* The host's safe area insets, set by `useHostStyles`. */
     --sb-inset-top: 0px;
     --sb-inset-right: 0px;
@@ -161,6 +170,13 @@
     font-size: var(--font-text-sm-size);
     line-height: var(--font-text-sm-line-height);
     color: var(--sb-color-foreground);
+  }
+
+  /* Skeletons stand still when the user asks for less motion. */
+  @media (prefers-reduced-motion: reduce) {
+    :where(:root) {
+      --sb-skeleton-animation: none;
+    }
   }
 
   /* Sizes include padding and border everywhere. */
