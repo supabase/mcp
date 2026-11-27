@@ -1,5 +1,6 @@
 export const AWS_REGION_CODES = [
   'us-west-1',
+  'us-west-2',
   'us-east-1',
   'us-east-2',
   'ca-central-1',
