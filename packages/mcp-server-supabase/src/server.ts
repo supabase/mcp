@@ -46,7 +46,7 @@ import {
   getSecretTools,
 } from './tools/secret-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
-import { writeToolSet } from './tools/tool-schemas.js';
+import { viewOnlyToolSet, writeToolSet } from './tools/tool-schemas.js';
 import {
   CURRENT_ELICITATION_TOOLS,
   type ElicitationToolName,
@@ -378,7 +378,15 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       }
 
       if (debugging && enabledFeatures.has('debugging')) {
-        Object.assign(tools, getDebuggingTools({ debugging, projectId }));
+        Object.assign(
+          tools,
+          getDebuggingTools({
+            debugging,
+            account,
+            projectId,
+            readOnly,
+          })
+        );
       }
 
       if (development && enabledFeatures.has('development')) {
@@ -533,7 +541,11 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
       if (!appsEnabled(experimentalApps, ctx)) {
         for (const [name, tool] of Object.entries(tools)) {
-          if (tool._meta?.ui) {
+          // Without a view these tools do nothing useful, so they are
+          // neither listed nor callable.
+          if (viewOnlyToolSet.has(name)) {
+            delete tools[name];
+          } else if (tool._meta?.ui) {
             const { ui: _, ...meta } = tool._meta;
             tools[name] = {
               ...tool,

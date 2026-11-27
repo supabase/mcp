@@ -1,5 +1,12 @@
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import { ToolCallerError } from '@supabase/mcp-utils';
 import { z } from 'zod/v4';
+import { VIEW_DATA_META_KEY } from '../apps/index.js';
+import {
+  INVALID_CURSOR_CODE,
+  type PaginateIssuesToolName,
+  type ShowIssuesViewData,
+} from '../apps/show-issues.js';
 import {
   filterAndSortIssues,
   getAdvisorAdapters,
@@ -8,13 +15,27 @@ import {
   issuesResultSchema,
   readIssues,
   type IssuesResult,
+  type IssueType,
 } from '../issues.js';
+import {
+  decodeIssuesCursor,
+  InvalidIssuesCursorError,
+  ISSUES_PAGE_DEFAULT_LIMIT,
+  issuesPageSchema,
+  pageIssues,
+} from '../issues-page.js';
 import { resolveLogWindow } from '../logs.js';
 import {
   logsServiceSchema,
+  type AccountOperations,
   type DebuggingOperations,
   type LogsDialect,
 } from '../platform/types.js';
+import { SHOW_ISSUES_UI_URI } from '../resources/app-resources.js';
+import {
+  paginateIssuesInputSchema,
+  showIssuesInputSchema,
+} from './show-issues-inputs.js';
 import {
   injectableTool,
   type ToolDefs,
@@ -25,7 +46,10 @@ export const DEFAULT_LOGS_DIALECT: LogsDialect = 'clickhouse';
 
 type DebuggingToolsOptions = {
   debugging: DebuggingOperations;
+  /** Reads project facts for the issues view's prompt context. */
+  account?: AccountOperations;
   projectId?: string;
+  readOnly?: boolean;
 };
 
 const getLogsInputSchema = z.object({
@@ -251,6 +275,13 @@ const legacyIssuesInputSchema = getIssuesInputSchema.extend({
   type: legacyIssueTypeSchema.default('all'),
 });
 
+const legacyShowIssuesInputSchema = showIssuesInputSchema.extend({
+  type: legacyIssueTypeSchema.default('all'),
+});
+
+// The result is a sentence for the model, with the view's data in `_meta`.
+const showIssuesOutputSchema = z.object({});
+
 export const debuggingToolDefs = {
   get_issues: {
     description:
@@ -264,6 +295,37 @@ export const debuggingToolDefs = {
       idempotentHint: true,
       openWorldHint: false,
     },
+  },
+  show_issues: {
+    description:
+      "Shows the user an interactive list of the project's security, performance, and health issues, where they can select issues to review with you. Use it when the user wants to see their issues. To read issues yourself, use get_issues.",
+    parameters: showIssuesInputSchema,
+    outputSchema: showIssuesOutputSchema,
+    annotations: {
+      title: 'Show project issues',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    viewOnly: true,
+    _meta: { ui: { resourceUri: SHOW_ISSUES_UI_URI } },
+  },
+  // The view calls this by `PaginateIssuesToolName` (see below).
+  app_paginate_issues: {
+    description:
+      "Gets one page of the project's issues for the issues view, most severe first. Only the view calls this tool.",
+    parameters: paginateIssuesInputSchema,
+    outputSchema: issuesPageSchema,
+    annotations: {
+      title: 'Page project issues',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    viewOnly: true,
+    _meta: { ui: { visibility: ['app'] } },
   },
   get_logs: {
     description:
@@ -305,9 +367,18 @@ export const debuggingToolDefs = {
   },
 } as const satisfies ToolDefs;
 
+/**
+ * Fails typecheck if `app_paginate_issues` is renamed without the view's
+ * `PaginateIssuesToolName`.
+ */
+export type PaginateIssuesToolDef =
+  (typeof debuggingToolDefs)[PaginateIssuesToolName];
+
 export function getDebuggingTools({
   debugging,
+  account,
   projectId,
+  readOnly = false,
 }: DebuggingToolsOptions) {
   const project_id = projectId;
   const { queryLogs } = debugging;
@@ -375,6 +446,61 @@ export function getDebuggingTools({
         return result;
       },
     }),
+    show_issues: injectableTool({
+      ...debuggingToolDefs.show_issues,
+      parameters: advisorAdapters.health
+        ? showIssuesInputSchema
+        : legacyShowIssuesInputSchema,
+      inject: { project_id },
+      execute: async ({ project_id, type }): Promise<CallToolResult> => {
+        const [result, project] = await Promise.all([
+          readIssues(debugging, project_id, 'all'),
+          // The prompt context is optional: the view still works without it.
+          account
+            ?.getProject(project_id)
+            .catch(() => undefined),
+        ]);
+        const now = new Date();
+        const page = pageIssues(result, {
+          type,
+          limit: ISSUES_PAGE_DEFAULT_LIMIT,
+          readAt: now,
+        });
+        const viewData: ShowIssuesViewData = {
+          page,
+          opened: { at: now.getTime(), project: project_id },
+          context: {
+            project: project
+              ? { id: project.id, ref: project.ref, name: project.name }
+              : { id: project_id },
+            connection: { readOnly, scopedProjectId: projectId ?? null },
+          },
+        };
+        const count = `${page.total} ${page.total === 1 ? 'issue' : 'issues'}`;
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Opened the issues view for the user. It lists ${count}. To read the issues yourself, use get_issues.`,
+            },
+          ],
+          _meta: { [VIEW_DATA_META_KEY]: viewData },
+        };
+      },
+    }),
+    // The view cannot see which advisors this platform has, so this schema is
+    // the same everywhere. A category the platform cannot read pages as empty,
+    // and `checks` marks it unsupported.
+    app_paginate_issues: injectableTool({
+      ...debuggingToolDefs.app_paginate_issues,
+      inject: { project_id },
+      execute: async ({ project_id, type, cursor, limit }) => {
+        // Reject a bad cursor before reading any advisors.
+        const after = cursor ? decodeCursorForTool(cursor, type) : undefined;
+        const result = await readIssues(debugging, project_id, 'all');
+        return pageIssues(result, { type, after, limit, readAt: new Date() });
+      },
+    }),
     get_advisors: injectableTool({
       ...debuggingToolDefs.get_advisors,
       parameters: debugging.getHealthAdvisors
@@ -395,4 +521,19 @@ export function getDebuggingTools({
       },
     }),
   };
+}
+
+/** Decodes a cursor, turning a bad one into an error the caller can act on. */
+function decodeCursorForTool(cursor: string, type: IssueType) {
+  try {
+    return decodeIssuesCursor(cursor, type);
+  } catch (error) {
+    if (error instanceof InvalidIssuesCursorError) {
+      throw new ToolCallerError(error.message, {
+        cause: error,
+        code: INVALID_CURSOR_CODE,
+      });
+    }
+    throw error;
+  }
 }

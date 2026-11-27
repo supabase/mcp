@@ -15,7 +15,10 @@ import { createSupabaseApiPlatform } from './platform/api-platform.js';
 import type { SupabasePlatform } from './platform/types.js';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { createSupabaseMcpServer, instructions } from './server.js';
-import { supabaseMcpToolSchemas } from './tools/tool-schemas.js';
+import {
+  supabaseMcpToolSchemas,
+  viewOnlyToolSet,
+} from './tools/tool-schemas.js';
 import { stripIndent } from 'common-tags';
 import gqlmin from 'gqlmin';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -128,11 +131,13 @@ describe('tools', () => {
     const registryToolNames = Object.keys(supabaseMcpToolSchemas);
     const serverToolNames = tools.map((t) => t.name);
     // Registered only when secretCollection is configured; get_cost/confirm_cost hidden from form-capable clients
+    // View-only tools are listed only for clients with MCP Apps.
     const conditionallyHiddenToolNames = new Set([
       'get_logs',
       'create_edge_function_secret',
       'get_cost',
       'confirm_cost',
+      ...viewOnlyToolSet,
     ]);
 
     const extraToolsInRegistry = registryToolNames.filter(

@@ -76,4 +76,6 @@ The full rules are in [`.agents/skills/mcp-ui-css/SKILL.md`](.agents/skills/mcp-
 2. In `packages/mcp-server-supabase/src/resources/app-resources.ts`, import `@supabase/mcp-ui/<name>.html` and register it as a resource.
 3. Link the tool to it with `_meta: { ui: { resourceUri } }` in its definition.
 
+A server tool that only a view calls is named with an `app_` prefix (`app_paginate_issues`) and sets `_meta: { ui: { visibility: ['app'] } }`, so the host lets the view call it but does not give it to the model.
+
 Keep views small. The whole HTML is sent on every `resources/read`, so prefer system fonts and SVG icons, and avoid heavy dependencies unless a view really needs them.
