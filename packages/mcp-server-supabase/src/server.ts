@@ -46,6 +46,7 @@ import {
   getSecretTools,
 } from './tools/secret-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
+import { getWarehouseTools } from './tools/warehouse-tools.js';
 import { writeToolSet } from './tools/tool-schemas.js';
 import {
   CURRENT_ELICITATION_TOOLS,
@@ -105,7 +106,7 @@ export type SupabaseMcpServerOptions = {
 
   /**
    * Features to enable.
-   * Options: 'account', 'branching', 'database', 'debugging', 'development', 'docs', 'feedback', 'functions', 'notebooks', 'storage'
+   * Options: 'account', 'branching', 'database', 'debugging', 'development', 'docs', 'feedback', 'functions', 'notebooks', 'storage', 'warehouse'
    */
   features?: string[];
 
@@ -325,6 +326,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
         debugging,
         development,
         storage,
+        warehouse,
         branching,
         secrets,
         notebooks,
@@ -410,6 +412,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
 
       if (storage && enabledFeatures.has('storage')) {
         Object.assign(tools, getStorageTools({ storage, projectId, readOnly }));
+      }
+
+      if (warehouse && enabledFeatures.has('warehouse')) {
+        Object.assign(tools, getWarehouseTools({ warehouse, projectId }));
       }
 
       if (notebooks && enabledFeatures.has('notebooks')) {

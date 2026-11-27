@@ -3,3 +3,4 @@ export {
   getDefaultImportMapPath,
 } from '../edge-function.js';
 export * from './types.js';
+export * from './warehouse.js';

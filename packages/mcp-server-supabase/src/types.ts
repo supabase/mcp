@@ -20,6 +20,7 @@ export const CURRENT_FEATURE_GROUPS = [
   'functions',
   'branching',
   'storage',
+  'warehouse',
   'notebooks',
   'feedback',
 ] as const;
