@@ -289,6 +289,60 @@ describe('startLocalHttpEntry', () => {
     });
   });
 
+  test('rejects a browser Origin', async () => {
+    const response = await fetch(entry.url, {
+      method: 'POST',
+      headers: {
+        ...AUTH_HEADERS,
+        'content-type': 'application/json',
+        origin: 'https://evil.example',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  test('OAuth mode reads the token source on every request', async () => {
+    const issued: string[] = [];
+    const oauthEntry = await startLocalHttpEntry({
+      port: 0,
+      apiUrl: API_URL,
+      accessToken: async () => {
+        const token = `${ACCESS_TOKEN}-${issued.length + 1}`;
+        issued.push(token);
+        return token;
+      },
+      log: () => {},
+    });
+    cleanups.push(() => oauthEntry.close());
+    const seen: Array<string | null> = [];
+    mockServer.use(
+      http.all(`${new URL(oauthEntry.url).origin}/*`, () => passthrough()),
+      http.get(`${API_URL}/v1/projects`, ({ request }) => {
+        seen.push(request.headers.get('authorization'));
+        return HttpResponse.json([]);
+      })
+    );
+    const client = new Client(
+      { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION },
+      { versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } } }
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(oauthEntry.url))
+    );
+    cleanups.push(() => client.close());
+
+    await client.callTool({ name: 'list_projects', arguments: {} });
+    await client.callTool({ name: 'list_projects', arguments: {} });
+
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).not.toBe(seen[1]);
+    expect(issued.map((token) => `Bearer ${token}`)).toEqual(
+      expect.arrayContaining(seen)
+    );
+  });
+
   test.each([
     {
       label: 'omitted API and template',
