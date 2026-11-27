@@ -8,6 +8,9 @@
     "paths": {
       "@supabase/mcp-server-supabase/platform": [
         "../mcp-server-supabase/src/platform/index.ts"
+      ],
+      "@supabase/mcp-server-supabase/show-issues": [
+        "../mcp-server-supabase/src/apps/show-issues.ts"
       ]
     }
   },
