@@ -2490,7 +2490,7 @@ export interface components {
                 code: "entitlement_required";
                 /** @description Entitlement feature key that failed the check */
                 feature: string;
-                /** @description Billing page URL for the organization, present when the org is resolvable */
+                /** @description Dashboard URL where the feature can be unlocked: the organization billing page, or the project add-ons page when a per-project add-on is missing. Present when the organization or project is resolvable */
                 upgrade_url?: string;
             };
         };
@@ -13788,6 +13788,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description The project does not have the PITR add-on, or the request cannot be fulfilled */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanGateErrorBody"];
+                };
             };
             /** @description Unauthorized */
             401: {

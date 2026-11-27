@@ -805,6 +805,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/projects/{ref}/database/clone/cloneable-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the valid physical backups that can be used to clone into a new project */
+        get: operations["v2-projects-database-cloneable-backups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/projects/{ref}/database/clone/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retrieve the current status of an existing cloning process */
+        get: operations["v2-projects-database-clone-status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/projects/{ref}/environments/{environment}/variables": {
         parameters: {
             query?: never;
@@ -3129,7 +3163,7 @@ export interface components {
                 attributes: {
                     is_physical_backup: boolean;
                     inserted_at: string;
-                    project_id: number;
+                    project_ref: string;
                     /** @enum {string} */
                     status: "COMPLETED" | "FAILED" | "PENDING" | "REMOVED" | "ARCHIVED" | "CANCELLED";
                 };
@@ -4039,6 +4073,46 @@ export interface components {
                     context_upload_id?: string;
                 };
             };
+        };
+        CloneableBackupsResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "project_cloneable_backup";
+                id: number;
+                attributes: {
+                    is_physical_backup: boolean;
+                    inserted_at: string;
+                    project_ref: string;
+                    /** @enum {string} */
+                    status: "COMPLETED" | "FAILED" | "PENDING" | "REMOVED" | "ARCHIVED" | "CANCELLED";
+                };
+            }[];
+        };
+        CloneStatusResponse_Output: {
+            data: {
+                /**
+                 * @description Resource type.
+                 * @enum {string}
+                 */
+                type: "project_clone_status";
+                attributes: {
+                    inserted_at: string | null;
+                    updated_at: string | null;
+                    /** @description The destination cloned project */
+                    target_project: {
+                        ref: string;
+                        name: string;
+                    };
+                    /**
+                     * @description The cloning status
+                     * @enum {string}
+                     */
+                    status: "COMPLETED" | "IN_PROGRESS" | "FAILED" | "REMOVED";
+                };
+            }[];
         };
         V2ListEnvironmentVariablesResponse_Output: {
             data: {
@@ -7794,6 +7868,131 @@ export interface operations {
             };
             /** @description Rate limit exceeded */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-projects-database-cloneable-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloneableBackupsResponse_Output"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to list cloneable backups candidates */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+        };
+    };
+    "v2-projects-database-clone-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ref */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloneStatusResponse_Output"];
+                };
+            };
+            /** @description Invalid request for clone project status */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Forbidden action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseBody"];
+                };
+            };
+            /** @description Failed to retrieve clone project status */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
