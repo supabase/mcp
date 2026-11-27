@@ -1,3 +1,4 @@
+import type { CallToolResult } from '@modelcontextprotocol/client';
 import type {
   App,
   McpUiHostCapabilities,
@@ -6,7 +7,7 @@ import type {
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { useEffect, useState } from 'react';
 import { callTool as callServerTool, type CallTool } from './call-tool';
-import { parseToolError, parseToolResult } from './tool-result';
+import { parseToolResult, readToolError } from './tool-result';
 import { useHostStyles } from './use-host-styles';
 
 export type ToolCallState<T> =
@@ -15,6 +16,16 @@ export type ToolCallState<T> =
   | { status: 'cancelled'; reason?: string }
   /** The tool call returned an error, or the view couldn't read its result. */
   | { status: 'error'; message: string };
+
+export type McpViewOptions<T> = {
+  /**
+   * Reads the view's data from the successful tool result. Defaults to the
+   * JSON text (`parseToolResult`). It may throw: the message becomes the
+   * `error` state. Read once, when the view mounts, so it need not be
+   * stable.
+   */
+  read?: (result: CallToolResult) => T;
+};
 
 export type McpView<T> = {
   toolCall: ToolCallState<T>;
@@ -43,11 +54,15 @@ export type McpView<T> = {
 
 /**
  * Connects a view to its host. Returns the state of the tool call the view
- * was opened for (its parsed result once it arrives), the app, the tool input,
- * the host context and capabilities, and helpers built on them (`callTool`,
- * `inputText`, `openLink`). Also applies the host's styles (see `useHostStyles`).
+ * was opened for (its result once it arrives, as the view's `read` option
+ * reads it: the JSON text by default), the app, the tool input, the host context and
+ * capabilities, and helpers built on them (`callTool`, `inputText`,
+ * `openLink`). Also applies the host's styles (see `useHostStyles`).
  */
-export function useMcpView<T>(name: string): McpView<T> {
+export function useMcpView<T>(
+  name: string,
+  options: McpViewOptions<T> = {}
+): McpView<T> {
   const [toolCall, setToolCall] = useState<ToolCallState<T>>({
     status: 'loading',
   });
@@ -68,11 +83,17 @@ export function useMcpView<T>(name: string): McpView<T> {
         const metaUrl = result._meta?.['supabase.com/dashboardUrl'];
         if (typeof metaUrl === 'string') setDashboardUrl(metaUrl);
         if (result.isError) {
-          setToolCall({ status: 'error', message: parseToolError(result) });
+          setToolCall({
+            status: 'error',
+            message: readToolError(result).message,
+          });
           return;
         }
         try {
-          setToolCall({ status: 'ready', data: parseToolResult<T>(result) });
+          setToolCall({
+            status: 'ready',
+            data: (options.read ?? parseToolResult<T>)(result),
+          });
         } catch (err) {
           setToolCall({ status: 'error', message: String(err) });
         }

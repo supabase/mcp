@@ -1,6 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { describe, expect, it, vi } from 'vitest';
-import { callTool } from './call-tool';
+import { callTool, ToolCallError } from './call-tool';
 
 type Result = Awaited<ReturnType<App['callServerTool']>>;
 
@@ -39,6 +39,30 @@ describe('callTool', () => {
       content: [text('{"error":{"message":"Project not found"}}')],
     });
     await expect(callTool(app, 't', {})).rejects.toThrow('Project not found');
+  });
+
+  it("throws a ToolCallError with the server's error code", async () => {
+    const { app } = fakeApp({
+      isError: true,
+      content: [
+        text(
+          '{"error":{"name":"ToolCallerError","message":"Bad cursor","code":"invalid_cursor"}}'
+        ),
+      ],
+    });
+    const error = await callTool(app, 't', {}).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ToolCallError);
+    expect(error).toMatchObject({
+      message: 'Bad cursor',
+      code: 'invalid_cursor',
+    });
+  });
+
+  it('throws a ToolCallError without a code when the server sent none', async () => {
+    const { app } = fakeApp({ isError: true, content: [text('Not allowed')] });
+    const error = await callTool(app, 't', {}).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ToolCallError);
+    expect((error as ToolCallError).code).toBeUndefined();
   });
 
   it('throws on non-text content', async () => {
