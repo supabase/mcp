@@ -468,7 +468,8 @@ export function getDatabaseTools({
               schema,
               name,
               rls_enabled,
-            }))
+            })),
+            schemas
           ),
         ]);
 

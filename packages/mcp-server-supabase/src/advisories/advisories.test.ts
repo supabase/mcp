@@ -110,6 +110,35 @@ describe('buildRlsDisabledAdvisory', () => {
       'ALTER TABLE "my.app"."hobbies" ENABLE ROW LEVEL SECURITY;'
     );
   });
+
+  test('declares the inspected schemas when the query was scoped', () => {
+    const tables = [{ schema: 'public', name: 'users', rls_enabled: false }];
+
+    const advisory = buildRlsDisabledAdvisory(tables, ['public']);
+
+    expect(advisory).not.toBeNull();
+    expect(advisory!.message).toContain('public');
+    expect(advisory!.message).toContain('other schemas were not checked');
+    expect(advisory!.message).toContain('schemas: []');
+  });
+
+  test('names every inspected schema when multiple were queried', () => {
+    const tables = [{ schema: 'public', name: 'users', rls_enabled: false }];
+
+    const advisory = buildRlsDisabledAdvisory(tables, ['public', 'billing']);
+
+    expect(advisory).not.toBeNull();
+    expect(advisory!.message).toContain('public, billing');
+  });
+
+  test('does not add a scope caveat when every schema was inspected', () => {
+    const tables = [{ schema: 'public', name: 'users', rls_enabled: false }];
+
+    const advisory = buildRlsDisabledAdvisory(tables, []);
+
+    expect(advisory).not.toBeNull();
+    expect(advisory!.message).not.toContain('other schemas were not checked');
+  });
 });
 
 describe('selectAdvisory', () => {
