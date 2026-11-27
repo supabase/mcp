@@ -46,6 +46,12 @@ also starts its own sequence, advancing one step per poll.
 | `create-branch:create-failed` | creating the branch fails (400), so the tool call returns an error |
 | `create-branch:polling-error` | first poll is a 503 "Service temporarily unavailable"; retry then follows the happy sequence |
 | `create-branch:polling-timeout` | RUNNING_MIGRATIONS forever (10 minute timeout) |
+| `show-issues:many` | 23 issues across all categories (plus 2 info-level ones), more than one server page |
+| `show-issues:none` | no issues in any category |
+| `show-issues:category-down` | health advisors fail with a 503, so the health check is unavailable |
+| `show-issues:page-fails` | 23 issues; the first read works, then security advisors fail with a 403, so the next page or a refresh fails |
+
+Every other scenario serves a few issues (one critical, three warnings, one info-level).
 
 ## Server-flag scenarios
 
