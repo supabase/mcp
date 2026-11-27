@@ -284,49 +284,52 @@ describe('tools', () => {
     expect(result).toEqual(project.details);
   });
 
-  test('create project', async () => {
-    const { callTool } = await setup();
+  test.each(['us-east-1', 'us-west-2'])(
+    'create project in %s',
+    async (region) => {
+      const { callTool } = await setup();
 
-    const freeOrg = await createOrganization({
-      name: 'Free Org',
-      plan: 'free',
-      allowed_release_channels: ['ga'],
-    });
+      const freeOrg = await createOrganization({
+        name: 'Free Org',
+        plan: 'free',
+        allowed_release_channels: ['ga'],
+      });
 
-    const confirm_cost_id_result = await callTool({
-      name: 'confirm_cost',
-      arguments: {
-        type: 'project',
-        recurrence: 'monthly',
-        amount: 0,
-      },
-    });
+      const confirm_cost_id_result = await callTool({
+        name: 'confirm_cost',
+        arguments: {
+          type: 'project',
+          recurrence: 'monthly',
+          amount: 0,
+        },
+      });
 
-    const newProject = {
-      name: 'New Project',
-      region: 'us-east-1',
-      organization_id: freeOrg.id,
-      confirm_cost_id: confirm_cost_id_result.confirmation_id,
-    };
+      const newProject = {
+        name: 'New Project',
+        region,
+        organization_id: freeOrg.id,
+        confirm_cost_id: confirm_cost_id_result.confirmation_id,
+      };
 
-    const result = await callTool({
-      name: 'create_project',
-      arguments: newProject,
-    });
+      const result = await callTool({
+        name: 'create_project',
+        arguments: newProject,
+      });
 
-    expect(result).toEqual({
-      id: expect.stringMatching(/^.+$/),
-      ref: expect.stringMatching(/^.+$/),
-      name: newProject.name,
-      region: newProject.region,
-      organization_id: newProject.organization_id,
-      organization_slug: newProject.organization_id,
-      created_at: expect.stringMatching(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
-      ),
-      status: 'UNKNOWN',
-    });
-  });
+      expect(result).toEqual({
+        id: expect.stringMatching(/^.+$/),
+        ref: expect.stringMatching(/^.+$/),
+        name: newProject.name,
+        region: newProject.region,
+        organization_id: newProject.organization_id,
+        organization_slug: newProject.organization_id,
+        created_at: expect.stringMatching(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
+        ),
+        status: 'UNKNOWN',
+      });
+    }
+  );
 
   test('create project in read-only mode throws an error', async () => {
     const { errors, onToolCall } = captureToolErrors();
