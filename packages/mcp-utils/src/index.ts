@@ -1,3 +1,4 @@
+export * from './cache.js';
 export {
   isToolCallerError,
   ToolCallerError,
