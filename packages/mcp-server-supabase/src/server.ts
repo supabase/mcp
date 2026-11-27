@@ -46,6 +46,12 @@ import {
   getSecretTools,
 } from './tools/secret-tools.js';
 import { getStorageTools } from './tools/storage-tools.js';
+import {
+  createSkillsProvider,
+  getSkillsResources,
+  installSupabaseSkills,
+  type SkillsProviderOptions,
+} from './skills/index.js';
 import { writeToolSet } from './tools/tool-schemas.js';
 import {
   CURRENT_ELICITATION_TOOLS,
@@ -166,6 +172,18 @@ export type SupabaseMcpServerOptions = {
       ttlSeconds?: number;
     };
   };
+
+  /**
+   * Serves Supabase's published agent skills
+   * (`supabase.com/.well-known/agent-skills`) over the MCP Skills extension
+   * (SEP-2640): `skills/list`, `skills/get`, and their files via
+   * `resources/read`. Off by default — pass `{}` to enable with defaults, or
+   * override `indexUrl` / `ttlMs` / `fetchImpl` for testing.
+   *
+   * Built on the Skills extension types from the stable SDK 2.4.0
+   * (modelcontextprotocol/typescript-sdk#3047).
+   */
+  skills?: SkillsProviderOptions;
 };
 
 const DEFAULT_FEATURES: FeatureGroup[] = [
@@ -215,6 +233,7 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     onToolCall,
     observer,
     elicitation,
+    skills,
   } = options;
   const dashboardUrl = rawDashboardUrl.replace(/\/+$/, '');
 
@@ -226,6 +245,14 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
   const contentApiClientPromise = createContentApiClient(contentApiUrl, {
     'User-Agent': `supabase-mcp/${version}`,
   });
+
+  const skillsProvider = skills
+    ? createSkillsProvider({
+        userAgent: `supabase-mcp/${version}`,
+        ...skills,
+      })
+    : undefined;
+  const skillsResources = skillsProvider && getSkillsResources(skillsProvider);
 
   // Filter the default features based on the platform's capabilities
   const availableDefaultFeatures = DEFAULT_FEATURES.filter(
@@ -276,9 +303,15 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
     title: 'Supabase',
     version,
     instructions,
-    resources: experimentalApps
-      ? (ctx) => getResources({ apps: appsEnabled(experimentalApps, ctx) })
-      : undefined,
+    resources:
+      experimentalApps || skillsResources
+        ? async (ctx) => [
+            ...getResources({ apps: appsEnabled(experimentalApps, ctx) }),
+            ...(skillsResources ? await skillsResources() : []),
+          ]
+        : undefined,
+    // The skills extension is declared separately by `installSupabaseSkills`;
+    // `registerCapabilities` merges it into these `extensions`.
     extensions: experimentalApps ? APPS_EXTENSIONS : undefined,
     async onInitialize(info) {
       handshakeClientInfo = info.clientInfo;
@@ -558,6 +591,10 @@ export function createSupabaseMcpServer(options: SupabaseMcpServerOptions) {
       return tools;
     },
   });
+
+  if (skillsProvider) {
+    installSupabaseSkills(server, skillsProvider);
+  }
 
   return server;
 }
