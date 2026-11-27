@@ -1,0 +1,577 @@
+@layer view {
+  /*
+   * The issues view: a header, up to a page of fixed-height rows, and a
+   * footer with the pager and the selection. Every row is one line of title
+   * and one of meta, so the view's height is known without measuring, and it
+   * never scrolls inside (hosts clip inline views rather than scroll them).
+   */
+  :where(.show-issues) {
+    /* One row's height, borders included. */
+    --sb-view-show-issues-row-height: 56px;
+    /* Rows per page; the list sets it from the host's height limit. */
+    --sb-view-show-issues-page-size: 5;
+    /* The inline padding every part shares, so the header, notices, rows,
+       status rows and footer line up on both edges. */
+    --sb-view-show-issues-padding-inline: var(--sb-space-3);
+    /* How far a compact icon-only or ghost button's box reaches past its
+       glyph or text. Its negative, as a margin, puts the glyph or text on
+       the content edge instead of the box, and keeps the focus ring inside
+       the inline padding. */
+    --sb-view-show-issues-optical-inset: calc(
+      var(--sb-control-compact-padding-block) +
+      var(--border-width-regular)
+    );
+
+    /* The parts follow the view's width, not the window's: a host may
+       frame the view narrower than its iframe. */
+    container: show-issues / inline-size;
+    padding-block: var(--sb-space-3);
+    overflow: hidden;
+    border: var(--border-width-regular) solid var(--sb-color-border);
+    border-radius: var(--border-radius-lg);
+    background: var(--sb-color-card);
+
+    /* The parts, in a column. A container query sees its container's
+       ancestors, never the container itself, so the view's width is
+       measured here and passed down as flags: each part reads them with
+       `@container style(…)` beside its other rules. Narrow is the width
+       too small for the pager and the actions on one line; very narrow,
+       also too small for "Handed to chat" beside Review (and is narrow
+       too). */
+    :where([data-slot="content"]) {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sb-space-2);
+
+      @container show-issues (width < 29rem) {
+        --sb-view-show-issues-narrow: true;
+      }
+
+      @container show-issues (width < 19rem) {
+        --sb-view-show-issues-very-narrow: true;
+      }
+    }
+
+    /* "Issues", then Refresh at the end. */
+    :where([data-slot="header"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-2);
+      padding-inline: var(--sb-view-show-issues-padding-inline);
+    }
+
+    :where([data-slot="header"] [data-slot="title"]) {
+      margin: 0;
+      font-size: var(--font-text-md-size);
+      font-weight: var(--font-weight-medium);
+      line-height: var(--font-text-md-line-height);
+    }
+
+    /* Icon-only and square, as tall as the footer's small buttons. The
+       border stays, transparent, so the size matches the other buttons. */
+    :where([data-slot="header"] [data-slot="refresh"]) {
+      flex: none;
+      justify-content: center;
+      margin-inline-start: auto;
+      padding: var(--sb-control-compact-padding-block);
+      border-color: transparent;
+
+      /* In a narrow view the arrow's stroke, not the box, ends on the
+         content edge, over the pager's next chevron and the Review button.
+         The stroke ends 1.7px inside the 16px icon; the end padding is a
+         pixel short so the focus ring stays inside the inline padding. */
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        margin-inline-end: calc(-1.7px - 5px - var(--border-width-regular));
+        padding-inline-end: 5px;
+      }
+    }
+
+    /* Checks that couldn't be read, rows that couldn't be shown. */
+    :where([data-slot="notices"]) {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sb-space-1);
+      margin: 0;
+      padding: 0 var(--sb-view-show-issues-padding-inline);
+      list-style: none;
+    }
+
+    :where([data-slot="notices"] [data-slot="notice"]) {
+      padding: var(--sb-space-1) var(--sb-space-2);
+      border: var(--border-width-regular) solid var(--sb-color-border);
+      border-radius: var(--border-radius-md);
+      color: var(--sb-color-muted-foreground);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+
+      &:where([data-tone="warning"]) {
+        border-color: var(--sb-color-border-warning);
+        background: color-mix(
+          in oklab,
+          var(--sb-color-warning) 10%,
+          transparent
+        );
+        color: var(--sb-color-warning);
+      }
+    }
+
+    /* The pager at the start and Clear and Review at the end, on one line.
+       A hint or a hand-off's result takes a line of its own below. In a view
+       too narrow for that line, the pager and the actions take a line each
+       (see `.pager` and `.selection-bar`). */
+    :where([data-slot="footer"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-2) var(--sb-space-3);
+      padding-inline: var(--sb-view-show-issues-padding-inline);
+
+      /* One step between its lines, and as much space above the first as
+         below the last (the view's padding), as around the header. */
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        row-gap: var(--sb-space-2);
+        padding-block-start: var(--sb-space-1);
+      }
+    }
+  }
+
+  /*
+   * One view page of rows. Once the list has more than one page it keeps a
+   * full page's height, so a short last page doesn't move the chat.
+   */
+  :where(.issues-list) {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    border-block-start: var(--border-width-regular) solid var(--sb-color-border);
+    list-style: none;
+
+    &:where([data-reserve="true"]) {
+      min-block-size: calc(
+        var(--sb-view-show-issues-page-size) *
+        var(--sb-view-show-issues-row-height)
+      );
+    }
+
+    /* Loading, failed, empty or unavailable, in place of the rows. */
+    :where([data-slot="status"]) {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sb-space-1) var(--sb-space-2);
+      min-block-size: var(--sb-view-show-issues-row-height);
+      padding: var(--sb-space-1) var(--sb-view-show-issues-padding-inline);
+      border-block-end: var(--border-width-regular) solid var(--sb-color-border);
+    }
+
+    :where([data-slot="status"] [data-slot="empty-icon"]) {
+      color: var(--sb-color-primary);
+    }
+
+    /* A row's shape while it loads: a title line and a meta line. */
+    :where([data-slot="skeleton-row"]) {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+      block-size: var(--sb-view-show-issues-row-height);
+      padding-inline: var(--sb-view-show-issues-padding-inline);
+      border-block-end: var(--border-width-regular) solid var(--sb-color-border);
+    }
+
+    :where([data-slot="skeleton-row"] [data-slot="skeleton"]) {
+      inline-size: 60%;
+      block-size: 0.8em;
+      border-radius: var(--border-radius-md);
+      background: var(--sb-skeleton-background);
+      animation: var(--sb-skeleton-animation);
+
+      &:where([data-width="short"]) {
+        inline-size: 35%;
+      }
+    }
+  }
+
+  /* One issue: checkbox (where issues can be selected), severity bars, then
+     title over meta. */
+  :where(.issue-row) {
+    block-size: var(--sb-view-show-issues-row-height);
+    border-block-end: var(--border-width-regular) solid var(--sb-color-border);
+
+    :where([data-slot="target"], [data-slot="body"]) {
+      display: flex;
+      align-items: center;
+      gap: var(--sb-space-3);
+      block-size: 100%;
+      padding-inline: var(--sb-view-show-issues-padding-inline);
+    }
+
+    /* The whole row toggles the checkbox. */
+    :where([data-slot="target"]) {
+      cursor: pointer;
+
+      &:where(:hover) {
+        background: var(--sb-color-muted);
+      }
+    }
+
+    :where([data-slot="checkbox"]) {
+      flex: none;
+      margin: 0;
+      accent-color: var(--sb-color-foreground);
+    }
+
+    :where([data-slot="text"]) {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-inline-size: 0;
+    }
+
+    :where([data-slot="text"] [data-slot="title"]) {
+      overflow: hidden;
+      font-size: var(--font-text-sm-size);
+      line-height: var(--font-text-sm-line-height);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    :where([data-slot="text"] [data-slot="meta"]) {
+      overflow: hidden;
+      color: var(--sb-color-muted-foreground);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  /* Studio's severity bars, rising left to right. */
+  :where(.severity-indicator) {
+    display: inline-flex;
+    flex: none;
+    align-items: flex-end;
+    gap: 2px;
+    block-size: 12px;
+
+    :where([data-slot="bar"]) {
+      inline-size: 3px;
+      block-size: 40%;
+      border-radius: 1px;
+      background: color-mix(
+        in oklab,
+        var(--sb-color-foreground) 15%,
+        transparent
+      );
+
+      &:where(:nth-child(2)) {
+        block-size: 70%;
+      }
+
+      &:where(:nth-child(3)) {
+        block-size: 100%;
+      }
+    }
+
+    &:where([data-severity="critical"]) {
+      :where([data-slot="bar"][data-lit="true"]) {
+        background: var(--sb-color-destructive);
+      }
+    }
+
+    &:where([data-severity="warning"]) {
+      :where([data-slot="bar"][data-lit="true"]) {
+        background: var(--sb-color-warning);
+      }
+    }
+  }
+
+  /*
+   * "‹ 6–10 of 23 ›": the range between two icon-only buttons. In a narrow
+   * view, "6–10 of 23  ‹ ›" on a line of its own: the range on the start
+   * edge and the buttons together on the end edge, where they stay while a
+   * page loads and the range is empty.
+   */
+  :where(.pager) {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--sb-space-1);
+
+    /* biome-ignore format: Biome writes "style (", a container name */
+    @container style(--sb-view-show-issues-narrow: true) {
+      gap: 0;
+    }
+
+    /* Square, as tall as the footer's other small buttons. The border stays,
+       transparent, so the size matches them. */
+    :where([data-slot="step"]) {
+      justify-content: center;
+      padding: var(--sb-control-compact-padding-block);
+      border-color: transparent;
+    }
+
+    /* The next chevron, last: in a narrow view, its stroke on the end
+       edge. The stroke ends 5.2px inside the 16px icon, so the end padding
+       shrinks to a pixel to keep the focus ring inside the inline padding;
+       the button stays 25px wide. */
+    :where([data-slot="step"]:last-child) {
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        margin-inline-end: calc(-5.2px - 1px - var(--border-width-regular));
+        padding-inline-end: 1px;
+      }
+    }
+
+    /* Wide enough for a short range, so the chevrons don't move while a
+       page loads and the range is empty. */
+    :where([data-slot="range"]) {
+      min-inline-size: 9ch;
+      color: var(--sb-color-muted-foreground);
+      font-size: var(--font-text-xs-size);
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+      white-space: nowrap;
+
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        flex: 1;
+        order: -1;
+        min-inline-size: 0;
+        padding-inline-end: var(--sb-space-2);
+        overflow: hidden;
+        text-align: start;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+
+  /*
+   * Clear and Review, then a hint or the last hand-off's result. The bar
+   * adds no box: its parts are the footer's flex items, so the buttons sit
+   * beside the pager, and the text below never pushes them onto another
+   * line. Review is always there, disabled while nothing is selected, so
+   * the footer keeps its height when the first issue is ticked. In a narrow
+   * view the bar is a line of its own, a grid: Clear's text, or once handed
+   * the success (which clears the selection, so never both), on the start
+   * edge, Review on the end edge, and a failure on a line under them from
+   * the start edge.
+   */
+  :where(.selection-bar) {
+    display: contents;
+
+    /* biome-ignore format: Biome writes "style (", a container name */
+    @container style(--sb-view-show-issues-narrow: true) {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: var(--sb-space-2) var(--sb-space-3);
+    }
+
+    /* At the end of the pager's line. */
+    :where([data-slot="actions"]) {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: var(--sb-space-2);
+      margin-inline-start: auto;
+      white-space: nowrap;
+
+      /* Its parts are the narrow grid's own. */
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        &:where([data-action="message"]) {
+          display: contents;
+        }
+      }
+    }
+
+    /* On a host that can't take messages: the hint on a line of its own,
+       as tall as a button, with Clear, once something is selected, at its
+       end. Clear's column is kept while it is absent, so the hint doesn't
+       rewrap, and the footer change height, when the first issue is
+       ticked. */
+    :where([data-slot="actions"][data-action="hint"]) {
+      display: grid;
+      flex: 1 0 100%;
+      grid-template-columns:
+        minmax(0, 1fr)
+        minmax(
+          calc(
+            5ch +
+            2 *
+            var(--sb-control-compact-padding-inline) +
+            2 *
+            var(--border-width-regular)
+          ),
+          auto
+        );
+      gap: var(--sb-space-3);
+      justify-items: start;
+      min-block-size: calc(
+        1lh +
+        2 *
+        var(--sb-control-compact-padding-block) +
+        2 *
+        var(--border-width-regular)
+      );
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+      white-space: normal;
+
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        grid-column: 1 / -1;
+        margin-inline-start: 0;
+      }
+    }
+
+    /* In a narrow view, as narrow as the icon buttons' padding, so its text
+       sits on the start edge with its focus ring inside the line's
+       padding. */
+    :where([data-slot="actions"] [data-slot="clear"]) {
+      flex: none;
+
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        margin-inline-start: calc(-1 * var(--sb-view-show-issues-optical-inset));
+        padding-inline: var(--sb-control-compact-padding-block);
+      }
+    }
+
+    :where([data-action="message"] [data-slot="clear"]) {
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        grid-area: 1 / 1;
+        justify-self: start;
+      }
+    }
+
+    /* After a hint, at the end instead: in a narrow view, on the end edge. */
+    :where([data-slot="hint"] + [data-slot="clear"]) {
+      justify-self: end;
+
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        margin-inline: 0 calc(-1 * var(--sb-view-show-issues-optical-inset));
+      }
+    }
+
+    :where([data-slot="actions"] [data-slot="review"]) {
+      flex: none;
+      margin-inline-start: auto;
+
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        grid-area: 1 / 2;
+      }
+    }
+
+    /* The Review button while the list loads: its size, so the footer doesn't
+       move when the page arrives. The width is that of the button with
+       nothing selected, "Review selected", in the button's font. */
+    :where([data-slot="actions"] [data-slot="skeleton"]) {
+      flex: none;
+      inline-size: 14.5ch;
+      block-size: calc(
+        1lh +
+        2 *
+        var(--sb-control-compact-padding-block) +
+        2 *
+        var(--border-width-regular)
+      );
+      margin-inline-start: auto;
+      border-radius: var(--border-radius-md);
+      background: var(--sb-skeleton-background);
+      animation: var(--sb-skeleton-animation);
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        grid-area: 1 / 2;
+      }
+    }
+
+    /* In a narrow view, a text line pads as a button does, so one line of
+       it is a button's height and the footer keeps one rhythm. */
+    :where([data-slot="actions"] [data-slot="hint"]) {
+      flex: 1;
+      min-inline-size: 0;
+      color: var(--sb-color-tertiary-foreground);
+
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        padding-block: var(--sb-view-show-issues-optical-inset);
+      }
+    }
+
+    /* The last hand-off's result, under the buttons: handed, or why it
+       failed. In a narrow view, handed takes Clear's place, beside Review
+       (on a line of its own where there isn't room), and a failure, often
+       too long for that, a line under them. */
+    :where([data-slot="handoff"]) {
+      flex: 1 0 100%;
+      font-size: var(--font-text-xs-size);
+      line-height: var(--font-text-xs-line-height);
+      text-align: end;
+
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        padding-block: var(--sb-view-show-issues-optical-inset);
+        text-align: start;
+
+        &:where([data-tone="success"]) {
+          grid-area: 1 / 1;
+          white-space: nowrap;
+        }
+      }
+
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-very-narrow: true) {
+        &:where([data-tone="success"]) {
+          grid-area: 2 / 1 / auto / -1;
+        }
+      }
+
+      &:where([data-tone="success"]) {
+        color: var(--sb-color-primary);
+      }
+
+      &:where([data-tone="danger"]) {
+        color: var(--sb-color-destructive);
+      }
+    }
+
+    /* Inline, so it stays beside the first word when the text wraps. */
+    :where([data-slot="handoff"] [data-slot="handoff-icon"]) {
+      margin-inline-end: var(--sb-space-1);
+      vertical-align: -2px;
+    }
+
+    /* In a narrow view, where the message is on the start edge, the icon's
+       stroke rather than its box starts there, with the checkboxes: the
+       cross's circle starts 0.9px inside the 12px icon, the check 2px. */
+    :where([data-slot="handoff"] [data-slot="handoff-icon"]) {
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        margin-inline-start: -1px;
+      }
+    }
+
+    :where([data-tone="success"] [data-slot="handoff-icon"]) {
+      /* biome-ignore format: Biome writes "style (", a container name */
+      @container style(--sb-view-show-issues-narrow: true) {
+        margin-inline-start: -2px;
+      }
+    }
+  }
+}

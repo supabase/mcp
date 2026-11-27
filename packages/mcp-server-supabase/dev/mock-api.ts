@@ -1,6 +1,6 @@
 /**
  * A long-running fake Supabase Management API for visually testing MCP Apps
- * views (create-project, create-branch) without a real account or PAT.
+ * views (create-project, create-branch, show-issues) without a real account or PAT.
  *
  *   pnpm mock-api                                  # listens on :4010
  *   curl -X POST localhost:4010/__scenario -d '{"name":"create-project:init-failed"}'
@@ -23,6 +23,8 @@ type Project = Schemas['V1ProjectWithDatabaseResponse_Output'];
 type Branch = Schemas['BranchResponse_Output'];
 type ProjectStatus = Project['status'];
 type BranchStatus = Branch['status'];
+type Lint = Schemas['V1ProjectAdvisorsResponse_Output']['lints'][number];
+type IssueCategory = 'security' | 'performance' | 'health';
 
 const PORT = Number(process.env.MOCK_API_PORT ?? process.argv[2] ?? 4010);
 
@@ -45,6 +47,25 @@ function pollError(errors: PollErrors = [], poll: number): string | undefined {
   return undefined;
 }
 
+type AdvisorErrors = [
+  category: IssueCategory,
+  status: number,
+  message: string,
+  after?: number,
+][];
+
+/** The failure for the given (0-based) read of a category's advisors, if any. */
+function advisorError(
+  errors: AdvisorErrors = [],
+  category: IssueCategory,
+  read: number
+): Reply | undefined {
+  const error = errors.find(
+    ([failing, , , after = 0]) => failing === category && read >= after
+  );
+  return error && { status: error[1], body: { message: error[2] } };
+}
+
 type Scenario = {
   description: string;
   /** Status returned by each successive `GET /v1/projects/{ref}` poll of a project created while active; the last one repeats. */
@@ -59,7 +80,14 @@ type Scenario = {
   branchPollErrors?: PollErrors;
   /** Status returned by each successive branch list for a branch created while active; the last one repeats. */
   branchStatuses: BranchStatus[];
+  /** Advisor lints behind the issues tools. */
+  issues: 'few' | 'many' | 'none';
+  /** Advisor reads that fail: each `[category, status, message, after]` entry fails that category's reads with `status` and `message` once its first `after` reads (default 0) have succeeded. */
+  advisorErrors?: AdvisorErrors;
 };
+
+/** Every field but `description` defaults to `BASE_SCENARIO`. */
+type ScenarioOverrides = Pick<Scenario, 'description'> & Partial<Scenario>;
 
 const HAPPY_PROJECT: ProjectStatus[] = [
   'COMING_UP',
@@ -73,35 +101,34 @@ const HAPPY_BRANCH: BranchStatus[] = [
   'FUNCTIONS_DEPLOYED',
 ];
 
-const scenarios: Record<string, Scenario> = {
+/** The happy state every scenario starts from. */
+const BASE_SCENARIO: Omit<Scenario, 'description'> = {
+  projectStatuses: HAPPY_PROJECT,
+  branchStatuses: HAPPY_BRANCH,
+  issues: 'few',
+};
+
+const scenarioOverrides: Record<string, ScenarioOverrides> = {
   happy: {
     description:
       'Everything succeeds (default). Same as the two :happy scenarios.',
-    projectStatuses: HAPPY_PROJECT,
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-project:happy': {
     description: 'COMING_UP, COMING_UP, ACTIVE_HEALTHY',
-    projectStatuses: HAPPY_PROJECT,
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-project:init-failed': {
     description: 'COMING_UP, then INIT_FAILED',
     projectStatuses: ['COMING_UP', 'INIT_FAILED'],
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-project:polling-timeout': {
     description:
       'COMING_UP forever. The view gives up after POLL_TIMEOUT_MS (10 minutes).',
     projectStatuses: ['COMING_UP'],
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-project:polling-error': {
     description:
       'First poll fails with "Service temporarily unavailable" (503); retry then follows the happy sequence',
-    projectStatuses: HAPPY_PROJECT,
     projectPollErrors: [['Service temporarily unavailable', 1]],
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-project:health-checks': {
     description:
@@ -112,30 +139,22 @@ const scenarios: Record<string, Scenario> = {
       'ACTIVE_UNHEALTHY',
       'ACTIVE_HEALTHY',
     ],
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-project:polling-down': {
     description:
       'The first 3 polls fail with a 503, so the view stops polling; Retry then follows the happy sequence',
-    projectStatuses: HAPPY_PROJECT,
     projectPollErrors: [['Service temporarily unavailable', 3]],
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-project:create-failed': {
     description: 'POST /v1/projects fails, so the tool call returns an error',
-    projectStatuses: HAPPY_PROJECT,
     projectCreateError: 'Project limit reached for this organization',
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-branch:happy': {
     description:
       'CREATING_PROJECT, RUNNING_MIGRATIONS, MIGRATIONS_PASSED, FUNCTIONS_DEPLOYED',
-    projectStatuses: HAPPY_PROJECT,
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-branch:migrations-failed': {
     description: 'CREATING_PROJECT, RUNNING_MIGRATIONS, MIGRATIONS_FAILED',
-    projectStatuses: HAPPY_PROJECT,
     branchStatuses: [
       'CREATING_PROJECT',
       'RUNNING_MIGRATIONS',
@@ -144,7 +163,6 @@ const scenarios: Record<string, Scenario> = {
   },
   'create-branch:functions-failed': {
     description: 'RUNNING_MIGRATIONS, MIGRATIONS_PASSED, FUNCTIONS_FAILED',
-    projectStatuses: HAPPY_PROJECT,
     branchStatuses: [
       'RUNNING_MIGRATIONS',
       'MIGRATIONS_PASSED',
@@ -154,24 +172,46 @@ const scenarios: Record<string, Scenario> = {
   'create-branch:create-failed': {
     description:
       'POST /v1/projects/{ref}/branches fails, so the tool call returns an error',
-    projectStatuses: HAPPY_PROJECT,
     branchCreateError: 'Branching is not enabled for this project',
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-branch:polling-error': {
     description:
       'First poll fails with "Service temporarily unavailable" (503); retry then follows the happy sequence',
-    projectStatuses: HAPPY_PROJECT,
     branchPollErrors: [['Service temporarily unavailable', 1]],
-    branchStatuses: HAPPY_BRANCH,
   },
   'create-branch:polling-timeout': {
     description:
       'RUNNING_MIGRATIONS forever. The view gives up after POLL_TIMEOUT_MS (10 minutes).',
-    projectStatuses: HAPPY_PROJECT,
     branchStatuses: ['RUNNING_MIGRATIONS'],
   },
+  'show-issues:many': {
+    description:
+      '23 issues across all categories (plus 2 info-level ones), so the list has more than one server page',
+    issues: 'many',
+  },
+  'show-issues:none': {
+    description: 'No issues in any category',
+    issues: 'none',
+  },
+  'show-issues:category-down': {
+    description:
+      'Health advisors fail with a 503, so the health check is unavailable; the other categories have issues',
+    advisorErrors: [['health', 503, 'Service temporarily unavailable']],
+  },
+  'show-issues:page-fails': {
+    description:
+      '23 issues; the first read works, then security advisors fail with a 403, so loading the next page or refreshing fails',
+    issues: 'many',
+    advisorErrors: [['security', 403, 'Access denied (mock)', 1]],
+  },
 };
+
+const scenarios: Record<string, Scenario> = Object.fromEntries(
+  Object.entries(scenarioOverrides).map(([name, overrides]) => [
+    name,
+    { ...BASE_SCENARIO, ...overrides },
+  ])
+);
 
 const DEFAULT_SCENARIO = 'happy';
 let scenarioName = DEFAULT_SCENARIO;
@@ -189,6 +229,8 @@ type BranchState = { branch: Branch; polls: number; seeded: boolean };
 const projects = new Map<string, ProjectState>();
 /** Keyed by parent project ref. */
 const branches = new Map<string, BranchState[]>();
+/** Advisor reads per category since the scenario last changed. */
+const advisorReads = new Map<IssueCategory, number>();
 
 function randomRef(): string {
   const letters = 'abcdefghijklmnopqrstuvwxyz';
@@ -218,6 +260,7 @@ function makeProject(init: Partial<Project> & { ref: string }): Project {
 }
 
 function resetState() {
+  advisorReads.clear();
   projects.clear();
   branches.clear();
   projects.set(SEED_REF, {
@@ -265,6 +308,7 @@ function makeBranch(init: {
 
 /** Restarts every status sequence, e.g. when the scenario changes. */
 function resetPolling() {
+  advisorReads.clear();
   for (const p of projects.values()) p.polls = 0;
   for (const list of branches.values()) for (const b of list) b.polls = 0;
 }
@@ -502,6 +546,121 @@ route('POST', '/v1/projects/{ref}/database/query', ({ params }) => {
 });
 
 route('GET', '/v1/projects/{ref}/secrets', () => ({ body: [] }));
+
+// Advisors, read by get_issues, show_issues and app_paginate_issues.
+
+const advisorCategory = {
+  security: 'SECURITY',
+  performance: 'PERFORMANCE',
+  health: 'HEALTH',
+} as const;
+
+/** One lint per affected object; the server groups them into one issue. */
+function lints(
+  category: IssueCategory,
+  name: Lint['name'],
+  level: Lint['level'],
+  objects = 1
+): Lint[] {
+  const title = name.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
+  return Array.from({ length: objects }, (_, i) => ({
+    name,
+    title,
+    level,
+    facing: 'EXTERNAL',
+    categories: [advisorCategory[category]],
+    description: `Mock description for ${name}.`,
+    detail:
+      category === 'health'
+        ? `Mock ${name} finding.`
+        : `Table public.table_${i + 1} is affected.`,
+    remediation: 'https://supabase.com/docs/guides/database/database-linter',
+    metadata:
+      category === 'health'
+        ? { type: 'health' }
+        : { schema: 'public', name: `table_${i + 1}`, type: 'table' },
+    cache_key: `${name}_${i + 1}`,
+  }));
+}
+
+const FEW_ISSUES: Record<IssueCategory, Lint[]> = {
+  security: [
+    ...lints('security', 'rls_disabled_in_public', 'ERROR', 2),
+    ...lints('security', 'function_search_path_mutable', 'WARN'),
+  ],
+  performance: [
+    ...lints('performance', 'auth_rls_initplan', 'WARN', 3),
+    ...lints('performance', 'unused_index', 'INFO'),
+  ],
+  health: lints('health', 'log_auth_error_rate_high', 'WARN'),
+};
+
+const MANY_ISSUES: Record<IssueCategory, Lint[]> = {
+  security: [
+    ...lints('security', 'rls_disabled_in_public', 'ERROR', 4),
+    ...lints('security', 'security_definer_view', 'ERROR'),
+    ...lints('security', 'auth_users_exposed', 'ERROR'),
+    ...lints('security', 'policy_exists_rls_disabled', 'ERROR', 2),
+    ...lints('security', 'leaked_service_key', 'ERROR'),
+    ...lints('security', 'function_search_path_mutable', 'WARN', 7),
+    ...lints('security', 'extension_in_public', 'WARN', 2),
+    ...lints('security', 'rls_references_user_metadata', 'WARN'),
+    ...lints('security', 'materialized_view_in_api', 'WARN'),
+    ...lints('security', 'foreign_table_in_api', 'WARN'),
+    ...lints('security', 'auth_otp_long_expiry', 'WARN'),
+    ...lints('security', 'auth_otp_short_length', 'WARN'),
+    ...lints('security', 'auth_leaked_password_protection', 'WARN'),
+    ...lints('security', 'auth_insufficient_mfa_options', 'WARN'),
+    ...lints('security', 'vulnerable_postgres_version', 'WARN'),
+    ...lints('security', 'rls_enabled_no_policy', 'INFO', 3),
+  ],
+  performance: [
+    ...lints('performance', 'unindexed_foreign_keys', 'WARN', 5),
+    ...lints('performance', 'auth_rls_initplan', 'WARN', 3),
+    ...lints('performance', 'no_primary_key', 'WARN'),
+    ...lints('performance', 'multiple_permissive_policies', 'WARN', 2),
+    ...lints('performance', 'duplicate_index', 'WARN'),
+    ...lints('performance', 'unused_index', 'INFO', 6),
+  ],
+  health: [
+    ...lints('health', 'log_data_api_error_rate_high', 'ERROR'),
+    ...lints('health', 'log_auth_error_rate_high', 'WARN'),
+    ...lints('health', 'log_storage_error_rate_high', 'WARN'),
+  ],
+};
+
+function advisorReply(category: IssueCategory, ref: string): Reply | Lint[] {
+  if (!projects.has(ref)) return notFound(`Project not found: ${ref}`);
+  const scenario = active();
+  const read = advisorReads.get(category) ?? 0;
+  advisorReads.set(category, read + 1);
+  const error = advisorError(scenario.advisorErrors, category, read);
+  if (error) return error;
+  if (scenario.issues === 'none') return [];
+  return (scenario.issues === 'many' ? MANY_ISSUES : FEW_ISSUES)[category];
+}
+
+for (const category of ['security', 'performance'] as const) {
+  route('GET', `/v1/projects/{ref}/advisors/${category}`, ({ params }) => {
+    const reply = advisorReply(category, params.ref!);
+    if (!Array.isArray(reply)) return reply;
+    return {
+      body: {
+        lints: reply,
+      } satisfies Schemas['V1ProjectAdvisorsResponse_Output'],
+    };
+  });
+}
+
+route('POST', '/v2/projects/{ref}/advisors/run', ({ params }) => {
+  const reply = advisorReply('health', params.ref!);
+  if (!Array.isArray(reply)) return reply;
+  return {
+    body: {
+      data: { type: 'project_advisors', attributes: { lints: reply } },
+    },
+  };
+});
 
 route('GET', '/v1/profile', () => ({
   headers: { 'X-Gotrue-Id': '00000000-0000-4000-8000-000000000000' },

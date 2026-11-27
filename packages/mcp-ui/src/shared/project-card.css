@@ -208,16 +208,8 @@
       inline-size: 8em;
       block-size: 1em;
       border-radius: var(--border-radius-md);
-      background: color-mix(
-        in oklab,
-        var(--sb-color-foreground) 10%,
-        transparent
-      );
-      animation: pulse 1.6s ease-in-out infinite;
-
-      @media (prefers-reduced-motion: reduce) {
-        animation: none;
-      }
+      background: var(--sb-skeleton-background);
+      animation: var(--sb-skeleton-animation);
 
       &:where([data-width="short"]) {
         inline-size: 5em;

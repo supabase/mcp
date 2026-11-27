@@ -115,6 +115,7 @@ Where the host standard has no variable, use a local token prefixed `--sb-`. The
 
 - `--sb-space-1` to `--sb-space-4` (4px, 8px, 12px, 16px): the host standard has no spacing scale. Use these for gaps and padding; a one-off size may stay literal.
 - `--sb-inset-top`, `-right`, `-bottom`, `-left`: the host's safe-area insets, set from JS in `src/shared/use-host-styles.ts`.
+- `--sb-skeleton-background`, `--sb-skeleton-animation`: a skeleton placeholder's colour and pulse. `base` sets the animation to `none` under `prefers-reduced-motion`, so a skeleton needs no media query. Any skeleton uses them (`background: var(--sb-skeleton-background); animation: var(--sb-skeleton-animation);`) instead of writing its own colour or animation.
 
 - `--sb-component-<component>-*`: a custom property that belongs to one component, named after the component's CSS file, which is also the class it owns (`--sb-component-project-card-radius` in `project-card.css`; a view's `view.css` uses `--sb-view-<view>-*`). Declare it on the component's rule, in any layer; it needs no fallback in `base`. A file may declare only its own namespace. `--sb-component-` and `--sb-view-` are reserved: `base.css` declares none, and a name under them that matches no file is an error, so a global token can never be mistaken for a component's. The linter resolves a name to the longest matching file name, so `project` and `project-card` can coexist. A file reads its own namespace with no fallback, and the property must be declared in that same file.
 - Reading another component's namespace needs a fallback: `var(--sb-component-project-card-radius, var(--border-radius-lg))`. `connection-details.css` aligns with the card it sits in this way. A view can ship `connection-details.css` without `project-card.css`, and without the fallback the read would be invalid there. This is the one place outside `base` where a `var()` fallback is allowed, and there it is required. Write the fallback with the global tokens the owner declares its property with, so the component looks right on its own, or a zero where the property is a padding that margins cancel. The linter also fails if the property is not declared in the other component's file, which catches typos and stale names.
@@ -141,12 +142,13 @@ Add a local token when a value is reused or carries meaning. Do not add one for 
 - **Controls**: `font: inherit` on buttons; hover is always `:hover:not(:disabled)`.
 - **Focus**: one global `:where(:focus-visible)` outline in `base`, coloured by `--sb-color-ring`. Do not remove or restyle it per component.
 - **Motion**: nest `@media (prefers-reduced-motion: reduce)` inside the rule it modifies. Declare `@keyframes` in `base`: animation names are global to the document whichever layer declares them (the layer only decides which wins when two share a name), so they belong with the other document-wide definitions.
-- **Width**: views are narrow and the host sets the width. Do not add width media queries; let content wrap.
+- **Width**: views are narrow and the host sets the width. Do not add width media queries; let content wrap. Where a view must change layout at a width, make its outer element a size container and state each threshold once: a size query sets a flag on the element just inside it (`@container show-issues (width < 29rem) { --sb-view-show-issues-narrow: true; }`), and each part reads the flag with a style query beside its other rules (`@container style(--sb-view-show-issues-narrow: true) { … }`). A container query can't see its own container, and `var()` can't hold a threshold, so this is how one width reaches every part.
 
 ## Build gotchas
 
 - Vite minifies CSS with lightningcss, which by default rewrites `light-dark()` into a `prefers-color-scheme` polyfill. That polyfill ignores the host's theme, so a dark host on a light OS would get light colours. `vite.config.ts` excludes that transform (`Features.LightDark`). Do not remove the exclusion.
 - The dev server does not minify. Anything about theming must also be checked against the built output: open the mock host with `?source=dist` after a build.
+- Biome's formatter (1.9) rewrites `@container style(…)` as `style (…)`, which queries a container named `style` and never matches. Put `/* biome-ignore format: … */` on the line before each style query; `pnpm lint:css` fails on the spaced form.
 - The build flattens native nesting. Specificity is unchanged as long as every nested selector is inside `:where()`.
 
 ## Checklist

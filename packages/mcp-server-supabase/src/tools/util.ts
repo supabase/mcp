@@ -24,6 +24,8 @@ export type ToolDef = {
   readOnlyBehavior?: 'exclude' | 'adapt';
   /** If true, excludes the tool from `tools/list` while keeping it callable via `tools/call`. */
   hidden?: boolean;
+  /** If true, the tool exists only for MCP Apps views, so hosts without MCP Apps can neither list nor call it. */
+  viewOnly?: boolean;
   _meta?: ToolMeta;
 };
 

@@ -11,6 +11,7 @@ import {
   resourceTemplate,
   tool,
 } from './server.js';
+import { ToolCallerError } from './errors.js';
 import { StreamTransport } from './stream-transport.js';
 
 export const MCP_CLIENT_NAME = 'test-client';
@@ -409,6 +410,64 @@ describe('tools', () => {
     expect(rawResult._meta).toEqual({
       'example.com/a': '1',
       'example.com/b': 'from-result',
+    });
+  });
+
+  test("error results carry a caller error's code and no other error's", async () => {
+    const server = createMcpServer({
+      name: 'test-server',
+      version: '0.0.0',
+      tools: {
+        coded: tool({
+          description: 'Fails with a coded caller error',
+          parameters: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => {
+            throw new ToolCallerError('Bad cursor', { code: 'invalid_cursor' });
+          },
+        }),
+        uncoded: tool({
+          description: 'Fails with an uncoded caller error',
+          parameters: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => {
+            throw new ToolCallerError('Bad input');
+          },
+        }),
+        internal: tool({
+          description: 'Fails with an error that has its own code field',
+          parameters: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => {
+            throw Object.assign(new Error('Connection refused'), {
+              code: 'ECONNREFUSED',
+            });
+          },
+        }),
+      },
+    });
+
+    const { client } = await setup({ server });
+    const errorOf = async (name: string) => {
+      const result = await client.callTool({ name, arguments: {} });
+      expect(result.isError).toBe(true);
+      const [content] = result.content;
+      if (content?.type !== 'text') throw new Error('expected text content');
+      return JSON.parse(content.text).error;
+    };
+
+    expect(await errorOf('coded')).toEqual({
+      name: 'ToolCallerError',
+      message: 'Bad cursor',
+      code: 'invalid_cursor',
+    });
+    expect(await errorOf('uncoded')).toEqual({
+      name: 'ToolCallerError',
+      message: 'Bad input',
+    });
+    expect(await errorOf('internal')).toEqual({
+      name: 'Error',
+      message: 'Connection refused',
     });
   });
 });

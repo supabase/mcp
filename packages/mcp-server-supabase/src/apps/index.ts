@@ -40,3 +40,9 @@ export const APPS_EXTENSIONS = {
 
 /** Tool result `_meta` key with the dashboard base URL the server links to. */
 export const DASHBOARD_URL_META_KEY = 'supabase.com/dashboardUrl';
+
+/**
+ * Tool result `_meta` key with the data a view renders. Hosts do not give
+ * `_meta` to the model, so the model reads only the result's `content`.
+ */
+export const VIEW_DATA_META_KEY = 'supabase.com/view';

@@ -11,11 +11,18 @@ import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { resource, type Resource } from '@supabase/mcp-utils';
 import createBranchHtml from '@supabase/mcp-ui/create-branch.html';
 import createProjectHtml from '@supabase/mcp-ui/create-project.html';
+import showIssuesHtml from '@supabase/mcp-ui/show-issues.html';
 
 export const CREATE_PROJECT_UI_URI = 'ui://supabase/create-project';
 export const CREATE_BRANCH_UI_URI = 'ui://supabase/create-branch';
+export const SHOW_ISSUES_UI_URI = 'ui://supabase/show-issues';
 
-const VIEW_META: { ui: McpUiResourceMeta } = {
+export const OPENAI_UI_META = {
+  availableDisplayModes: ['inline'],
+  preferredDisplayMode: 'inline',
+};
+
+const VIEW_META: { ui: McpUiResourceMeta; 'openai/ui': object } = {
   ui: {
     // Views are fully inlined and make no network requests.
     csp: { connectDomains: [], resourceDomains: [] },
@@ -24,6 +31,7 @@ const VIEW_META: { ui: McpUiResourceMeta } = {
     // Views let the user copy connection details.
     permissions: { clipboardWrite: {} },
   },
+  'openai/ui': OPENAI_UI_META,
 };
 
 function appResource(
@@ -60,6 +68,12 @@ export function getAppResources(): Resource[] {
       'Create branch view',
       'Live setup progress for the create_branch tool.',
       createBranchHtml
+    ),
+    appResource(
+      SHOW_ISSUES_UI_URI,
+      'Issues view',
+      "A project's security, performance and health issues for the show_issues tool.",
+      showIssuesHtml
     ),
   ];
 }

@@ -20,7 +20,9 @@
  * `--sb-color-*` tokens. Every host colour the bridge reads, and every
  * non-`--sb-` property `base.css` declares (the host variables' fallbacks),
  * must be a name the MCP Apps spec defines (`McpUiStyleVariableKey` in
- * ext-apps' schema), so a typo can't leave the host's value unused. Run with
+ * ext-apps' schema), so a typo can't leave the host's value unused. A
+ * container style query is spelt `style(…)`: Biome's formatter writes
+ * `style (…)`, which queries a container named `style`. Run with
  * `pnpm lint:css`.
  */
 import { readdirSync, readFileSync } from 'node:fs';
@@ -192,6 +194,14 @@ function* allStyleRules(rule) {
   for (const child of rule.value?.rules ?? []) yield* allStyleRules(child);
 }
 
+/** `@container` rules among some rules, at any depth. */
+function* containerRules(rules) {
+  for (const rule of rules) {
+    if (rule.type === 'container') yield rule;
+    yield* containerRules(rule.value?.rules ?? []);
+  }
+}
+
 /** Class names in a selector, at any depth. */
 function* classes(selector) {
   for (const part of selector) {
@@ -223,6 +233,13 @@ for (const file of files) {
   });
 
   const rules = stylesheet.rules;
+  for (const query of containerRules(rules)) {
+    if (query.value.name === 'style') {
+      errors.push(
+        `${at(query.value.loc)}: \`@container style (…)\` queries a container named \`style\`, not a style; write \`style(…)\` with no space, after a \`/* biome-ignore format: … */\` comment (Biome adds the space)`
+      );
+    }
+  }
   const allowed = allowedLayers(name);
   if (!allowed) {
     errors.push(

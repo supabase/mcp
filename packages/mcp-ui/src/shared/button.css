@@ -21,4 +21,17 @@
       );
     }
   }
+
+  /* Quiet, for a minor action beside a primary one: secondary text with no
+     border until hovered. The border stays, transparent, so the size matches
+     the other buttons. */
+  :is(button, a:where(.button)):where(.ghost) {
+    border-color: transparent;
+    color: var(--sb-color-muted-foreground);
+
+    &:where(:hover:not(:disabled)) {
+      background: var(--sb-color-muted);
+      color: var(--sb-color-foreground);
+    }
+  }
 }

@@ -14,7 +14,7 @@ import type {
 } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 
-import { ToolCallerError } from './errors.js';
+import { isToolCallerError, ToolCallerError } from './errors.js';
 import type { ExtractParams } from './types.js';
 import { assertValidUri, compareUris, matchUriTemplate } from './util.js';
 import { beginObservation } from './observation.js';
@@ -742,6 +742,12 @@ function enumerateError(error: unknown) {
     if (prop in error) {
       newError[prop] = (error as Record<string, unknown>)[prop];
     }
+  }
+
+  // Only a caller error's own code: other errors' `code` fields (Node,
+  // Postgres) are internal and were never part of the result.
+  if (isToolCallerError(error) && error.code !== undefined) {
+    newError.code = error.code;
   }
 
   return newError;

@@ -24,6 +24,9 @@ type DefsToSchemas<T extends ToolDefs> = {
       ? R
       : undefined;
     hidden: T[K] extends { hidden: infer H extends boolean } ? H : undefined;
+    viewOnly: T[K] extends { viewOnly: infer V extends boolean }
+      ? V
+      : undefined;
   };
 };
 
@@ -48,6 +51,8 @@ type SchemaEntry = {
   readOnlyBehavior?: 'exclude' | 'adapt';
   /** If true, the tool is excluded from `tools/list` but kept in this registry for typed access. */
   hidden?: boolean;
+  /** If true, the tool is listed and callable only for hosts with MCP Apps. */
+  viewOnly?: boolean;
 };
 
 /**
@@ -162,6 +167,13 @@ export const writeToolSet = new Set(
         entry.annotations.readOnlyHint === false &&
         entry.readOnlyBehavior !== 'adapt'
     )
+    .map(([name]) => name)
+);
+
+/** Tools removed entirely for hosts without MCP Apps. Derived from tool defs. */
+export const viewOnlyToolSet = new Set(
+  Object.entries(supabaseMcpToolSchemas)
+    .filter(([, entry]) => entry.viewOnly)
     .map(([name]) => name)
 );
 
