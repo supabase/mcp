@@ -15,10 +15,17 @@ export type ToolCallerErrorKind = 'confirmation_required';
 export class ToolCallerError extends Error {
   declare [toolCallerErrorBrand]: true;
   declare readonly kind?: ToolCallerErrorKind;
+  /**
+   * A stable, machine-readable code for this error, such as `invalid_cursor`.
+   * Unlike `kind`, it is sent to the client: the error result's JSON carries
+   * it as `error.code`, beside `name` and `message`, so a client can branch
+   * on it without reading the message.
+   */
+  declare readonly code?: string;
 
   constructor(
     message: string,
-    options?: ErrorOptions & { kind?: ToolCallerErrorKind }
+    options?: ErrorOptions & { kind?: ToolCallerErrorKind; code?: string }
   ) {
     super(message, options);
     this.name = 'ToolCallerError';
@@ -26,6 +33,9 @@ export class ToolCallerError extends Error {
     this[toolCallerErrorBrand] = true;
     if (options?.kind !== undefined) {
       this.kind = options.kind;
+    }
+    if (options?.code !== undefined) {
+      this.code = options.code;
     }
   }
 }
