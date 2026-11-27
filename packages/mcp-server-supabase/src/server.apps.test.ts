@@ -117,7 +117,7 @@ describe('MCP Apps', () => {
     expect(await linkedViewUris(client)).toEqual([...VIEW_URIS].sort());
   });
 
-  test('views set CSP and border metadata in the listing and content', async () => {
+  test('views set CSP, border and display mode metadata in the listing and content', async () => {
     const { client } = await harness.setupModern({
       experimentalApps: true,
       clientCapabilities: APPS_CLIENT_CAPABILITIES,
@@ -128,6 +128,10 @@ describe('MCP Apps', () => {
         csp: { connectDomains: [], resourceDomains: [] },
         prefersBorder: false,
         permissions: { clipboardWrite: {} },
+      },
+      'openai/ui': {
+        availableDisplayModes: ['inline'],
+        preferredDisplayMode: 'inline',
       },
     };
 

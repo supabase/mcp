@@ -17,6 +17,8 @@ const sdk = vi.hoisted(() => ({
   app: undefined as unknown as App,
   /** Every app created, in order. */
   apps: [] as App[],
+  /** The capabilities the view declared to the host. */
+  declared: undefined as unknown,
 }));
 
 // Creates the fake app, calls `onAppCreated`, then "connects" on the next
@@ -25,7 +27,14 @@ vi.mock('@modelcontextprotocol/ext-apps/react', async () => {
   const { useEffect, useState } = await import('react');
   return {
     useHostStyles: () => {},
-    useApp: ({ onAppCreated }: { onAppCreated?: (app: App) => void }) => {
+    useApp: ({
+      capabilities,
+      onAppCreated,
+    }: {
+      capabilities?: unknown;
+      onAppCreated?: (app: App) => void;
+    }) => {
+      sdk.declared = capabilities;
       const [app, setApp] = useState<App | null>(null);
       useEffect(() => {
         const created = {
@@ -92,6 +101,11 @@ function viewWithTool(initialProps: Omit<McpViewTool, 'name' | 'description'>) {
 const text = (value: string) => async () => value;
 
 describe('useMcpView', () => {
+  it('declares itself inline-only to the host', () => {
+    view();
+    expect(sdk.declared).toEqual({ availableDisplayModes: ['inline'] });
+  });
+
   it('registers its tools once, before connecting', () => {
     const tools = () =>
       ['first_tool', 'second_tool'].map((name) => ({

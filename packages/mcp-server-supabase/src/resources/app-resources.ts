@@ -17,7 +17,12 @@ export const CREATE_PROJECT_UI_URI = 'ui://supabase/create-project';
 export const CREATE_BRANCH_UI_URI = 'ui://supabase/create-branch';
 export const SHOW_ISSUES_UI_URI = 'ui://supabase/show-issues';
 
-const VIEW_META: { ui: McpUiResourceMeta } = {
+export const OPENAI_UI_META = {
+  availableDisplayModes: ['inline'],
+  preferredDisplayMode: 'inline',
+};
+
+const VIEW_META: { ui: McpUiResourceMeta; 'openai/ui': object } = {
   ui: {
     // Views are fully inlined and make no network requests.
     csp: { connectDomains: [], resourceDomains: [] },
@@ -26,6 +31,7 @@ const VIEW_META: { ui: McpUiResourceMeta } = {
     // Views let the user copy connection details.
     permissions: { clipboardWrite: {} },
   },
+  'openai/ui': OPENAI_UI_META,
 };
 
 function appResource(

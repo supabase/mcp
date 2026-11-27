@@ -139,7 +139,7 @@ export function useMcpView<T>(
 
   const { app, error } = useApp({
     appInfo: { name, version: '0.0.0' },
-    capabilities: {},
+    capabilities: { availableDisplayModes: ['inline'] },
     onAppCreated: (app) => {
       app.ontoolinput = ({ arguments: args }) => setInput(args);
       app.ontoolresult = (result) => {
