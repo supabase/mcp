@@ -7,6 +7,13 @@ import {
 } from '@supabase/mcp-server-supabase';
 import type * as Supabase from '@supabase/mcp-server-supabase';
 import {
+  regexClassifier,
+  SqlClassifierCallError,
+  SqlClassifierUnavailableError,
+  withFallback,
+  type SqlConfirmationClassifier,
+} from '@supabase/mcp-server-supabase/sql-confirmation';
+import {
   createMcpServer,
   tool,
   type McpServerOptions,
@@ -47,6 +54,13 @@ void handler.bus;
 // packed public declaration surface: a shape drift here must fail this
 // typecheck rather than surface only in an internal test.
 const enabledTools: readonly ElicitationToolName[] = CURRENT_ELICITATION_TOOLS;
+
+// The SQL classifier contract comes from its own subpath, and the server
+// option takes what that subpath builds.
+const classifier: SqlConfirmationClassifier = withFallback(async () => {
+  throw new SqlClassifierUnavailableError('parser failed to load');
+}, regexClassifier);
+void SqlClassifierCallError;
 
 const optionsWithElicitation: SupabaseMcpServerOptions = {
   platform: { account },
