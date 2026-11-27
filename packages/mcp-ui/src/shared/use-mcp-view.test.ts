@@ -27,6 +27,8 @@ vi.mock('@modelcontextprotocol/ext-apps/react', async () => {
         const created = {
           getHostCapabilities: () => sdk.capabilities,
           getHostContext: () => undefined,
+          sendMessage: vi.fn().mockResolvedValue({}),
+          updateModelContext: vi.fn().mockResolvedValue({}),
         } as unknown as App;
         sdk.app = created;
         onAppCreated?.(created);
@@ -117,7 +119,30 @@ describe('useMcpView', () => {
   it('offers no host actions the host lacks', () => {
     const { result } = view({});
     expect(result.current.app).not.toBeNull();
+    expect(result.current.sendMessage).toBeUndefined();
+    expect(result.current.updateModelContext).toBeUndefined();
     expect(result.current.callTool).toBeUndefined();
     expect(result.current.openLink).toBeUndefined();
+  });
+
+  it('sends messages through the message limits when the host takes them', async () => {
+    const { result } = view({ message: { text: {} } });
+    await result.current.sendMessage?.('Review\n\n\n\n\nthese');
+    expect(sdk.app.sendMessage).toHaveBeenCalledWith({
+      role: 'user',
+      content: [{ type: 'text', text: 'Review\n\n\nthese' }],
+    });
+    await expect(
+      result.current.sendMessage?.('a'.repeat(8001))
+    ).rejects.toThrow(/8,000/);
+  });
+
+  it('updates the model context when the host accepts it', async () => {
+    const { result } = view({ updateModelContext: { text: {} } });
+    const params = { content: [{ type: 'text' as const, text: 'Selected' }] };
+    await expect(result.current.updateModelContext?.(params)).resolves.toBe(
+      undefined
+    );
+    expect(sdk.app.updateModelContext).toHaveBeenCalledWith(params);
   });
 });

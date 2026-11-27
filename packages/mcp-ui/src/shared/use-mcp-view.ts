@@ -7,6 +7,7 @@ import type {
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { useEffect, useState } from 'react';
 import { callTool as callServerTool, type CallTool } from './call-tool';
+import { type SendMessage, sendMessage } from './send-message';
 import { parseToolResult, readToolError } from './tool-result';
 import { useHostStyles } from './use-host-styles';
 
@@ -16,6 +17,15 @@ export type ToolCallState<T> =
   | { status: 'cancelled'; reason?: string }
   /** The tool call returned an error, or the view couldn't read its result. */
   | { status: 'error'; message: string };
+
+/**
+ * Replaces what the host shares with the model about the view
+ * (`ui/update-model-context`). Each update replaces the last, so send the
+ * whole state each time; `{ content: [] }` clears it.
+ */
+export type UpdateModelContext = (
+  params: Parameters<App['updateModelContext']>[0]
+) => Promise<void>;
 
 export type McpViewOptions<T> = {
   /**
@@ -50,6 +60,17 @@ export type McpView<T> = {
    * (a sandboxed view can't open them itself).
    */
   openLink: ((url: string) => void) | undefined;
+  /**
+   * Sends a message to the assistant as the user, tidied to fit what
+   * Claude accepts; rejects when it is too long or the host refuses it.
+   * Undefined when the host can't receive messages from views.
+   */
+  sendMessage: SendMessage | undefined;
+  /**
+   * Shares the view's state with the model for its next turn. Undefined when
+   * the host doesn't accept context updates.
+   */
+  updateModelContext: UpdateModelContext | undefined;
 };
 
 /**
@@ -57,7 +78,9 @@ export type McpView<T> = {
  * was opened for (its result once it arrives, as the view's `read` option
  * reads it: the JSON text by default), the app, the tool input, the host context and
  * capabilities, and helpers built on them (`callTool`, `inputText`,
- * `openLink`). Also applies the host's styles (see `useHostStyles`).
+ * `openLink`, `sendMessage`, `updateModelContext`). A helper is undefined when
+ * the host can't do what it does. Also applies the host's styles (see
+ * `useHostStyles`).
  */
 export function useMcpView<T>(
   name: string,
@@ -133,6 +156,16 @@ export function useMcpView<T>(
     openLink:
       app && hostCapabilities.openLinks
         ? (url) => void app.openLink({ url })
+        : undefined,
+    sendMessage:
+      app && hostCapabilities.message
+        ? (text) => sendMessage(app, text)
+        : undefined,
+    updateModelContext:
+      app && hostCapabilities.updateModelContext
+        ? async (params) => {
+            await app.updateModelContext(params);
+          }
         : undefined,
   };
 }
