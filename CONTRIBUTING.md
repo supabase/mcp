@@ -44,6 +44,8 @@ Example client config:
 
 The dev server supports the same [query params as the hosted endpoint](https://supabase.com/docs/guides/ai-tools/mcp#configuration-options). Set `project_ref`, `read_only`, and `features` in the HTTP URL, not through stdio CLI flags. The access token comes from the client's `Authorization` header on each request.
 
+Add `--oauth` to sign in with Supabase OAuth in the browser instead. The server then attaches the token to every request itself and the client config needs no `headers`. The session is saved to `~/.supabase/mcp-oauth.json`, next to the Supabase CLI's files (`SUPABASE_HOME` overrides the directory for both). Delete that file to sign out.
+
 Secret creation is configured by default over HTTP, subject to the `functions` feature, read-only mode, and client and platform support. The production API remains the default and uses `https://supabase.com/dashboard/mcp/secrets?ref={ref}&name={name}`. Selecting `--api-url https://api.supabase.green` uses `https://supabase.green/dashboard/mcp/secrets?ref={ref}&name={name}` without an override.
 
 The optional HTTP-only `--secret-url-template` overrides this URL. Custom API origins require an explicit template; no dashboard host is derived from them. The template must be an absolute URL containing both `{ref}` and `{name}`. An explicitly empty value is invalid, not a fallback to the default.
@@ -56,7 +58,7 @@ pnpm dev:http --api-url 'http://127.0.0.1:<port>' --secret-url-template '<absolu
 
 In this package's local HTTP server, signed `requestState` used by cost confirmation, destructive SQL confirmation, mutating notebook run confirmation, and notebook deletion confirmation expires after 600 seconds; URL secret-collection state expires after 120 seconds. The secret tool retains a separate 600-second timestamp-based recovery window for fresh calls; this does not extend URL or token validity. Watch restarts invalidate pending state. Restart the server in your MCP client after each change.
 
-Flags: `--http`, `--port` (default 3111), `--api-url`, `--content-api-url`, `--secret-url-template`, `--version`.
+Flags: `--http`, `--port` (default 3111), `--oauth`, `--api-url`, `--content-api-url`, `--secret-url-template`, `--version`.
 
 For this package's local HTTP server, the optional `skip_elicitations` query parameter accepts comma-separated values (`create_project`, `create_branch`, `execute_sql`, `apply_migration`, `run_notebook`, `delete_notebook`). Skipping `create_project` or `create_branch` uses legacy cost confirmation instead of elicitation; it does not bypass cost confirmation. Skipping `execute_sql` or `apply_migration` disables destructive SQL elicitation, so SQL may execute without a prompt or legacy confirmation fallback. Skipping `run_notebook` runs notebook cells without a prompt. Skipping `delete_notebook` deletes notebooks without a prompt. Notebook creation never prompts. By default, read-only notebook runs and runs without mutating database cells do not prompt; mutating runs require form elicitation and are rejected before any cell runs if the client lacks form support. Notebook deletion always requires form elicitation and is rejected if the client lacks form support. Omitting the parameter or leaving it blank preserves the configured or default eligible tools.
 

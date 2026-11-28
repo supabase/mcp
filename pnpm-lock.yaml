@@ -99,6 +99,9 @@ importers:
       '@mjackson/multipart-parser':
         specifier: ^0.10.1
         version: 0.10.1
+      '@modelcontextprotocol/client':
+        specifier: 'catalog:'
+        version: 2.0.0
       '@modelcontextprotocol/node':
         specifier: 'catalog:'
         version: 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.19)
@@ -127,9 +130,6 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.2.17
         version: 0.2.17
-      '@modelcontextprotocol/client':
-        specifier: 'catalog:'
-        version: 2.0.0
       '@modelcontextprotocol/ext-apps':
         specifier: ^2.0.4
         version: 2.0.4(@modelcontextprotocol/client@2.0.0)(@modelcontextprotocol/core@2.4.0)(@modelcontextprotocol/server@2.0.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.2.1)

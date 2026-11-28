@@ -12,6 +12,7 @@ import {
   isJSONRPCRequest,
   isSpecType,
   localhostAllowedHostnames,
+  originValidationResponse,
   PROTOCOL_VERSION_META_KEY,
 } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
@@ -28,6 +29,8 @@ export type LocalHttpEntryOptions = {
   apiUrl?: string;
   contentApiUrl?: string;
   secretUrlTemplate?: string;
+  /** OAuth mode. Supplies the token for every request. */
+  accessToken?: () => Promise<string>;
   log?: (line: string) => void;
 };
 
@@ -101,6 +104,7 @@ export async function startLocalHttpEntry({
   apiUrl,
   contentApiUrl,
   secretUrlTemplate,
+  accessToken: tokenSource,
   log = (line) =>
     console.error(`[${new Date().toLocaleTimeString('en-GB')}] ${line}`),
 }: LocalHttpEntryOptions) {
@@ -120,21 +124,24 @@ export async function startLocalHttpEntry({
   assertValidConnectUrlTemplate(secretUrlTemplate);
   const secretCollection = { connectUrlTemplate: secretUrlTemplate };
   const requestStateKey = randomBytes(32);
+  // OAuth tokens refresh, so the principal is a per-process value instead of a token hash.
+  const processPrincipal = randomBytes(16).toString('hex');
   const allowedHostnames = localhostAllowedHostnames();
 
   const server = createServer(
     toNodeHandler(
       {
         fetch: async (request) => {
-          const rejected = hostHeaderValidationResponse(
-            request,
-            allowedHostnames
-          );
+          const rejected =
+            hostHeaderValidationResponse(request, allowedHostnames) ??
+            originValidationResponse(request, []);
           if (rejected) return rejected;
 
-          const accessToken = request.headers
-            .get('authorization')
-            ?.match(/^Bearer (.+)$/i)?.[1];
+          const accessToken = tokenSource
+            ? await tokenSource()
+            : request.headers
+                .get('authorization')
+                ?.match(/^Bearer (.+)$/i)?.[1];
           if (!accessToken) {
             return Response.json(
               { error: 'missing bearer token' },
@@ -199,9 +206,9 @@ export async function startLocalHttpEntry({
                   requestState: {
                     key: requestStateKey,
                     // One process can serve several PATs, so the principal is the token's hash.
-                    principal: createHash('sha256')
-                      .update(accessToken)
-                      .digest('hex'),
+                    principal: tokenSource
+                      ? processPrincipal
+                      : createHash('sha256').update(accessToken).digest('hex'),
                   },
                   confirmation: {
                     enabledTools: CURRENT_ELICITATION_TOOLS.filter(
